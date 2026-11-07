@@ -54,4 +54,13 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 
 ## Environment
 
-`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`. A Google OAuth `client_secret_*.json` sits untracked at the repo root — never commit it.
+`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (must differ), `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` (seconds), `FRONTEND_URL`.
+
+### Auth flow
+
+1. `GET /auth/google` → Google → `GET /auth/google/callback`: `AuthService.issueTokens` saves both tokens in `Token` (one row per user, PK `id` = user id), sets the refresh token as an httpOnly `refreshToken` cookie (`path: /auth`), and redirects to `${FRONTEND_URL}/auth/callback`.
+2. Frontend calls `POST /auth/access` with credentials: the refresh token is verified (refresh secret), looked up in `Token`, and a new access token is returned in the body (and stored in `Token`).
+3. Frontend sends `Authorization: Bearer <accessToken>`; protect routes with `@UseGuards(AuthGuard('jwt'))` (`JwtStrategy`, access secret; `req.user` is `{ id }`). An expired access token gets 401.
+4. On 401, frontend calls `POST /auth/reissue` with credentials: `AuthService.reissueTokens` verifies the cookie's refresh token (expired → 401), looks it up in `Token` (missing → 401), deletes the old row, issues and saves a new access + refresh pair, resets the `refreshToken` cookie, and returns `{ accessToken }`. The old refresh token is unusable afterwards (rotation).
+
+JWTs are signed only through `TokenProvider` (`auth/token.provider.ts`), which passes the access/refresh secret per call (`JwtModule.register({})` has no default secret). A Google OAuth `client_secret_*.json` sits untracked at the repo root — never commit it.
