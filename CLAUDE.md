@@ -63,4 +63,6 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 3. Frontend sends `Authorization: Bearer <accessToken>`; protect routes with `@UseGuards(AuthGuard('jwt'))` (`JwtStrategy`, access secret; `req.user` is `{ id }`). An expired access token gets 401.
 4. On 401, frontend calls `POST /auth/reissue` with credentials: `AuthService.reissueTokens` verifies the cookie's refresh token (expired → 401), looks it up in `Token` (missing → 401), deletes the old row, issues and saves a new access + refresh pair, resets the `refreshToken` cookie, and returns `{ accessToken }`. The old refresh token is unusable afterwards (rotation).
 
+**Keep `/auth/access` and `/auth/reissue` as separate endpoints** — don't merge them or remove `/auth/access`. `/auth/access` is only for right after login (new access token, refresh token unchanged); `/auth/reissue` is for an expired access token (both tokens rotated).
+
 JWTs are signed only through `TokenProvider` (`auth/token.provider.ts`), which passes the access/refresh secret per call (`JwtModule.register({})` has no default secret). A Google OAuth `client_secret_*.json` sits untracked at the repo root — never commit it.
