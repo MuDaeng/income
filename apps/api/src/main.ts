@@ -1,3 +1,4 @@
+import { StandardSchemaValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
@@ -12,6 +13,8 @@ async function bootstrap() {
   app.use(cookieParser());
   // 프론트엔드에서 cookie를 담아(credentials: 'include') 호출할 수 있도록 허용
   app.enableCors({ origin: process.env.FRONTEND_URL, credentials: true });
+  // @Body({ schema }) 등에 붙인 Zod 스키마로 입력 검증 (실패 시 400)
+  app.useGlobalPipes(new StandardSchemaValidationPipe());
   const options = new DocumentBuilder()
       .setTitle('Income API')
       .setDescription('배당인컴')
