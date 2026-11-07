@@ -1,0 +1,1 @@
+export enum Currency {USD = 'USD', KRW = 'KRW'}

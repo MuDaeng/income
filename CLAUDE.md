@@ -57,6 +57,9 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 
 - **Column/property names are unprefixed:** `id`, not `userId`; `name`, not `userName`; `email`, not `oauthEmail`. The entity/table already gives the context.
 - **Join column naming:** a relation's `@JoinColumn` normally follows the same rule (e.g. `id`). Only when that name would collide with an existing property of the entity that means something different (e.g. the entity has its own `id` and also references `User`), name the join column `<table name> + <property name>` in camelCase — e.g. `@JoinColumn({ name: 'userId' })`.
+- **Prices, quantities and money amounts use `@Column(decimalColumn)`** (`libs/common/src/base/decimal-column.ts`: `DECIMAL(20, 2)` with a transformer so the TS type stays `number` — mysql2 returns DECIMAL as a string otherwise). Don't use plain `@Column()` (`int`) for them.
+- **Enum columns need `@Column({ type: 'enum', enum: X })`** — a bare `@Column()` on an enum-typed property fails at startup with `Data type "undefined" ... is not supported`.
+- **Composite-FK join columns must name their target:** `@JoinColumn([{ name: 'userId', referencedColumnName: 'userId' }, { name: 'securityId', referencedColumnName: 'securityId' }])`. Without `referencedColumnName`, TypeORM mapped both to `userId` (`FOREIGN KEY (userId, userId)`, then `Duplicate column name`).
 - **Relations are unidirectional by default.** Declare the relation only on the owning side (the side with the `@JoinColumn`, usually `@ManyToOne`/`@OneToOne`) and omit the inverse `@OneToMany`/inverse-side callback. Add a bidirectional relation only when it is truly unavoidable, and note why in a comment.
 
 ### Data access: Repository only
@@ -77,6 +80,7 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 
 - `autoLoadEntities` only loads entities passed to some `forFeature()`. Every entity on either side of a relation must be registered, or startup fails with `Entity metadata for X#y was not found`.
 - `synchronize: true` alters the live DB schema on every boot from entity definitions — entity changes are schema changes.
+- **Per-group sequence numbers (max + 1) are assigned in the service, not in entity listeners** (`@BeforeInsert` has no DI and would need a global DataSource + QueryBuilder). In a `@Transactional()` method, first lock the owning parent row by PK (e.g. `userRepository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } })`), then read the group's last row with `findOne({ order: { sequence: 'DESC' } })` and save with `+ 1`. Don't put the lock on the sequence table's own range query: InnoDB gap locks make concurrent inserts deadlock (verified — 2 of 5 concurrent saves failed even with 3 retries). A PK lookup on the parent takes a plain record lock, so same-owner saves run one at a time with no deadlock (verified with 10 concurrent saves). See `BalanceService.addPurchaseDateBalance`.
 - `Oauth → User` is a unidirectional `@ManyToOne` (`User` has no `oauth` property), so there is no cascade from `User`. Save the `User` first (`userRepository.save`), then save `Oauth` with `user` set (`oauthRepository.save`), in one `@Transactional()` method (see `AuthService.findOrCreateOauthUser`). `Oauth` has a composite PK (`id` = the user's id, doubling as the `@JoinColumn` to `User`, + `type` enum).
 
 ## Environment

@@ -1,0 +1,1 @@
+export enum DividendType { MONEY = 'money', STOCK = 'stock' }
