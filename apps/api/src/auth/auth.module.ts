@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -7,6 +7,11 @@ import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { GoogleStrategy } from './google-strategy.guard.js';
 import { JwtStrategy } from './jwt.strategy.js';
+import {
+  RefreshTokenContext,
+  RefreshTokenContextMiddleware,
+  RefreshTokenGuard,
+} from './refresh-token.context.js';
 import { TokenProvider } from './token.provider.js';
 
 @Module({
@@ -18,6 +23,19 @@ import { TokenProvider } from './token.provider.js';
     TypeOrmModule.forFeature([Oauth, User, Token]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, TokenProvider, GoogleStrategy, JwtStrategy],
+  providers: [
+    AuthService,
+    TokenProvider,
+    GoogleStrategy,
+    JwtStrategy,
+    RefreshTokenContext,
+    RefreshTokenGuard,
+  ],
+  // 다른 업무 모듈에서도 @UseGuards(RefreshTokenGuard) + RefreshTokenContext.getSub() 사용 가능
+  exports: [TokenProvider, RefreshTokenContext, RefreshTokenGuard],
 })
-export class AuthModule {}
+export class AuthModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RefreshTokenContextMiddleware).forRoutes('*path');
+  }
+}

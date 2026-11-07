@@ -21,6 +21,7 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 - `apps/api` — the only application. `ApiModule` is the root: it imports `DatabaseModule` and one feature module per business area. Each feature module registers the entities it uses with its own `TypeOrmModule.forFeature([...])` (e.g. `AuthModule` → `[Oauth, User]`).
   - **Each new business area gets its own folder and module** under `apps/api/src/<feature>/` (e.g. `auth/` → `AuthModule` in `auth/auth.module.ts`). That folder's controllers, strategies, services etc. are declared in its module, not in `ApiModule`.
   - **`ApiModule` only imports the feature module** (`imports: [..., AuthModule]`); don't add a feature's controllers/providers to `ApiModule` directly.
+  - **Controllers only call services.** A controller class contains only route handler methods, and each handler just passes request inputs to a service method and returns its result. No private/helper methods, no business logic, no repository or `TokenProvider` access in controllers — put that logic in the service. Need the response? Don't take `@Res()`: return `{ url }` with `@Redirect()`, and set cookies from the service via `RefreshTokenContext.setRefreshTokenCookie`.
 - `libs/common` — shared library, imported as `@app/common` (path alias in `tsconfig.json`, resolved in Vitest via `resolve.tsconfigPaths`). Holds:
   - `DatabaseModule`: global `ConfigModule` (loads `.env` + `dbConfig` from `config/db.config.ts`) and `TypeOrmModule.forRootAsync` for MySQL (`mysql2`) with `synchronize: true` and `autoLoadEntities: true`.
   - TypeORM entities grouped by domain (`user/`, `auth/`) with `BaseTimeEntity` (abstract, `createdAt`/`updatedAt`, no `@Entity`) as a base class.
@@ -58,10 +59,12 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 
 ### Auth flow
 
-1. `GET /auth/google` → Google → `GET /auth/google/callback`: `AuthService.issueTokens` saves both tokens in `Token` (one row per user, PK `id` = user id), sets the refresh token as an httpOnly `refreshToken` cookie (`path: /auth`), and redirects to `${FRONTEND_URL}/auth/callback`.
-2. Frontend calls `POST /auth/access` with credentials: the refresh token is verified (refresh secret), looked up in `Token`, and a new access token is returned in the body (and stored in `Token`).
+1. `GET /auth/google` → Google → `GET /auth/google/callback`: `AuthService.loginWithOauth` saves both tokens in `Token` (one row per user, PK `id` = user id), sets the refresh token as an httpOnly `refreshToken` cookie (`path: /auth`), and returns `{ url: ${FRONTEND_URL}/auth/callback }` for `@Redirect()`.
+2. Frontend calls `POST /auth/access` with credentials: `AuthService.issueAccessToken` looks the refresh token up in `Token` and returns a new access token in the body (also stored in `Token`); the refresh token is unchanged.
 3. Frontend sends `Authorization: Bearer <accessToken>`; protect routes with `@UseGuards(AuthGuard('jwt'))` (`JwtStrategy`, access secret; `req.user` is `{ id }`). An expired access token gets 401.
-4. On 401, frontend calls `POST /auth/reissue` with credentials: `AuthService.reissueTokens` verifies the cookie's refresh token (expired → 401), looks it up in `Token` (missing → 401), deletes the old row, issues and saves a new access + refresh pair, resets the `refreshToken` cookie, and returns `{ accessToken }`. The old refresh token is unusable afterwards (rotation).
+4. On 401, frontend calls `POST /auth/reissue` with credentials: `AuthService.reissueTokens` looks the refresh token up in `Token` (missing → 401), deletes the old row, issues and saves a new access + refresh pair, resets the `refreshToken` cookie, and returns `{ accessToken }`. The old refresh token is unusable afterwards (rotation).
+
+**Refresh-token context** (`auth/refresh-token.context.ts`): `RefreshTokenContextMiddleware` opens a per-request `AsyncLocalStorage` store (applied to all routes in `AuthModule.configure`). `@UseGuards(RefreshTokenGuard)` reads the `refreshToken` cookie, verifies it (missing/expired/invalid → 401), and stores the token and its `sub` (user id). Services then read them with `RefreshTokenContext.getRefreshToken()` / `getSub()` instead of taking them as parameters, and set the cookie with `RefreshTokenContext.setRefreshTokenCookie(token)`. `AuthModule` exports `RefreshTokenContext` and `RefreshTokenGuard` for other feature modules.
 
 **Keep `/auth/access` and `/auth/reissue` as separate endpoints** — don't merge them or remove `/auth/access`. `/auth/access` is only for right after login (new access token, refresh token unchanged); `/auth/reissue` is for an expired access token (both tokens rotated).
 

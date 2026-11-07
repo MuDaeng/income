@@ -60,3 +60,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Google OAuth client secrets
 client_secret_*.json
+
+# Claude 작업 결과 기록
+claude-output.md
