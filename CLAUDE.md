@@ -12,13 +12,13 @@ See also `AGENTS.md` (NestJS 12 specifics: first-party packages to prefer, ESM r
 - `npm test` — Vitest unit tests (`**/*.spec.ts`). Single file: `npx vitest run apps/api/src/api.controller.spec.ts`; single test: add `-t "<name>"`.
 - `npm run test:e2e` — Vitest with `vitest.config.e2e.ts` (`**/*.e2e-spec.ts`). E2E boots the real `ApiModule`, so it needs a reachable MySQL.
 
-If port 3000 is already in use (the user often has a dev server running), start another instance with `PORT=8081` instead of killing the existing process.
+If port 8080 is already in use (the user often has a dev server running), start another instance with `PORT=8081` instead of killing the existing process.
 
 ## Architecture
 
 Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative imports end in `.js`).
 
-- `apps/api` — the only application. `ApiModule` is the root: it imports `DatabaseModule` and one feature module per business area. Each feature module registers the entities it uses with its own `TypeOrmModule.forFeature([...])` (e.g. `AuthModule` → `[Oauth, User]`).
+- `apps/api` — the only application. `ApiModule` is the root: it imports `DatabaseModule` and one feature module per business area. Each feature module registers the entities it uses with its own `TypeOrmModule.forFeature([...])` (e.g. `AuthModule` → `[Oauth, User, Token]`).
   - **Each new business area gets its own folder and module** under `apps/api/src/<feature>/` (e.g. `auth/` → `AuthModule` in `auth/auth.module.ts`). That folder's controllers, strategies, services etc. are declared in its module, not in `ApiModule`.
   - **`ApiModule` only imports the feature module** (`imports: [..., AuthModule]`); don't add a feature's controllers/providers to `ApiModule` directly.
   - **Controllers only call services.** A controller class contains only route handler methods, and each handler just passes request inputs to a service method and returns its result. No private/helper methods, no business logic, no repository or `TokenProvider` access in controllers — put that logic in the service. Need the response? Don't take `@Res()`: return `{ url }` with `@Redirect()`, and set cookies from the service via `RefreshTokenContext.setRefreshTokenCookie`.
@@ -26,6 +26,32 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
   - `DatabaseModule`: global `ConfigModule` (loads `.env` + `dbConfig` from `config/db.config.ts`) and `TypeOrmModule.forRootAsync` for MySQL (`mysql2`) with `synchronize: true` and `autoLoadEntities: true`.
   - TypeORM entities grouped by domain (`user/`, `auth/`) with `BaseTimeEntity` (abstract, `createdAt`/`updatedAt`, no `@Entity`) as a base class.
   - Each folder has an `index.ts` barrel re-exported from `libs/common/src/index.ts`; import entities from `@app/common`.
+
+### Decorators
+
+**Request inputs in controllers come only from parameter decorators — never `@Req()` / `@Res()`.**
+
+- Body/params/query: Nest's `@Body()`, `@Param()`, `@Query()`.
+- Authenticated user: a custom param decorator that matches the route's guard. Using the decorator without its guard gives `undefined`.
+
+  | Guard on the route | Decorator | Value |
+  |---|---|---|
+  | `@UseGuards(AuthGuard('jwt'))` (Bearer access token) | `@CurrentUser()` | `AuthUser` (`{ id }`) |
+  | `@UseGuards(AuthGuard('google'))` (Google callback) | `@GoogleUser()` | `User` from `GoogleStrategy.validate` |
+  | `@UseGuards(RefreshTokenGuard)` (refresh token cookie) | none — the service reads `RefreshTokenContext.getRefreshToken()` / `getSub()` | |
+
+- Responses: return the value; use `@Redirect()` + return `{ url }` for redirects, and `@HttpCode(200)` on `POST` routes that don't create anything (`/auth/access`, `/auth/reissue`).
+
+**New custom param decorators:**
+
+- One per file, `<name>.decorator.ts`, in the feature folder (e.g. `auth/current-user.decorator.ts`); export a `PascalCase` const built with `createParamDecorator`, with an explicit return type.
+- Only extract a value from the request (usually what a guard/strategy put on `req.user`). No validation, DB access or other logic — that belongs in the guard/strategy or the service.
+- Add a JSDoc line naming the guard it requires.
+- When a new guard type needs its user, add a new decorator rather than reusing one with a different shape (that's why `@GoogleUser()` exists alongside `@CurrentUser()`).
+
+**Swagger decorators on every controller/handler:** `@ApiTags('<feature>')` on the controller; `@ApiOperation({ summary: '<Korean description>' })` on each handler; `@ApiBearerAuth()` next to `AuthGuard('jwt')`; `@ApiCookieAuth(REFRESH_TOKEN_COOKIE)` next to `RefreshTokenGuard`.
+
+**Other decorators:** `@Transactional()` only on service methods (see Data access); `@InjectRepository()` only in constructors.
 
 ### Entity conventions
 
