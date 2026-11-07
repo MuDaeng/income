@@ -1,8 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { initializeTransactionalContext } from 'typeorm-transactional';
 import { ApiModule } from './api.module.js';
 
 async function bootstrap() {
+  // @Transactional()을 쓰려면 앱 생성 전에 호출해야 함
+  initializeTransactionalContext();
   const app = await NestFactory.create(ApiModule);
   const options = new DocumentBuilder()
       .setTitle('Income API')
