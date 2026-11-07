@@ -9,10 +9,10 @@ const decimalTransformer: ValueTransformer = {
     from: (value?: string | null) => (value === null || value === undefined ? value : Number(value)),
 };
 
-/** 가격·수량·배당금 컬럼 공통 옵션: DECIMAL(20, 2), TS 타입은 number */
+/** 가격·수량·배당금 컬럼 공통 옵션: DECIMAL(20, 6), TS 타입은 number */
 export const decimalColumn: ColumnOptions = {
     type: 'decimal',
     precision: 20,
-    scale: 2,
+    scale: 6,
     transformer: decimalTransformer,
 };
