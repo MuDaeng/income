@@ -1,17 +1,13 @@
 import {
-  CanActivate,
-  ExecutionContext,
   Inject,
   Injectable,
   InternalServerErrorException,
   NestMiddleware,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import type { NextFunction, Request, Response } from 'express';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { authConfig } from '@app/common';
-import { TokenProvider } from './token.provider.js';
 
 export const REFRESH_TOKEN_COOKIE = 'refreshToken';
 
@@ -90,27 +86,5 @@ export class RefreshTokenContext {
       );
     }
     return store;
-  }
-}
-
-/** cookie의 refresh token을 검증(만료 포함)하고 sub를 RefreshTokenContext에 저장. 없거나 유효하지 않으면 401 */
-@Injectable()
-export class RefreshTokenGuard implements CanActivate {
-  constructor(
-    private readonly tokenProvider: TokenProvider,
-    private readonly refreshTokenContext: RefreshTokenContext,
-  ) {}
-
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<Request>();
-    const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE] as
-      | string
-      | undefined;
-    if (!refreshToken) {
-      throw new UnauthorizedException('refresh token이 없습니다.');
-    }
-    const { sub } = await this.tokenProvider.verifyRefreshToken(refreshToken);
-    this.refreshTokenContext.set(refreshToken, sub);
-    return true;
   }
 }

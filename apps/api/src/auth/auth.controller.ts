@@ -4,7 +4,6 @@ import {
   HttpCode,
   Post,
   Redirect,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -14,15 +13,13 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
 import { User } from '@app/common';
 import { AuthService } from './auth.service.js';
 import { CurrentUser } from './current-user.decorator.js';
+import { GoogleUser } from './google-user.decorator.js';
 import type { AuthUser } from './jwt.strategy.js';
-import {
-  REFRESH_TOKEN_COOKIE,
-  RefreshTokenGuard,
-} from './refresh-token.context.js';
+import { REFRESH_TOKEN_COOKIE } from './refresh-token.context.js';
+import { RefreshTokenGuard } from './refresh-token.guard.js';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -43,9 +40,8 @@ export class AuthController {
     summary:
       'Google 로그인 callback: refresh token을 cookie에 담고 프론트엔드 /auth/callback으로 리다이렉트',
   })
-  googleCallback(@Req() req: Request): Promise<{ url: string }> {
-    // req.user = GoogleStrategy.validate()가 반환한 User
-    return this.authService.loginWithOauth(req.user as User);
+  googleCallback(@GoogleUser() user: User): Promise<{ url: string }> {
+    return this.authService.loginWithOauth(user);
   }
 
   @Post('access')

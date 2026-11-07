@@ -5,13 +5,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommonModule, Oauth, Token, User } from '@app/common';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
-import { GoogleStrategy } from './google-strategy.guard.js';
+import { GoogleStrategy } from './google.strategy.js';
 import { JwtStrategy } from './jwt.strategy.js';
 import {
   RefreshTokenContext,
   RefreshTokenContextMiddleware,
-  RefreshTokenGuard,
 } from './refresh-token.context.js';
+import { RefreshTokenGuard } from './refresh-token.guard.js';
 import { TokenProvider } from './token.provider.js';
 
 @Module({
