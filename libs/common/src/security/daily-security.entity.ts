@@ -12,16 +12,16 @@ export class DailySecurity extends BaseTimeEntity {
     date: string;
 
     @Column(decimalColumn)
-    openingPrice: number;
+    openingPrice: string;
 
     @Column(decimalColumn)
-    closingPrice: number;
+    closingPrice: string;
 
     @Column(decimalColumn)
-    highestPrice: number;
+    highestPrice: string;
 
     @Column(decimalColumn)
-    lowestPrice: number;
+    lowestPrice: string;
 
     @ManyToOne(() => Security, {onDelete: 'CASCADE'})
     @JoinColumn({name: 'id'})

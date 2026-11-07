@@ -1,16 +1,24 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { Decimal } from 'decimal.js';
 import { Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { PurchaseDateBalance, User } from '@app/common';
+import {
+  PurchaseDateBalance,
+  Security,
+  truncateByCurrency,
+  User,
+} from '@app/common';
 
 export interface AddPurchaseDateBalanceInput {
   userId: number;
   securityId: string;
   /** 'YYYY-MM-DD' */
   purchaseDate: string;
-  amount: number;
-  price: number;
+  /** 수량. 종목 통화에 맞춰 버림 (KRW: 정수, USD: 소수 6자리) */
+  amount: Decimal.Value;
+  /** 매수 단가. 종목 통화에 맞춰 버림 (KRW: 정수, USD: 소수 6자리) */
+  price: Decimal.Value;
 }
 
 @Injectable()
@@ -20,6 +28,8 @@ export class BalanceService {
     private readonly purchaseDateBalanceRepository: Repository<PurchaseDateBalance>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Security)
+    private readonly securityRepository: Repository<Security>,
   ) {}
 
   /**
@@ -43,6 +53,13 @@ export class BalanceService {
       throw new NotFoundException('존재하지 않는 사용자입니다.');
     }
 
+    const security = await this.securityRepository.findOneBy({
+      id: securityId,
+    });
+    if (!security) {
+      throw new NotFoundException('존재하지 않는 종목입니다.');
+    }
+
     const last = await this.purchaseDateBalanceRepository.findOne({
       where: { userId, securityId, purchaseDate },
       order: { sequence: 'DESC' },
@@ -50,8 +67,12 @@ export class BalanceService {
 
     return this.purchaseDateBalanceRepository.save(
       this.purchaseDateBalanceRepository.create({
-        ...input,
+        userId,
+        securityId,
+        purchaseDate,
         sequence: (last?.sequence ?? 0) + 1,
+        amount: truncateByCurrency(input.amount, security.currency),
+        price: truncateByCurrency(input.price, security.currency),
       }),
     );
   }

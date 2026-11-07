@@ -19,10 +19,10 @@ export class PurchaseDateBalance extends BaseTimeEntity{
     sequence: number;
 
     @Column(decimalColumn)
-    amount: number;
+    amount: string;
 
     @Column(decimalColumn)
-    price: number;
+    price: string;
 
     @ManyToOne(() => UserBalance, {onDelete: 'CASCADE'})
     @JoinColumn([

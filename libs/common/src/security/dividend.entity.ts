@@ -16,7 +16,7 @@ export class Dividend extends BaseTimeEntity {
     noticeDate: string;
 
     @Column(decimalColumn)
-    amount: number;
+    amount: string;
 
     @Column({ type: 'enum', enum: DividendType })
     type: DividendType;
