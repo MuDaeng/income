@@ -16,7 +16,7 @@ async function bootstrap() {
       .setTitle('Income API')
       .setDescription('배당인컴')
       .setVersion('1.0')
-      .addServer('http://localhost:3000/', '스웨거 테스트')
+      .addServer('http://localhost:8080/', '스웨거 테스트')
       // .addServer('https://production.yourapi.com/', 'Production')
       .addTag('배당 인컴')
       .addBearerAuth()
@@ -25,6 +25,6 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('api-docs', app, document);
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 8080);
 }
 await bootstrap();
