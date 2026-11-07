@@ -17,6 +17,7 @@ import {
 import type { Request } from 'express';
 import { User } from '@app/common';
 import { AuthService } from './auth.service.js';
+import { CurrentUser } from './current-user.decorator.js';
 import type { AuthUser } from './jwt.strategy.js';
 import {
   REFRESH_TOKEN_COOKIE,
@@ -74,7 +75,7 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Bearer access token으로 로그인한 사용자 확인' })
-  me(@Req() req: Request): AuthUser {
-    return req.user as AuthUser;
+  me(@CurrentUser() user: AuthUser): Promise<User> {
+    return this.authService.getMe(user);
   }
 }

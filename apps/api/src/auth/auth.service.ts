@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import { authConfig, Oauth, OAuthType, Token, User } from '@app/common';
+import type { AuthUser } from './jwt.strategy.js';
 import { RefreshTokenContext } from './refresh-token.context.js';
 import { TokenProvider } from './token.provider.js';
 
@@ -95,6 +96,15 @@ export class AuthService {
     );
     this.refreshTokenContext.setRefreshTokenCookie(refreshToken);
     return { accessToken };
+  }
+
+  /** Bearer access token의 사용자를 DB에서 조회. 삭제된 사용자면 401 */
+  async getMe(authUser: AuthUser): Promise<User> {
+    const user = await this.userRepository.findOneBy({ id: authUser.id });
+    if (!user) {
+      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
+    }
+    return user;
   }
 
   /** context의 refresh token으로 Token을 조회. 없거나 sub와 사용자가 다르면 401 */
