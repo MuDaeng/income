@@ -1,0 +1,1 @@
+export enum OAuthType {GOOGLE = 'google', KAKAOTALK = 'kakaoTalk'}

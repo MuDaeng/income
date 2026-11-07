@@ -1,11 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/nest-cli",
   "collection": "@nestjs/schematics",
-  "sourceRoot": "apps/income/src",
+  "sourceRoot": "apps/api/src",
   "compilerOptions": {
     "deleteOutDir": true,
     "builder": "rspack",
-    "tsConfigPath": "apps/income/tsconfig.app.json"
+    "tsConfigPath": "apps/api/tsconfig.app.json"
   },
   "projects": {
     "api": {
@@ -17,25 +17,16 @@
         "tsConfigPath": "apps/api/tsconfig.app.json"
       }
     },
-    "entity": {
+    "common": {
       "type": "library",
-      "root": "libs/entity",
+      "root": "libs/common",
       "entryFile": "index",
-      "sourceRoot": "libs/entity/src",
+      "sourceRoot": "libs/common/src",
       "compilerOptions": {
-        "tsConfigPath": "libs/entity/tsconfig.lib.json"
-      }
-    },
-    "income": {
-      "type": "application",
-      "root": "apps/income",
-      "entryFile": "main",
-      "sourceRoot": "apps/income/src",
-      "compilerOptions": {
-        "tsConfigPath": "apps/income/tsconfig.app.json"
+        "tsConfigPath": "libs/common/tsconfig.lib.json"
       }
     }
   },
   "monorepo": true,
-  "root": "apps/income"
+  "root": "apps/api"
 }

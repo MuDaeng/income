@@ -23,19 +23,16 @@
       "node"
     ],
     "paths": {
-      "@app/entity": [
-        "./libs/entity/src/index.ts"
+      "@app/common": [
+        "./libs/common/src/index.ts"
       ],
-      "@app/entity/*": [
-        "./libs/entity/src/*"
+      "@app/common/*": [
+        "./libs/common/src/*"
       ]
     }
   },
   "files": [],
   "references": [
-    {
-      "path": "./apps/income/tsconfig.app.json"
-    },
     {
       "path": "./apps/api/tsconfig.app.json"
     },
