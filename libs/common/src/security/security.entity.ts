@@ -12,6 +12,9 @@ export class Security extends BaseTimeEntity {
     type: SecurityType;
 
     @Column()
+    symbol: string;
+
+    @Column()
     name: string;
 
     @Column()

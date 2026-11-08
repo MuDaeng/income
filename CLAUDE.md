@@ -88,7 +88,11 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 
 ## Environment
 
-`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (must differ), `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` (seconds), `FRONTEND_URL`.
+`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (must differ), `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` (seconds), `FRONTEND_URL`, `TOSS_CLIENT_ID` / `TOSS_CLIENT_SECRET` (Toss Open API; the calling machine's IP must be on Toss's allowed-IP list, otherwise 403).
+
+### Toss Open API
+
+Call Toss only through `TossClient` (`toss/toss.client.ts`, exported by `TossModule`). It caches the access token in memory until shortly before expiry: Toss allows one valid token per client, so issuing a new one revokes the previous token — never request a token per call. `GET /api/v1/stocks/all` is rate-limited to 1 request/second (the import waits between markets). `POST /securities/import` (`SecurityService.importFromToss`) upserts every KOSPI/KOSDAQ/NYSE/NASDAQ/AMEX listing into `Security` (`id` = ISIN, currency from the market).
 
 ### Auth flow
 
