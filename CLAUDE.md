@@ -88,7 +88,7 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 
 ## Environment
 
-`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (must differ), `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` (seconds), `FRONTEND_URL`, `TOSS_CLIENT_ID` / `TOSS_CLIENT_SECRET` (Toss Open API; the calling machine's IP must be on Toss's allowed-IP list, otherwise 403), `MASSIVE_API_KEY` (Massive REST API, sent as `Authorization: Bearer`).
+`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (must differ), `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` (seconds), `FRONTEND_URL`, `TOSS_CLIENT_ID` / `TOSS_CLIENT_SECRET` (Toss Open API; the calling machine's IP must be on Toss's allowed-IP list, otherwise 403), `MASSIVE_API_KEY` (Massive REST API, sent as `Authorization: Bearer`), `DATA_GO_KR_SERVICE_KEY` (data.go.kr decoding key, sent as the `serviceKey` query param).
 
 ### Toss Open API
 
@@ -97,6 +97,10 @@ Call Toss only through `TossClient` (`toss/toss.client.ts`, exported by `TossMod
 ### Massive API
 
 Call Massive only through `MassiveClient` (`massive/massive.client.ts`, exported by `MassiveModule`). `POST /exchange-rates/import` (`ExchangeRateService.importFromMassive`, body `{ from?, to? }`, default the last 2 years) fetches `C:USDKRW` daily bars and upserts them into `DailyExchangeRate` as `currency = USD` (KRW per USD; `date` = the bar's UTC date). Rates keep 6 decimals (`ROUND_DOWN`) — don't use `truncateByCurrency` on them, KRW would cut them to integers. The Currencies Basic plan only serves 2 years of end-of-day data.
+
+### data.go.kr
+
+Call data.go.kr only through `DataGoKrClient` (`data-go-kr/data-go-kr.client.ts`, exported by `DataGoKrModule`). `POST /daily-securities/import` (`DailySecurityService.importFromDataGoKr`, body `{ from?, to? }`, default the last 2 years) pages through the FSC stock price API (`getStockPriceInfo_V2`, domestic listed stocks only, ~2,900 rows per trading day, 10,000 rows per page) and upserts each page into `DailySecurity` right away. Rows are matched by ISIN (`isinCd` = `Security.id`); ISINs not in `security` as KRW are skipped (they would violate the FK). `endBasDt` is exclusive, so the service passes `to + 1 day`. Errors such as an unregistered key come back as `OpenAPI_ServiceResponse` (or XML) instead of `response.header`, and the client turns them into 502.
 
 ### Auth flow
 

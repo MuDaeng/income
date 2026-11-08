@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { BalanceModule } from './balance/balance.module.js';
 import { SecurityModule } from './security/security.module.js';
 import { ExchangeRateModule } from './exchange-rate/exchange-rate.module.js';
+import { DailySecurityModule } from './daily-security/daily-security.module.js';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ExchangeRateModule } from './exchange-rate/exchange-rate.module.js';
     BalanceModule,
     SecurityModule,
     ExchangeRateModule,
+    DailySecurityModule,
   ],
   controllers: [ApiController],
   providers: [ApiService],
