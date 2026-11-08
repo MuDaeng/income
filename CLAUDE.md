@@ -88,11 +88,15 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 
 ## Environment
 
-`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (must differ), `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` (seconds), `FRONTEND_URL`, `TOSS_CLIENT_ID` / `TOSS_CLIENT_SECRET` (Toss Open API; the calling machine's IP must be on Toss's allowed-IP list, otherwise 403).
+`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (must differ), `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` (seconds), `FRONTEND_URL`, `TOSS_CLIENT_ID` / `TOSS_CLIENT_SECRET` (Toss Open API; the calling machine's IP must be on Toss's allowed-IP list, otherwise 403), `MASSIVE_API_KEY` (Massive REST API, sent as `Authorization: Bearer`).
 
 ### Toss Open API
 
 Call Toss only through `TossClient` (`toss/toss.client.ts`, exported by `TossModule`). It caches the access token in memory until shortly before expiry: Toss allows one valid token per client, so issuing a new one revokes the previous token — never request a token per call. `GET /api/v1/stocks/all` is rate-limited to 1 request/second (the import waits between markets). `POST /securities/import` (`SecurityService.importFromToss`) upserts every KOSPI/KOSDAQ/NYSE/NASDAQ/AMEX listing into `Security` (`id` = ISIN, currency from the market).
+
+### Massive API
+
+Call Massive only through `MassiveClient` (`massive/massive.client.ts`, exported by `MassiveModule`). `POST /exchange-rates/import` (`ExchangeRateService.importFromMassive`, body `{ from?, to? }`, default the last 2 years) fetches `C:USDKRW` daily bars and upserts them into `DailyExchangeRate` as `currency = USD` (KRW per USD; `date` = the bar's UTC date). Rates keep 6 decimals (`ROUND_DOWN`) — don't use `truncateByCurrency` on them, KRW would cut them to integers. The Currencies Basic plan only serves 2 years of end-of-day data.
 
 ### Auth flow
 

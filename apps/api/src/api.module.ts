@@ -5,9 +5,16 @@ import { ApiService } from './api.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { BalanceModule } from './balance/balance.module.js';
 import { SecurityModule } from './security/security.module.js';
+import { ExchangeRateModule } from './exchange-rate/exchange-rate.module.js';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, BalanceModule, SecurityModule],
+  imports: [
+    DatabaseModule,
+    AuthModule,
+    BalanceModule,
+    SecurityModule,
+    ExchangeRateModule,
+  ],
   controllers: [ApiController],
   providers: [ApiService],
 })
