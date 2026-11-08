@@ -15,6 +15,10 @@ import {
   type RegisterBalanceRequest,
   registerBalanceSchema,
 } from './register-balance.schema.js';
+import {
+  type SellBalanceRequest,
+  sellBalanceSchema,
+} from './sell-balance.schema.js';
 
 @ApiTags('balance')
 @Controller('balance')
@@ -33,6 +37,20 @@ export class BalanceController {
     @Body({ schema: registerBalanceSchema }) body: RegisterBalanceRequest,
   ): Promise<PurchaseDateBalance> {
     return this.balanceService.registerBalance(user, body);
+  }
+
+  @Post('sale')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '매도 등록: 매수분(매수일·sequence)의 전량 또는 일부를 매도일로 매도 처리',
+  })
+  sell(
+    @CurrentUser() user: AuthUser,
+    @Body({ schema: sellBalanceSchema }) body: SellBalanceRequest,
+  ): Promise<PurchaseDateBalance> {
+    return this.balanceService.sellBalance(user, body);
   }
 
   @Get()

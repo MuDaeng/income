@@ -24,6 +24,7 @@ import type {
   IntegratedBalanceResponse,
 } from './integrated-balance.dto.js';
 import type { RegisterBalanceRequest } from './register-balance.schema.js';
+import type { SellBalanceRequest } from './sell-balance.schema.js';
 
 @Injectable()
 export class BalanceService {
@@ -124,6 +125,100 @@ export class BalanceService {
         amount,
         price,
         saleDate: input.saleDate ?? null,
+      }),
+    );
+  }
+
+  /**
+   * 매도 등록. 매수분 하나(종목·매수일·sequence, 미매도)의 전량 또는 일부를 매도일로 매도 처리한다.
+   * - 매도 수량 > 보유 수량: 400
+   * - 전량: 같은 매도일·매수가의 매도 행이 있으면 거기에 더하고 미매도 행은 삭제, 없으면 미매도 행에 saleDate만 저장
+   * - 일부: 미매도 행에서 빼고, 같은 매도일·매수가의 매도 행이 있으면 거기에 더하고,
+   *   없으면 새 행(saleDate·수량은 입력, 매수가는 미매도 행 값, sequence는 같은 매수일 안의 max + 1)을 저장
+   *
+   * 매수가까지 같은 행만 합쳐서, 같은 날 다른 가격에 산 매수분과 섞이지 않게 한다.
+   * registerBalance와 같은 이유로 먼저 User 행을 잠가 같은 사용자의 매수·매도를 순서대로 실행한다.
+   */
+  @Transactional()
+  async sellBalance(
+    authUser: AuthUser,
+    input: SellBalanceRequest,
+  ): Promise<PurchaseDateBalance> {
+    const userId = authUser.id;
+    const { securityId, purchaseDate, sequence, saleDate } = input;
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!user) {
+      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
+    }
+
+    const source = await this.purchaseDateBalanceRepository.findOne({
+      where: { userId, securityId, purchaseDate, sequence, saleDate: IsNull() },
+    });
+    if (!source) {
+      throw new NotFoundException('매도할 보유 잔고가 없습니다.');
+    }
+
+    const security = await this.securityRepository.findOneBy({
+      id: securityId,
+    });
+    if (!security) {
+      throw new NotFoundException('존재하지 않는 종목입니다.');
+    }
+    const { currency } = security;
+    const amount = new Decimal(truncateByCurrency(input.amount, currency));
+    const held = new Decimal(source.amount);
+    if (amount.gt(held)) {
+      throw new BadRequestException('매도 수량이 보유 수량보다 많습니다.');
+    }
+
+    const sold = await this.purchaseDateBalanceRepository.findOne({
+      where: { userId, securityId, purchaseDate, saleDate, price: source.price },
+    });
+
+    // 3. 전량 매도
+    if (amount.eq(held)) {
+      if (!sold) {
+        source.saleDate = saleDate;
+        return this.purchaseDateBalanceRepository.save(source);
+      }
+      sold.amount = truncateByCurrency(amount.plus(sold.amount), currency);
+      await this.purchaseDateBalanceRepository.delete({
+        userId,
+        securityId,
+        purchaseDate,
+        sequence,
+      });
+      return this.purchaseDateBalanceRepository.save(sold);
+    }
+
+    // 4. 일부 매도
+    source.amount = truncateByCurrency(held.minus(amount), currency);
+    await this.purchaseDateBalanceRepository.save(source);
+
+    // 4-1. 같은 매도일 행에 더함
+    if (sold) {
+      sold.amount = truncateByCurrency(amount.plus(sold.amount), currency);
+      return this.purchaseDateBalanceRepository.save(sold);
+    }
+
+    // 4-2. 새 매도 행
+    const last = await this.purchaseDateBalanceRepository.findOne({
+      where: { userId, securityId, purchaseDate },
+      order: { sequence: 'DESC' },
+    });
+    return this.purchaseDateBalanceRepository.save(
+      this.purchaseDateBalanceRepository.create({
+        userId,
+        securityId,
+        purchaseDate,
+        sequence: (last?.sequence ?? 0) + 1,
+        amount: truncateByCurrency(amount, currency),
+        price: source.price,
+        saleDate,
       }),
     );
   }
