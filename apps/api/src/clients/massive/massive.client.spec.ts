@@ -51,6 +51,37 @@ describe('MassiveClient', () => {
     ).resolves.toEqual([]);
   });
 
+  it('미국 주식 grouped daily를 날짜 경로로 호출하고, 휴장일(results 없음)은 빈 배열', async () => {
+    const bar = { T: 'AAPL', o: 1, h: 2, l: 0.5, c: 1.5, t: 0 };
+    fetchMock
+      .mockResolvedValueOnce(json({ status: 'OK', resultsCount: 1, results: [bar] }))
+      .mockResolvedValueOnce(json({ status: 'OK', resultsCount: 0 }));
+
+    await expect(client.getGroupedDailyStocks('2026-11-05')).resolves.toEqual([bar]);
+    await expect(client.getGroupedDailyStocks('2026-11-26')).resolves.toEqual([]);
+    expect((fetchMock.mock.calls[0][0] as URL).href).toBe(
+      'https://api.massive.com/v2/aggs/grouped/locale/us/market/stocks/2026-11-05?adjusted=true',
+    );
+  });
+
+  it('429면 Retry-After(없으면 15초)만큼 기다렸다 다시 시도한다', async () => {
+    vi.useFakeTimers();
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response('too many', { status: 429, headers: { 'Retry-After': '2' } }),
+      )
+      .mockResolvedValueOnce(new Response('too many', { status: 429 }))
+      .mockResolvedValueOnce(json({ status: 'OK', results: [] }));
+
+    const promise = client.getGroupedDailyStocks('2026-11-05');
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expect(promise).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
   it('비정상 응답이면 상태 코드와 본문을 담아 502', async () => {
     fetchMock.mockResolvedValueOnce(
       json({ status: 'ERROR', error: 'Unknown API Key' }, 401),

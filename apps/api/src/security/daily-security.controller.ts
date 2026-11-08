@@ -28,4 +28,18 @@ export class DailySecurityController {
   ): Promise<ImportDailySecuritiesResult> {
     return this.dailySecurityService.importFromDataGoKr(body);
   }
+
+  @Post('import/us')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '미국 일별 시세 가져오기: Massive로 미국 주식 일봉을 daily_security에 저장 (기간 생략 시 최근 2년)',
+  })
+  importUs(
+    @Body({ schema: importDailySecuritiesSchema })
+    body: ImportDailySecuritiesRequest,
+  ): Promise<ImportDailySecuritiesResult> {
+    return this.dailySecurityService.importUsFromMassive(body);
+  }
 }

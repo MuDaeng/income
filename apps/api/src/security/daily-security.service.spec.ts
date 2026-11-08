@@ -6,6 +6,7 @@ import type {
   StockPricePage,
   StockPriceQuery,
 } from '../clients/data-go-kr/data-go-kr.types.js';
+import type { MassiveClient } from '../clients/massive/massive.client.js';
 import { DailySecurityService } from './daily-security.service.js';
 
 const item = (isinCd: string, basDt: string, clpr = '72000'): StockPriceItem => ({
@@ -33,6 +34,7 @@ describe('DailySecurityService.importFromDataGoKr', () => {
       { upsert } as unknown as Repository<DailySecurity>,
       { find } as unknown as Repository<Security>,
       { getStockPrices } as unknown as DataGoKrClient,
+      {} as MassiveClient,
     );
   });
 

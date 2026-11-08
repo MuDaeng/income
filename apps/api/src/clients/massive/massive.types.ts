@@ -15,6 +15,17 @@ export interface MassiveAggregateBar {
   n?: number;
 }
 
+/** Daily Market Summary(grouped daily)의 행 하나. `T`는 티커 */
+export interface MassiveGroupedBar extends MassiveAggregateBar {
+  T: string;
+}
+
+export interface MassiveGroupedResponse {
+  status: string;
+  resultsCount?: number;
+  results?: MassiveGroupedBar[];
+}
+
 export interface MassiveAggregatesResponse {
   ticker: string;
   status: string;

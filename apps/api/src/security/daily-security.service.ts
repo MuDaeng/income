@@ -9,6 +9,7 @@ import {
 } from '@app/common';
 import { DataGoKrClient } from '../clients/data-go-kr/data-go-kr.client.js';
 import type { StockPriceItem } from '../clients/data-go-kr/data-go-kr.types.js';
+import { MassiveClient } from '../clients/massive/massive.client.js';
 import type { ImportDailySecuritiesRequest } from './import-daily-securities.schema.js';
 
 /** 기간을 생략했을 때 가져올 햇수 (환율 가져오기와 같은 기간) */
@@ -20,11 +21,11 @@ const UPSERT_CHUNK = 1_000;
 export interface ImportDailySecuritiesResult {
   from: string;
   to: string;
-  /** data.go.kr에서 받은 행 수 */
+  /** 원천(data.go.kr·Massive)에서 받은 행 수 */
   fetched: number;
   /** daily_security에 저장한 행 수 */
   saved: number;
-  /** security에 없는 ISIN이라 건너뛴 행 수 */
+  /** security에 없는 종목(ISIN·티커)이라 건너뛴 행 수 */
   skipped: number;
   firstDate: string | null;
   lastDate: string | null;
@@ -40,6 +41,7 @@ export class DailySecurityService {
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,
     private readonly dataGoKrClient: DataGoKrClient,
+    private readonly massiveClient: MassiveClient,
   ) {}
 
   /**
@@ -103,7 +105,87 @@ export class DailySecurityService {
       }
     }
   }
+
+  /**
+   * Massive Daily Market Summary로 미국 주식 일봉을 받아 daily_security에 넣는다.
+   * 하루에 한 번 호출해 그날 전체 종목을 받고(주말은 건너뜀, 휴장일은 빈 결과),
+   * security의 USD 종목과 티커(symbol)로 맞춰 저장한다. 가격은 소수 6자리 버림.
+   */
+  async importUsFromMassive(
+    input: ImportDailySecuritiesRequest,
+  ): Promise<ImportDailySecuritiesResult> {
+    const to = input.to ?? toIsoDate(new Date());
+    const from = input.from ?? yearsBefore(to, DEFAULT_YEARS);
+
+    const usdSecurities = await this.securityRepository.find({
+      select: { id: true, symbol: true },
+      where: { currency: Currency.USD },
+    });
+    const idByTicker = new Map(
+      usdSecurities.map(({ id, symbol }) => [toMassiveTicker(symbol), id]),
+    );
+
+    const result: ImportDailySecuritiesResult = {
+      from,
+      to,
+      fetched: 0,
+      saved: 0,
+      skipped: 0,
+      firstDate: null,
+      lastDate: null,
+    };
+    for (let date = from; date <= to; date = addDays(date, 1)) {
+      if (isWeekend(date)) {
+        continue;
+      }
+      const bars = await this.massiveClient.getGroupedDailyStocks(date);
+      const prices: DailySecurityRow[] = [];
+      for (const bar of bars) {
+        const id = idByTicker.get(bar.T);
+        if (id) {
+          prices.push({
+            id,
+            date,
+            openingPrice: truncateByCurrency(bar.o, Currency.USD),
+            closingPrice: truncateByCurrency(bar.c, Currency.USD),
+            highestPrice: truncateByCurrency(bar.h, Currency.USD),
+            lowestPrice: truncateByCurrency(bar.l, Currency.USD),
+          });
+        }
+      }
+      for (let i = 0; i < prices.length; i += UPSERT_CHUNK) {
+        await this.dailySecurityRepository.upsert(
+          prices.slice(i, i + UPSERT_CHUNK),
+          ['id', 'date'],
+        );
+      }
+
+      result.fetched += bars.length;
+      result.saved += prices.length;
+      result.skipped += bars.length - prices.length;
+      if (prices.length > 0) {
+        result.firstDate ??= date;
+        result.lastDate = date;
+      }
+      this.logger.log(
+        `미국 일별 시세 ${date}: ${bars.length}행 중 ${prices.length}행 저장 (누적 ${result.saved})`,
+      );
+    }
+    return result;
+  }
 }
+
+/**
+ * Toss 심볼을 Massive 티커로. 우선주 표기만 다름: Toss 'BAC-P' → Massive 'BACpP'.
+ * 그 밖의 표기('BRK.B' 등)는 같음
+ */
+const toMassiveTicker = (symbol: string) =>
+  symbol.replace(/-([A-Z]+)$/, 'p$1');
+
+const isWeekend = (isoDate: string) => {
+  const day = parseIsoDate(isoDate).getUTCDay();
+  return day === 0 || day === 6;
+};
 
 type DailySecurityRow = Pick<
   DailySecurity,
