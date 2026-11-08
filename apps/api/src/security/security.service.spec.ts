@@ -1,7 +1,7 @@
 import { Currency, Security, SecurityType } from '@app/common';
 import type { Repository } from 'typeorm';
-import type { TossClient } from '../toss/toss.client.js';
-import type { TossListedStock, TossMarket } from '../toss/toss.types.js';
+import type { TossClient } from '../clients/toss/toss.client.js';
+import type { TossListedStock, TossMarket } from '../clients/toss/toss.types.js';
 import { SecurityService } from './security.service.js';
 
 const stock = (

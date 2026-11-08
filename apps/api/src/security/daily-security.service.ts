@@ -7,8 +7,8 @@ import {
   Security,
   truncateByCurrency,
 } from '@app/common';
-import { DataGoKrClient } from '../data-go-kr/data-go-kr.client.js';
-import type { StockPriceItem } from '../data-go-kr/data-go-kr.types.js';
+import { DataGoKrClient } from '../clients/data-go-kr/data-go-kr.client.js';
+import type { StockPriceItem } from '../clients/data-go-kr/data-go-kr.types.js';
 import type { ImportDailySecuritiesRequest } from './import-daily-securities.schema.js';
 
 /** 기간을 생략했을 때 가져올 햇수 (환율 가져오기와 같은 기간) */

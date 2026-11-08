@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Currency, Security, SecurityType } from '@app/common';
-import { TossClient } from '../toss/toss.client.js';
-import type { TossMarket, TossSecurityType } from '../toss/toss.types.js';
+import { TossClient } from '../clients/toss/toss.client.js';
+import type { TossMarket, TossSecurityType } from '../clients/toss/toss.types.js';
 
 /** 가져올 시장과 그 시장 종목의 통화 (Toss 목록 응답에는 통화가 없음) */
 const MARKET_CURRENCY: [TossMarket, Currency][] = [

@@ -1,7 +1,7 @@
 import { Currency, DailyExchangeRate } from '@app/common';
 import type { Repository } from 'typeorm';
-import type { MassiveClient } from '../massive/massive.client.js';
-import type { MassiveAggregateBar } from '../massive/massive.types.js';
+import type { MassiveClient } from '../clients/massive/massive.client.js';
+import type { MassiveAggregateBar } from '../clients/massive/massive.types.js';
 import { ExchangeRateService } from './exchange-rate.service.js';
 
 const DAY_MS = 86_400_000;
