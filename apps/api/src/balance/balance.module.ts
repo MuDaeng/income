@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
+  DailyExchangeRate,
   DailySecurity,
   PurchaseDateBalance,
   Security,
@@ -18,6 +19,7 @@ import { BalanceService } from './balance.service.js';
       User,
       Security,
       DailySecurity,
+      DailyExchangeRate,
     ]),
   ],
   controllers: [BalanceController],

@@ -4,3 +4,4 @@ export * from './currency.enum.js';
 export * from './currency-decimal.js';
 export * from './daily-security.entity.js';
 export * from './dividend.entity.js';
+export * from './daily-exchange-rate.entity.js';
