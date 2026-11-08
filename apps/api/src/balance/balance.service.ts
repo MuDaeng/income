@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import {
   Currency,
@@ -46,6 +46,7 @@ export class BalanceService {
    * 매수 잔고 등록.
    * 1. 사용자 검증 2. 종목 검증 3. 매수일 시세 존재 검증 4. 매수 가격이 그날 저가~고가(경계 포함)인지 검증
    * 5. UserBalance(없을 때만 생성) + PurchaseDateBalance(sequence = 같은 사용자·종목·매수일 안의 max + 1) 등록.
+   *    매도일(saleDate)은 입력에 있으면 저장하고, 없으면 null(보유 중).
    *
    * 동시 등록 시 같은 sequence나 중복 UserBalance가 생기지 않도록 먼저 User 행을 잠근다(SELECT ... FOR UPDATE).
    * PK로 찾는 단일 행 잠금이라 gap lock이 없어서, 같은 사용자의 등록은 순서대로 실행되고 deadlock이 나지 않는다.
@@ -122,13 +123,15 @@ export class BalanceService {
         sequence: (last?.sequence ?? 0) + 1,
         amount,
         price,
+        saleDate: input.saleDate ?? null,
       }),
     );
   }
 
   /**
    * 통합잔고 조회.
-   * 1. 보유 종목(UserBalance + Security) 2. 매수일별 잔고로 종목별 총수량·총매입금액·매입평균가
+   * 1. 보유 종목(UserBalance + Security) 2. 매도하지 않은(saleDate IS NULL) 매수일별 잔고로 종목별 총수량·총매입금액·매입평균가
+   *    (미매도 매수분이 없는 종목, 즉 전량 매도한 종목은 제외)
    * 3. 최신 종가 × 총수량 = 평가금액 4. USD 종목은 최신 USD 환율(closingRate, 1 USD당 원화)을 곱해 원화로 환산
    * 5. 한국(KRW)·미국(USD)·전체(원화) 합계 6. 각 항목의 수익률(%).
    *
@@ -146,9 +149,9 @@ export class BalanceService {
       order: { securityId: 'ASC' },
     });
 
-    // 2. 매수일별 잔고를 종목별로 합산
+    // 2. 매도하지 않은 매수일별 잔고를 종목별로 합산
     const purchases = await this.purchaseDateBalanceRepository.find({
-      where: { userId },
+      where: { userId, saleDate: IsNull() },
     });
     const totals = new Map<string, { amount: Decimal; cost: Decimal }>();
     for (const purchase of purchases) {
@@ -163,8 +166,13 @@ export class BalanceService {
       totals.set(purchase.securityId, total);
     }
 
+    // 전량 매도한 종목 제외
+    const heldBalances = userBalances.filter((balance) =>
+      totals.has(balance.securityId),
+    );
+
     // 4. USD 종목이 있을 때만 최신 환율
-    const hasUsd = userBalances.some(
+    const hasUsd = heldBalances.some(
       (balance) => balance.security.currency === Currency.USD,
     );
     const exchangeRate = hasUsd
@@ -178,7 +186,7 @@ export class BalanceService {
     }
 
     const items: BalanceItemDto[] = [];
-    for (const { securityId, security } of userBalances) {
+    for (const { securityId, security } of heldBalances) {
       // 3. 최신 종가
       const latest = await this.dailySecurityRepository.findOne({
         where: { id: securityId },
@@ -187,10 +195,7 @@ export class BalanceService {
       if (!latest) {
         throw new NotFoundException(`${security.name}의 시세가 없습니다.`);
       }
-      const total = totals.get(securityId) ?? {
-        amount: new Decimal(0),
-        cost: new Decimal(0),
-      };
+      const total = totals.get(securityId)!;
       items.push(
         this.toBalanceItem(
           security,

@@ -24,6 +24,10 @@ export class PurchaseDateBalance extends BaseTimeEntity{
     @Column(decimalColumn)
     price: string;
 
+    /** 'YYYY-MM-DD', 매도 전이면 null */
+    @Column({ type: 'date', nullable: true })
+    saleDate: string | null;
+
     @ManyToOne(() => UserBalance, {onDelete: 'CASCADE'})
     @JoinColumn([
         {name: 'userId', referencedColumnName: 'userId'},

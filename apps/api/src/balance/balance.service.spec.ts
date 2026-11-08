@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { IsNull } from 'typeorm';
 import {
   Currency,
   DailyExchangeRate,
@@ -126,6 +127,36 @@ describe('BalanceService.getIntegratedBalance', () => {
     });
     expect(result.exchangeRate).toBe('1400.5');
     expect(result.exchangeRateDate).toBe('2026-11-06');
+    expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
+      where: { userId: 1, saleDate: IsNull() },
+    });
+  });
+
+  it('미매도 매수분이 없는(전량 매도한) 종목은 제외하고 시세·환율도 조회하지 않는다', async () => {
+    userBalanceRepository.find.mockResolvedValue([
+      { userId: 1, securityId: KRW_SECURITY.id, security: KRW_SECURITY },
+      { userId: 1, securityId: USD_SECURITY.id, security: USD_SECURITY },
+    ]);
+    // saleDate IS NULL 조건으로 조회한 결과: AAPL은 전부 매도돼서 없음
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      { securityId: '005930', amount: '10.000000', price: '70000.000000' },
+    ]);
+    dailySecurityRepository.findOne.mockResolvedValue({
+      id: '005930',
+      closingPrice: '77000.000000',
+    });
+
+    const result = await service.getIntegratedBalance({ id: 1 });
+
+    expect(result.items.map((item) => item.securityId)).toEqual(['005930']);
+    expect(result.total).toEqual({
+      purchaseAmount: '700000',
+      evaluationAmount: '770000',
+      returnRate: '10.00',
+    });
+    expect(result.exchangeRate).toBeNull();
+    expect(dailySecurityRepository.findOne).toHaveBeenCalledTimes(1);
+    expect(dailyExchangeRateRepository.findOne).not.toHaveBeenCalled();
   });
 
   it('보유 종목이 없으면 빈 목록과 0 합계를 돌려주고 환율은 조회하지 않는다', async () => {
@@ -149,7 +180,9 @@ describe('BalanceService.getIntegratedBalance', () => {
     userBalanceRepository.find.mockResolvedValue([
       { userId: 1, securityId: USD_SECURITY.id, security: USD_SECURITY },
     ]);
-    purchaseDateBalanceRepository.find.mockResolvedValue([]);
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      { securityId: 'AAPL', amount: '1.000000', price: '100.000000' },
+    ]);
     dailyExchangeRateRepository.findOne.mockResolvedValue(null);
 
     await expect(service.getIntegratedBalance({ id: 1 })).rejects.toThrow(
