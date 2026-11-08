@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import {
   UserBalance,
 } from '@app/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
+import { DividendService } from '../security/dividend.service.js';
 import type {
   BalanceItemDto,
   IntegratedBalanceResponse,
@@ -28,6 +30,8 @@ import type { SellBalanceRequest } from './sell-balance.schema.js';
 
 @Injectable()
 export class BalanceService {
+  private readonly logger = new Logger(BalanceService.name);
+
   constructor(
     @InjectRepository(PurchaseDateBalance)
     private readonly purchaseDateBalanceRepository: Repository<PurchaseDateBalance>,
@@ -41,10 +45,32 @@ export class BalanceService {
     private readonly dailySecurityRepository: Repository<DailySecurity>,
     @InjectRepository(DailyExchangeRate)
     private readonly dailyExchangeRateRepository: Repository<DailyExchangeRate>,
+    private readonly dividendService: DividendService,
   ) {}
 
   /**
-   * 매수 잔고 등록.
+   * 매수 잔고 등록. 등록(saveBalance 트랜잭션)이 커밋된 뒤에 그 종목의 배당 정보를 갱신한다(하루 한 번).
+   * 배당 갱신을 트랜잭션 밖에서 하는 이유: 등록이 검증에서 실패하면 KIS를 호출하지 않고,
+   * 등록 실패로 배당·조회 기록까지 롤백되는 일도 없게 하려고.
+   * 배당 조회(KIS)가 실패해도 등록 결과는 그대로 돌려준다 (lastSearchDate가 그대로라 다음에 다시 조회됨).
+   */
+  async registerBalance(
+    authUser: AuthUser,
+    input: RegisterBalanceRequest,
+  ): Promise<PurchaseDateBalance> {
+    const { saved, security } = await this.saveBalance(authUser, input);
+    try {
+      await this.dividendService.refreshDividends(security);
+    } catch (error) {
+      this.logger.warn(
+        `배당 갱신 실패 ${security.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return saved;
+  }
+
+  /**
+   * 매수 잔고 저장 (한 트랜잭션).
    * 1. 사용자 검증 2. 종목 검증 3. 매수일 시세 존재 검증 4. 매수 가격이 그날 저가~고가(경계 포함)인지 검증
    * 5. UserBalance(없을 때만 생성) + PurchaseDateBalance(sequence = 같은 사용자·종목·매수일 안의 max + 1) 등록.
    *    매도일(saleDate)은 입력에 있으면 저장하고, 없으면 null(보유 중).
@@ -54,10 +80,10 @@ export class BalanceService {
    * (매수일별 잔고 행 자체를 잠그면 InnoDB gap lock 때문에 동시 저장끼리 deadlock이 난다)
    */
   @Transactional()
-  async registerBalance(
+  private async saveBalance(
     authUser: AuthUser,
     input: RegisterBalanceRequest,
-  ): Promise<PurchaseDateBalance> {
+  ): Promise<{ saved: PurchaseDateBalance; security: Security }> {
     const userId = authUser.id;
     const { securityId, purchaseDate } = input;
 
@@ -116,7 +142,7 @@ export class BalanceService {
       order: { sequence: 'DESC' },
     });
 
-    return this.purchaseDateBalanceRepository.save(
+    const saved = await this.purchaseDateBalanceRepository.save(
       this.purchaseDateBalanceRepository.create({
         userId,
         securityId,
@@ -127,6 +153,7 @@ export class BalanceService {
         saleDate: input.saleDate ?? null,
       }),
     );
+    return { saved, security };
   }
 
   /**

@@ -3,8 +3,8 @@ import type { Repository } from 'typeorm';
 import type { DataGoKrClient } from '../clients/data-go-kr/data-go-kr.client.js';
 import type {
   StockPriceItem,
-  StockPricePage,
-  StockPriceQuery,
+  PricePage,
+  PriceQuery,
 } from '../clients/data-go-kr/data-go-kr.types.js';
 import type { MassiveClient } from '../clients/massive/massive.client.js';
 import { DailySecurityService } from './daily-security.service.js';
@@ -24,7 +24,7 @@ const item = (isinCd: string, basDt: string, clpr = '72000'): StockPriceItem => 
 describe('DailySecurityService.importFromDataGoKr', () => {
   const upsert = vi.fn();
   const find = vi.fn();
-  const getStockPrices = vi.fn<(query: StockPriceQuery) => Promise<StockPricePage>>();
+  const getStockPrices = vi.fn<(query: PriceQuery) => Promise<PricePage<StockPriceItem>>>();
   let service: DailySecurityService;
 
   beforeEach(() => {
@@ -129,5 +129,59 @@ describe('DailySecurityService.importFromDataGoKr', () => {
     });
     expect(upsert).not.toHaveBeenCalled();
     expect(result).toMatchObject({ fetched: 0, saved: 0, firstDate: null, lastDate: null });
+  });
+});
+
+describe('DailySecurityService.importEtfFromDataGoKr', () => {
+  const upsert = vi.fn();
+  const find = vi.fn();
+  const getEtfPrices = vi.fn<(query: PriceQuery) => Promise<PricePage>>();
+  let service: DailySecurityService;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    find.mockResolvedValue([{ id: 'KR7441640000' }]);
+    service = new DailySecurityService(
+      { upsert } as unknown as Repository<DailySecurity>,
+      { find } as unknown as Repository<Security>,
+      { getEtfPrices } as unknown as DataGoKrClient,
+      {} as MassiveClient,
+    );
+  });
+
+  it('ETF 시세를 받아 KRW 종목만 원화 정수 가격으로 upsert한다', async () => {
+    getEtfPrices.mockResolvedValueOnce({
+      totalCount: 2,
+      items: [
+        { ...item('KR7441640000', '20261105'), clpr: '10120', mkp: '10100', hipr: '10150', lopr: '10080' },
+        item('KR7999999999', '20261105'), // security에 없는 종목
+      ],
+    });
+
+    const result = await service.importEtfFromDataGoKr({
+      from: '2026-11-05',
+      to: '2026-11-05',
+    });
+
+    expect(getEtfPrices).toHaveBeenCalledWith({
+      beginBasDt: '20261105',
+      endBasDt: '20261106',
+      pageNo: 1,
+      numOfRows: 10_000,
+    });
+    expect(upsert).toHaveBeenCalledWith(
+      [
+        {
+          id: 'KR7441640000',
+          date: '2026-11-05',
+          openingPrice: '10100',
+          closingPrice: '10120',
+          highestPrice: '10150',
+          lowestPrice: '10080',
+        },
+      ],
+      ['id', 'date'],
+    );
+    expect(result).toMatchObject({ fetched: 2, saved: 1, skipped: 1 });
   });
 });

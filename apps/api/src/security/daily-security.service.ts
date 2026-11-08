@@ -8,7 +8,11 @@ import {
   truncateByCurrency,
 } from '@app/common';
 import { DataGoKrClient } from '../clients/data-go-kr/data-go-kr.client.js';
-import type { StockPriceItem } from '../clients/data-go-kr/data-go-kr.types.js';
+import type {
+  PriceItem,
+  PricePage,
+  PriceQuery,
+} from '../clients/data-go-kr/data-go-kr.types.js';
 import { MassiveClient } from '../clients/massive/massive.client.js';
 import type { ImportDailySecuritiesRequest } from './import-daily-securities.schema.js';
 
@@ -49,8 +53,31 @@ export class DailySecurityService {
    * security에 있는 KRW 종목(ISIN)만 저장하고, 페이지(10,000행)마다 바로 upsert한다.
    * 이미 있는 (종목, 날짜)는 갱신하므로 다시 실행해도 된다.
    */
-  async importFromDataGoKr(
+  importFromDataGoKr(
     input: ImportDailySecuritiesRequest,
+  ): Promise<ImportDailySecuritiesResult> {
+    return this.importDataGoKrPages(input, '일별 시세', (query) =>
+      this.dataGoKrClient.getStockPrices(query),
+    );
+  }
+
+  /**
+   * data.go.kr 증권상품시세(ETF)를 받아 daily_security에 넣는다. 주식시세와 같은 방식
+   * (security의 KRW 종목만, 페이지마다 upsert, 다시 실행해도 됨).
+   */
+  importEtfFromDataGoKr(
+    input: ImportDailySecuritiesRequest,
+  ): Promise<ImportDailySecuritiesResult> {
+    return this.importDataGoKrPages(input, 'ETF 일별 시세', (query) =>
+      this.dataGoKrClient.getEtfPrices(query),
+    );
+  }
+
+  /** data.go.kr 일별 시세 API(주식·ETF) 공통: 10,000행씩 페이지를 넘기며 KRW 종목만 upsert */
+  private async importDataGoKrPages(
+    input: ImportDailySecuritiesRequest,
+    label: string,
+    fetchPage: (query: PriceQuery) => Promise<PricePage>,
   ): Promise<ImportDailySecuritiesResult> {
     const to = input.to ?? toIsoDate(new Date());
     const from = input.from ?? yearsBefore(to, DEFAULT_YEARS);
@@ -71,7 +98,7 @@ export class DailySecurityService {
       lastDate: null,
     };
     for (let pageNo = 1; ; pageNo++) {
-      const page = await this.dataGoKrClient.getStockPrices({
+      const page = await fetchPage({
         beginBasDt: toBasDt(from),
         // endBasDt는 그 날짜를 포함하지 않으므로 다음 날을 넘김
         endBasDt: toBasDt(addDays(to, 1)),
@@ -97,7 +124,7 @@ export class DailySecurityService {
         if (!result.lastDate || date > result.lastDate) result.lastDate = date;
       }
       this.logger.log(
-        `일별 시세 ${pageNo}페이지: 누적 ${result.fetched}/${page.totalCount}행, 저장 ${result.saved}`,
+        `${label} ${pageNo}페이지: 누적 ${result.fetched}/${page.totalCount}행, 저장 ${result.saved}`,
       );
 
       if (page.items.length === 0 || pageNo * PAGE_SIZE >= page.totalCount) {
@@ -192,7 +219,7 @@ type DailySecurityRow = Pick<
   'id' | 'date' | 'openingPrice' | 'closingPrice' | 'highestPrice' | 'lowestPrice'
 >;
 
-const toDailySecurity = (item: StockPriceItem): DailySecurityRow => ({
+const toDailySecurity = (item: PriceItem): DailySecurityRow => ({
   id: item.isinCd,
   date: `${item.basDt.slice(0, 4)}-${item.basDt.slice(4, 6)}-${item.basDt.slice(6, 8)}`,
   openingPrice: toPrice(item.mkp),

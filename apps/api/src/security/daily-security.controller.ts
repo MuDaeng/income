@@ -29,6 +29,20 @@ export class DailySecurityController {
     return this.dailySecurityService.importFromDataGoKr(body);
   }
 
+  @Post('import/etf')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'ETF 일별 시세 가져오기: data.go.kr 증권상품시세로 국내 ETF 일봉을 daily_security에 저장 (기간 생략 시 최근 2년)',
+  })
+  importEtf(
+    @Body({ schema: importDailySecuritiesSchema })
+    body: ImportDailySecuritiesRequest,
+  ): Promise<ImportDailySecuritiesResult> {
+    return this.dailySecurityService.importEtfFromDataGoKr(body);
+  }
+
   @Post('import/us')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()

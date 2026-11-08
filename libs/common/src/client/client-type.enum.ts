@@ -1,0 +1,1 @@
+export enum ClientType {TOSS = 'TOSS', KAKAO = 'KAKAO', NAVER = 'NAVER', KIS='KIS'}

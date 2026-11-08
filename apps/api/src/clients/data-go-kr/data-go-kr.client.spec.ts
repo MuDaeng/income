@@ -105,3 +105,53 @@ describe('DataGoKrClient.getStockPrices', () => {
     expect((error as Error).message).toContain(message);
   });
 });
+
+describe('DataGoKrClient.getEtfPrices', () => {
+  const fetchMock = vi.fn<typeof fetch>();
+  let client: DataGoKrClient;
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+    client = new DataGoKrClient({
+      serviceKey: 'key',
+      baseUrl: 'https://apis.data.go.kr',
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('증권상품시세 ETF 경로로 같은 쿼리를 보내고 item 배열을 돌려준다', async () => {
+    const etf = { basDt: '20261105', isinCd: 'KR7441640000', clpr: '10120' };
+    fetchMock.mockResolvedValueOnce(ok({ item: etf }, 1));
+
+    await expect(client.getEtfPrices(query)).resolves.toEqual({
+      totalCount: 1,
+      items: [etf],
+    });
+
+    const url = fetchMock.mock.calls[0][0] as URL;
+    expect(url.origin + url.pathname).toBe(
+      'https://apis.data.go.kr/1160100/GetSecuritiesProductInfoService_V2/getETFPriceInfo_V2',
+    );
+    expect(url.searchParams.get('beginBasDt')).toBe('20261105');
+  });
+
+  it('활용신청이 안 된 키(등록되지 않은 서비스키)면 502', async () => {
+    fetchMock.mockResolvedValueOnce(
+      text(
+        JSON.stringify({
+          OpenAPI_ServiceResponse: {
+            cmmMsgHeader: { errMsg: 'SERVICE_KEY_IS_NOT_REGISTERED_ERROR' },
+          },
+        }),
+      ),
+    );
+
+    const error = await client.getEtfPrices(query).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BadGatewayException);
+    expect((error as Error).message).toContain('ETF 시세');
+  });
+});

@@ -6,3 +6,4 @@ export * from './base/index.js';
 export * from './user/index.js';
 export * from './security/index.js';
 export * from './balance/index.js';
+export * from './client/index.js';
