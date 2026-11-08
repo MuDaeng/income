@@ -32,3 +32,25 @@ export interface MassiveAggregatesResponse {
   resultsCount?: number;
   results?: MassiveAggregateBar[];
 }
+
+/** Dividends(/stocks/v1/dividends)의 현금배당 한 건. 날짜는 'YYYY-MM-DD' (없을 수 있음) */
+export interface MassiveDividend {
+  id: string;
+  ticker: string;
+  /** 주당 배당금 (currency 기준) */
+  cash_amount: number;
+  currency: string;
+  declaration_date?: string;
+  ex_dividend_date?: string;
+  record_date?: string;
+  pay_date?: string;
+  frequency?: number;
+  distribution_type?: string;
+}
+
+export interface MassiveDividendsResponse {
+  status: string;
+  results?: MassiveDividend[];
+  /** 다음 페이지 URL (Authorization 헤더는 그대로 보내야 함) */
+  next_url?: string;
+}

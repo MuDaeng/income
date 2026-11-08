@@ -13,6 +13,7 @@ import type {
   PricePage,
   PriceQuery,
 } from '../clients/data-go-kr/data-go-kr.types.js';
+import { toMassiveTicker } from '../clients/massive/massive-ticker.js';
 import { MassiveClient } from '../clients/massive/massive.client.js';
 import type { ImportDailySecuritiesRequest } from './import-daily-securities.schema.js';
 
@@ -201,13 +202,6 @@ export class DailySecurityService {
     return result;
   }
 }
-
-/**
- * Toss 심볼을 Massive 티커로. 우선주 표기만 다름: Toss 'BAC-P' → Massive 'BACpP'.
- * 그 밖의 표기('BRK.B' 등)는 같음
- */
-const toMassiveTicker = (symbol: string) =>
-  symbol.replace(/-([A-Z]+)$/, 'p$1');
 
 const isWeekend = (isoDate: string) => {
   const day = parseIsoDate(isoDate).getUTCDay();

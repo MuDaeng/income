@@ -94,4 +94,28 @@ describe('MassiveClient', () => {
     expect((error as Error).message).toContain('401');
     expect((error as Error).message).toContain('Unknown API Key');
   });
+
+  it('배당은 티커·배당락일 기간·limit으로 조회하고 next_url을 따라 이어 받는다', async () => {
+    const first = { id: 'E1', ticker: 'AAPL', cash_amount: 0.26, currency: 'USD', pay_date: '2026-05-14' };
+    const second = { id: 'E2', ticker: 'AAPL', cash_amount: 0.27, currency: 'USD', pay_date: '2026-08-13' };
+    fetchMock
+      .mockResolvedValueOnce(
+        json({ status: 'OK', results: [first], next_url: 'https://api.massive.com/stocks/v1/dividends?cursor=abc' }),
+      )
+      .mockResolvedValueOnce(json({ status: 'OK', results: [second] }));
+
+    await expect(client.getDividends('AAPL', '2024-11-09', '2027-11-09')).resolves.toEqual([
+      first,
+      second,
+    ]);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect((url as URL).href).toBe(
+      'https://api.massive.com/stocks/v1/dividends?ticker=AAPL&ex_dividend_date.gte=2024-11-09&ex_dividend_date.lte=2027-11-09&limit=5000&sort=ex_dividend_date.asc',
+    );
+    expect(init?.headers).toEqual({ Authorization: 'Bearer key' });
+    expect((fetchMock.mock.calls[1][0] as URL).href).toBe(
+      'https://api.massive.com/stocks/v1/dividends?cursor=abc',
+    );
+  });
 });

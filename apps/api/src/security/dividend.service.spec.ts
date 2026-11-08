@@ -8,6 +8,8 @@ import {
 import type { Repository } from 'typeorm';
 import type { KisClient } from '../clients/kis/kis.client.js';
 import type { KisDividendItem } from '../clients/kis/kis.types.js';
+import type { MassiveClient } from '../clients/massive/massive.client.js';
+import type { MassiveDividend } from '../clients/massive/massive.types.js';
 import { DividendService } from './dividend.service.js';
 
 const SAMSUNG = {
@@ -31,6 +33,7 @@ describe('DividendService.refreshDividends', () => {
   const searchFindOneBy = vi.fn();
   const searchUpsert = vi.fn();
   const getDividends = vi.fn<KisClient['getDividends']>();
+  const getMassiveDividends = vi.fn<MassiveClient['getDividends']>();
   let service: DividendService;
 
   beforeEach(() => {
@@ -39,6 +42,7 @@ describe('DividendService.refreshDividends', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-08T15:30:00Z'));
     getDividends.mockResolvedValue([]);
+    getMassiveDividends.mockResolvedValue([]);
     service = new DividendService(
       { upsert: dividendUpsert } as unknown as Repository<Dividend>,
       {
@@ -46,6 +50,7 @@ describe('DividendService.refreshDividends', () => {
         upsert: searchUpsert,
       } as unknown as Repository<SecuritySearch>,
       { getDividends } as unknown as KisClient,
+      { getDividends: getMassiveDividends } as unknown as MassiveClient,
     );
   });
 
@@ -118,14 +123,73 @@ describe('DividendService.refreshDividends', () => {
     expect(searchUpsert).toHaveBeenCalledTimes(1);
   });
 
-  it('USD 종목은 조회하지 않는다', async () => {
+  it('USD 종목은 symbol을 Massive 티커로 바꿔 배당락일 기간으로 조회하고 6자리 버림으로 저장한다', async () => {
+    const preferred = {
+      id: 'US0605056821',
+      symbol: 'BAC-P',
+      currency: Currency.USD,
+    } as Security;
+    searchFindOneBy.mockResolvedValue({ id: preferred.id, lastSearchDate: '2026-11-08' });
+    const dividend = (overrides: Partial<MassiveDividend>): MassiveDividend => ({
+      id: 'E1',
+      ticker: 'BACpP',
+      cash_amount: 0.2578125,
+      currency: 'USD',
+      record_date: '2026-10-15',
+      ex_dividend_date: '2026-10-15',
+      pay_date: '2026-11-02',
+      ...overrides,
+    });
+    getMassiveDividends.mockResolvedValue([
+      dividend({}),
+      // 기준일이 없으면 배당락일을 noticeDate로
+      dividend({ record_date: undefined, ex_dividend_date: '2026-07-15', pay_date: '2026-08-01' }),
+      // 지급일 미정 → 건너뜀
+      dividend({ pay_date: undefined }),
+    ]);
+
+    await service.refreshDividends(preferred);
+
+    expect(getDividends).not.toHaveBeenCalled();
+    expect(getMassiveDividends).toHaveBeenCalledWith('BACpP', '2024-11-09', '2027-11-09');
+    expect(dividendUpsert).toHaveBeenCalledWith(
+      [
+        {
+          id: preferred.id,
+          paymentDate: '2026-11-02',
+          noticeDate: '2026-10-15',
+          amount: '0.257812',
+          type: DividendType.MONEY,
+        },
+        expect.objectContaining({ paymentDate: '2026-08-01', noticeDate: '2026-07-15' }),
+      ],
+      ['id', 'paymentDate'],
+    );
+    expect(searchUpsert).toHaveBeenCalledWith(
+      { id: preferred.id, lastSearchDate: '2026-11-09' },
+      ['id'],
+    );
+  });
+
+  it('USD 종목도 오늘 이미 조회했으면 Massive를 호출하지 않는다', async () => {
+    searchFindOneBy.mockResolvedValue({ id: 'US0378331005', lastSearchDate: '2026-11-09' });
+
     await service.refreshDividends({
       id: 'US0378331005',
       symbol: 'AAPL',
       currency: Currency.USD,
     } as Security);
 
-    expect(searchFindOneBy).not.toHaveBeenCalled();
-    expect(getDividends).not.toHaveBeenCalled();
+    expect(getMassiveDividends).not.toHaveBeenCalled();
+    expect(dividendUpsert).not.toHaveBeenCalled();
+  });
+
+  it('KRW 종목은 Massive를 호출하지 않는다', async () => {
+    searchFindOneBy.mockResolvedValue(null);
+
+    await service.refreshDividends(SAMSUNG);
+
+    expect(getDividends).toHaveBeenCalledTimes(1);
+    expect(getMassiveDividends).not.toHaveBeenCalled();
   });
 });

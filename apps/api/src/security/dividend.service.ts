@@ -12,8 +12,11 @@ import {
 } from '@app/common';
 import { KisClient } from '../clients/kis/kis.client.js';
 import type { KisDividendItem } from '../clients/kis/kis.types.js';
+import { toMassiveTicker } from '../clients/massive/massive-ticker.js';
+import { MassiveClient } from '../clients/massive/massive.client.js';
+import type { MassiveDividend } from '../clients/massive/massive.types.js';
 
-/** 지난 배당은 이만큼 거슬러 받는다 */
+/** 지난 배당은 이만큼 거슬러 받는다 (Massive Stocks Basic도 2년치까지) */
 const PAST_YEARS = 2;
 /** 공시된 앞으로의 배당까지 받으려고 오늘 이후로도 조회 */
 const FUTURE_YEARS = 1;
@@ -34,16 +37,18 @@ export class DividendService {
     @InjectRepository(SecuritySearch)
     private readonly securitySearchRepository: Repository<SecuritySearch>,
     private readonly kisClient: KisClient,
+    private readonly massiveClient: MassiveClient,
   ) {}
 
   /**
-   * 종목의 배당 정보를 KIS 배당일정으로 갱신한다. 하루에 한 번만 조회한다.
+   * 종목의 배당 정보를 갱신한다. 하루에 한 번만 조회한다.
    * - security_search.lastSearchDate가 오늘(한국 시간)이면 아무것도 하지 않음
-   * - 행이 없거나 오늘이 아니면 KIS 조회 → dividend upsert → lastSearchDate = 오늘
-   * KIS는 국내 종목만 다루므로 KRW 종목만 처리한다.
+   * - 행이 없거나 오늘이 아니면 통화별 원천에서 조회 → dividend upsert → lastSearchDate = 오늘
+   *   - KRW: KIS 예탁원 배당일정 (6자리 symbol)
+   *   - USD: Massive Dividends (symbol을 Massive 티커로)
    */
   async refreshDividends(security: Security): Promise<void> {
-    if (security.currency !== Currency.KRW) {
+    if (security.currency !== Currency.KRW && security.currency !== Currency.USD) {
       return;
     }
     const today = todayInSeoul();
@@ -54,12 +59,12 @@ export class DividendService {
       return;
     }
 
-    const items = await this.kisClient.getDividends(
-      security.symbol,
-      toYmd(shiftYears(today, -PAST_YEARS)),
-      toYmd(shiftYears(today, FUTURE_YEARS)),
-    );
-    const rows = items.flatMap((item) => toDividendRows(security.id, item));
+    const from = shiftYears(today, -PAST_YEARS);
+    const to = shiftYears(today, FUTURE_YEARS);
+    const { fetched, rows } =
+      security.currency === Currency.KRW
+        ? await this.fetchKrwDividends(security, from, to)
+        : await this.fetchUsdDividends(security, from, to);
     if (rows.length > 0) {
       await this.dividendRepository.upsert(rows, ['id', 'paymentDate']);
     }
@@ -68,16 +73,42 @@ export class DividendService {
       ['id'],
     );
     this.logger.log(
-      `배당 갱신 ${security.symbol}: ${items.length}건 중 ${rows.length}건 저장`,
+      `배당 갱신 ${security.symbol}(${security.currency}): ${fetched}건 중 ${rows.length}건 저장`,
     );
+  }
+
+  /** KIS 배당일정. 기간은 기준일 */
+  private async fetchKrwDividends(security: Security, from: string, to: string) {
+    const items = await this.kisClient.getDividends(
+      security.symbol,
+      toYmd(from),
+      toYmd(to),
+    );
+    return {
+      fetched: items.length,
+      rows: items.flatMap((item) => fromKisItem(security.id, item)),
+    };
+  }
+
+  /** Massive 현금배당. 기간은 배당락일 */
+  private async fetchUsdDividends(security: Security, from: string, to: string) {
+    const dividends = await this.massiveClient.getDividends(
+      toMassiveTicker(security.symbol),
+      from,
+      to,
+    );
+    return {
+      fetched: dividends.length,
+      rows: dividends.flatMap((dividend) => fromMassiveDividend(security.id, dividend)),
+    };
   }
 }
 
 /**
- * KIS 배당일정 한 행 → dividend 행(현금·주식 각각).
+ * KIS 배당일정 한 행 → dividend 행(현금·주식 각각). noticeDate는 기준일.
  * 지급일이 아직 정해지지 않은 행은 PK(id, paymentDate)를 만들 수 없어 건너뛴다 (다음 날 조회 때 채워짐).
  */
-const toDividendRows = (id: string, item: KisDividendItem): DividendRow[] => {
+const fromKisItem = (id: string, item: KisDividendItem): DividendRow[] => {
   const rows: DividendRow[] = [];
   const noticeDate = toIsoDate(item.record_date);
   if (!noticeDate) {
@@ -109,6 +140,29 @@ const toDividendRows = (id: string, item: KisDividendItem): DividendRow[] => {
   return rows;
 };
 
+/**
+ * Massive 현금배당 한 건 → dividend 행. noticeDate는 KRW와 같게 기준일(record_date), 없으면 배당락일.
+ * 지급일이 없거나 금액이 0 이하면 건너뛴다. 금액은 소수 6자리 버림.
+ */
+const fromMassiveDividend = (id: string, dividend: MassiveDividend): DividendRow[] => {
+  const paymentDate = toIsoDate(dividend.pay_date);
+  const noticeDate =
+    toIsoDate(dividend.record_date) ?? toIsoDate(dividend.ex_dividend_date);
+  const cash = new Decimal(Number.isFinite(dividend.cash_amount) ? dividend.cash_amount : 0);
+  if (!paymentDate || !noticeDate || cash.lte(0)) {
+    return [];
+  }
+  return [
+    {
+      id,
+      paymentDate,
+      noticeDate,
+      amount: truncateByCurrency(cash, Currency.USD),
+      type: DividendType.MONEY,
+    },
+  ];
+};
+
 /** 숫자가 아니거나 비었으면 0 (new Decimal('')는 예외) */
 const toDecimal = (value: string | undefined) => {
   const trimmed = value?.trim() ?? '';
@@ -116,8 +170,8 @@ const toDecimal = (value: string | undefined) => {
 };
 
 /**
- * 'YYYYMMDD' 또는 'YYYY/MM/DD' → 'YYYY-MM-DD', 비었거나 형식이 다르면 null.
- * KIS는 기준일(record_date)은 'YYYYMMDD', 지급일(divi_pay_dt)은 'YYYY/MM/DD'로 준다
+ * 'YYYYMMDD'·'YYYY/MM/DD'·'YYYY-MM-DD' → 'YYYY-MM-DD', 비었거나 형식이 다르면 null.
+ * KIS는 기준일(record_date)은 'YYYYMMDD', 지급일(divi_pay_dt)은 'YYYY/MM/DD', Massive는 'YYYY-MM-DD'로 준다
  */
 const toIsoDate = (date: string | undefined) => {
   const value = (date ?? '').trim().replace(/[/-]/g, '');
