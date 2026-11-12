@@ -16,6 +16,12 @@ import {
   dividendHistorySchema,
 } from './dividend-history.schema.js';
 import { DividendHistoryService } from './dividend-history.service.js';
+import { PeriodReturnResponse } from './period-return.dto.js';
+import {
+  type PeriodReturnRequest,
+  periodReturnSchema,
+} from './period-return.schema.js';
+import { PeriodReturnService } from './period-return.service.js';
 import { IntegratedBalanceResponse } from './integrated-balance.dto.js';
 import {
   type RegisterBalanceRequest,
@@ -32,6 +38,7 @@ export class BalanceController {
   constructor(
     private readonly balanceService: BalanceService,
     private readonly dividendHistoryService: DividendHistoryService,
+    private readonly periodReturnService: PeriodReturnService,
   ) {}
 
   @Post()
@@ -89,5 +96,20 @@ export class BalanceController {
     @Query({ schema: dividendHistorySchema }) query: DividendHistoryRequest,
   ): Promise<DividendHistoryResponse> {
     return this.dividendHistoryService.getDividendHistory(user, query);
+  }
+
+  @Get('returns')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '기간 총수익률 조회: 종료일 보유분 평가수익 + 기간 배당금, 원금 대비 수익금·수익률',
+  })
+  @ApiOkResponse({ type: PeriodReturnResponse })
+  getPeriodReturn(
+    @CurrentUser() user: AuthUser,
+    @Query({ schema: periodReturnSchema }) query: PeriodReturnRequest,
+  ): Promise<PeriodReturnResponse> {
+    return this.periodReturnService.getPeriodReturn(user, query);
   }
 }

@@ -27,6 +27,7 @@ import type {
 } from './integrated-balance.dto.js';
 import type { RegisterBalanceRequest } from './register-balance.schema.js';
 import type { SellBalanceRequest } from './sell-balance.schema.js';
+import { returnRate } from './return-rate.js';
 
 @Injectable()
 export class BalanceService {
@@ -348,19 +349,19 @@ export class BalanceService {
       krwTotal: {
         purchaseAmount: toKrw(krwPurchase),
         evaluationAmount: toKrw(krwEvaluation),
-        returnRate: this.returnRate(krwPurchase, krwEvaluation),
+        returnRate: returnRate(krwPurchase, krwEvaluation),
       },
       usdTotal: {
         usdPurchaseAmount: toUsd(usdPurchase),
         usdEvaluationAmount: toUsd(usdEvaluation),
         krwPurchaseAmount: toKrw(usdKrwPurchase),
         krwEvaluationAmount: toKrw(usdKrwEvaluation),
-        returnRate: this.returnRate(usdPurchase, usdEvaluation),
+        returnRate: returnRate(usdPurchase, usdEvaluation),
       },
       total: {
         purchaseAmount: toKrw(totalPurchase),
         evaluationAmount: toKrw(totalEvaluation),
-        returnRate: this.returnRate(totalPurchase, totalEvaluation),
+        returnRate: returnRate(totalPurchase, totalEvaluation),
       },
       exchangeRate: exchangeRate
         ? new Decimal(exchangeRate.closingRate).toString()
@@ -389,7 +390,7 @@ export class BalanceService {
       currency,
       amount: truncateByCurrency(amount, currency),
       currentPrice: truncateByCurrency(closingPrice, currency),
-      returnRate: this.returnRate(cost, evaluation),
+      returnRate: returnRate(cost, evaluation),
     };
 
     if (currency === Currency.USD) {
@@ -420,23 +421,6 @@ export class BalanceService {
       (acc, value) => (value === null ? acc : acc.plus(value)),
       new Decimal(0),
     );
-  }
-
-  /** (평가 − 매입) / 매입 × 100, 소수 2자리 버림. 매입이 0이면 '0.00' */
-  private returnRate(
-    purchase: Decimal.Value,
-    evaluation: Decimal.Value,
-  ): string {
-    const cost = new Decimal(purchase);
-    if (cost.isZero()) {
-      return '0.00';
-    }
-    return new Decimal(evaluation)
-      .minus(cost)
-      .dividedBy(cost)
-      .times(100)
-      .toDecimalPlaces(2, Decimal.ROUND_DOWN)
-      .toFixed(2);
   }
 }
 
