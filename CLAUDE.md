@@ -102,6 +102,8 @@ Call Massive only through `MassiveClient` (`clients/massive/massive.client.ts`, 
 
 `POST /daily-securities/import/us` (`DailySecurityService.importUsFromMassive`, same body) calls the Daily Market Summary (`/v2/aggs/grouped/locale/us/market/stocks/{date}`) once per weekday — one call returns every US ticker for that day, holidays return no results — and upserts the bars into `DailySecurity` for `USD` securities, matched by `Security.symbol` (Toss preferred-share symbols `BAC-P` become Massive `BACpP`; unknown tickers are skipped; the conversion is `toMassiveTicker` in `clients/massive/massive-ticker.ts`). Prices use `truncateByCurrency(USD)`.
 
+`GET /daily-securities?keyword&from&to` (`DailySecurityService.getDailyPrices`) reads stored daily bars for one security whose `id` (ISIN), `symbol` or `name` equals `keyword` exactly (MySQL collation, so case-insensitive): none → 404, several → 400 with `candidates` — re-query with a candidate `id` (a name can equal another security's symbol, e.g. `SK`). `from`/`to` are optional and inclusive; prices are truncated by the security's currency.
+
 `MassiveClient.getDividends(ticker, fromExDate, toExDate)` reads `/stocks/v1/dividends` (cash dividends, filtered by ex-dividend date, `limit=5000`, follows `next_url`). `DividendService` uses it for `USD` securities (see KIS Open API below). `MassiveClient` retries a 429 after `Retry-After` (default 15s), so a rate-limited plan just runs slower.
 
 ### data.go.kr

@@ -1,6 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  Between,
+  type FindOperator,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import {
   Currency,
   DailySecurity,
@@ -15,7 +26,26 @@ import type {
 } from '../clients/data-go-kr/data-go-kr.types.js';
 import { toMassiveTicker } from '../clients/massive/massive-ticker.js';
 import { MassiveClient } from '../clients/massive/massive.client.js';
+import type { DailyPriceResponse } from './daily-price.dto.js';
+import type { DailyPriceRequest } from './daily-price.schema.js';
 import type { ImportDailySecuritiesRequest } from './import-daily-securities.schema.js';
+
+/** 날짜 기간 조건. 둘 다 없으면 null(조건 없음) */
+const dateFilter = (
+  from: string | null,
+  to: string | null,
+): FindOperator<string> | null => {
+  if (from && to) {
+    return Between(from, to);
+  }
+  if (from) {
+    return MoreThanOrEqual(from);
+  }
+  if (to) {
+    return LessThanOrEqual(to);
+  }
+  return null;
+};
 
 /** 기간을 생략했을 때 가져올 햇수 (환율 가져오기와 같은 기간) */
 const DEFAULT_YEARS = 2;
@@ -48,6 +78,57 @@ export class DailySecurityService {
     private readonly dataGoKrClient: DataGoKrClient,
     private readonly massiveClient: MassiveClient,
   ) {}
+
+  /**
+   * 종목 일별 시세 조회. id(ISIN)·symbol·종목명 중 하나가 keyword와 정확히 같은 종목(대소문자 무시) 하나의 시세를
+   * 날짜 오름차순으로 돌려준다. 없으면 404, 여러 개면 400(후보 목록 포함). 기간은 생략 가능.
+   */
+  async getDailyPrices(input: DailyPriceRequest): Promise<DailyPriceResponse> {
+    const { keyword } = input;
+    const from = input.from ?? null;
+    const to = input.to ?? null;
+
+    const matches = await this.securityRepository.find({
+      where: [{ id: keyword }, { symbol: keyword }, { name: keyword }],
+      order: { id: 'ASC' },
+    });
+    if (matches.length === 0) {
+      throw new NotFoundException('종목을 찾을 수 없습니다.');
+    }
+    const candidates = matches.map(({ id, symbol, name, currency }) => ({
+      id,
+      symbol,
+      name,
+      currency,
+    }));
+    if (candidates.length > 1) {
+      throw new BadRequestException({
+        message: '여러 종목이 일치합니다. 후보의 id(ISIN)로 다시 조회하세요.',
+        candidates,
+      });
+    }
+    const security = candidates[0];
+
+    const date = dateFilter(from, to);
+    const rows = await this.dailySecurityRepository.find({
+      where: { id: security.id, ...(date ? { date } : {}) },
+      order: { date: 'ASC' },
+    });
+    const price = (value: string) =>
+      truncateByCurrency(value, security.currency);
+    return {
+      security,
+      from,
+      to,
+      prices: rows.map((row) => ({
+        date: row.date,
+        openingPrice: price(row.openingPrice),
+        closingPrice: price(row.closingPrice),
+        highestPrice: price(row.highestPrice),
+        lowestPrice: price(row.lowestPrice),
+      })),
+    };
+  }
 
   /**
    * data.go.kr 주식시세(국내 상장 주식)를 받아 daily_security에 넣는다.

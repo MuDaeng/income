@@ -1,6 +1,16 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { DailyPriceResponse } from './daily-price.dto.js';
+import {
+  type DailyPriceRequest,
+  dailyPriceSchema,
+} from './daily-price.schema.js';
 import {
   type ImportDailySecuritiesResult,
   DailySecurityService,
@@ -14,6 +24,20 @@ import {
 @Controller('daily-securities')
 export class DailySecurityController {
   constructor(private readonly dailySecurityService: DailySecurityService) {}
+
+  @Get()
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '종목 일별 시세 조회: 종목명·symbol·ISIN(정확히 일치)으로 일별 시가·종가·고가·저가 (기간 생략 시 전체)',
+  })
+  @ApiOkResponse({ type: DailyPriceResponse })
+  getDailyPrices(
+    @Query({ schema: dailyPriceSchema }) query: DailyPriceRequest,
+  ): Promise<DailyPriceResponse> {
+    return this.dailySecurityService.getDailyPrices(query);
+  }
 
   @Post('import')
   @UseGuards(AuthGuard('jwt'))
