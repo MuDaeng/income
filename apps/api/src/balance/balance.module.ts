@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   DailyExchangeRate,
   DailySecurity,
+  Dividend,
   PurchaseDateBalance,
   Security,
   User,
@@ -11,6 +12,7 @@ import {
 import { SecurityModule } from '../security/security.module.js';
 import { BalanceController } from './balance.controller.js';
 import { BalanceService } from './balance.service.js';
+import { DividendHistoryService } from './dividend-history.service.js';
 
 @Module({
   imports: [
@@ -22,10 +24,11 @@ import { BalanceService } from './balance.service.js';
       Security,
       DailySecurity,
       DailyExchangeRate,
+      Dividend,
     ]),
   ],
   controllers: [BalanceController],
-  providers: [BalanceService],
+  providers: [BalanceService, DividendHistoryService],
   exports: [BalanceService],
 })
 export class BalanceModule {}

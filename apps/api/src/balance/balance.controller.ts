@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
@@ -10,6 +10,12 @@ import { PurchaseDateBalance } from '@app/common';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthUser } from '../auth/jwt.strategy.js';
 import { BalanceService } from './balance.service.js';
+import { DividendHistoryResponse } from './dividend-history.dto.js';
+import {
+  type DividendHistoryRequest,
+  dividendHistorySchema,
+} from './dividend-history.schema.js';
+import { DividendHistoryService } from './dividend-history.service.js';
 import { IntegratedBalanceResponse } from './integrated-balance.dto.js';
 import {
   type RegisterBalanceRequest,
@@ -23,7 +29,10 @@ import {
 @ApiTags('balance')
 @Controller('balance')
 export class BalanceController {
-  constructor(private readonly balanceService: BalanceService) {}
+  constructor(
+    private readonly balanceService: BalanceService,
+    private readonly dividendHistoryService: DividendHistoryService,
+  ) {}
 
   @Post()
   @UseGuards(AuthGuard('jwt'))
@@ -65,5 +74,20 @@ export class BalanceController {
     @CurrentUser() user: AuthUser,
   ): Promise<IntegratedBalanceResponse> {
     return this.balanceService.getIntegratedBalance(user);
+  }
+
+  @Get('dividends')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '배당금 내역 조회: 기준일 보유수량 × 주당배당금, USD는 지급일 환율로 원화 환산, 기간 총배당금과 월별 내역',
+  })
+  @ApiOkResponse({ type: DividendHistoryResponse })
+  getDividendHistory(
+    @CurrentUser() user: AuthUser,
+    @Query({ schema: dividendHistorySchema }) query: DividendHistoryRequest,
+  ): Promise<DividendHistoryResponse> {
+    return this.dividendHistoryService.getDividendHistory(user, query);
   }
 }

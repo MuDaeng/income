@@ -444,3 +444,4 @@ const toKrw = (value: Decimal.Value): string =>
   truncateByCurrency(value, Currency.KRW);
 const toUsd = (value: Decimal.Value): string =>
   truncateByCurrency(value, Currency.USD);
+
