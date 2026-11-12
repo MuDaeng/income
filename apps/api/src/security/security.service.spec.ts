@@ -1,4 +1,4 @@
-import { Currency, Security, SecurityType } from '@app/common';
+import { Currency, DailySecurity, Security, SecurityType } from '@app/common';
 import type { Repository } from 'typeorm';
 import type { TossClient } from '../clients/toss/toss.client.js';
 import type { TossListedStock, TossMarket } from '../clients/toss/toss.types.js';
@@ -26,6 +26,7 @@ describe('SecurityService.importFromToss', () => {
     vi.useFakeTimers();
     service = new SecurityService(
       { upsert } as unknown as Repository<Security>,
+      {} as Repository<DailySecurity>,
       { listStocks } as unknown as TossClient,
     );
   });

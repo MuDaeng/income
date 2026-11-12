@@ -22,6 +22,11 @@ import {
   periodReturnSchema,
 } from './period-return.schema.js';
 import { PeriodReturnService } from './period-return.service.js';
+import { PurchaseHistoryResponse } from './purchase-history.dto.js';
+import {
+  type PurchaseHistoryRequest,
+  purchaseHistorySchema,
+} from './purchase-history.schema.js';
 import { IntegratedBalanceResponse } from './integrated-balance.dto.js';
 import {
   type RegisterBalanceRequest,
@@ -81,6 +86,21 @@ export class BalanceController {
     @CurrentUser() user: AuthUser,
   ): Promise<IntegratedBalanceResponse> {
     return this.balanceService.getIntegratedBalance(user);
+  }
+
+  @Get('purchases')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '종목 매수 내역 조회: 매수일 최신순 수량·매수일·매도일·매수가·구매환율(USD)',
+  })
+  @ApiOkResponse({ type: PurchaseHistoryResponse })
+  getPurchases(
+    @CurrentUser() user: AuthUser,
+    @Query({ schema: purchaseHistorySchema }) query: PurchaseHistoryRequest,
+  ): Promise<PurchaseHistoryResponse> {
+    return this.balanceService.getPurchases(user, query);
   }
 
   @Get('dividends')

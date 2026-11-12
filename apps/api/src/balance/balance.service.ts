@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import {
   Currency,
@@ -26,6 +26,11 @@ import type {
   IntegratedBalanceResponse,
 } from './integrated-balance.dto.js';
 import type { RegisterBalanceRequest } from './register-balance.schema.js';
+import type {
+  PurchaseHistoryItemDto,
+  PurchaseHistoryResponse,
+} from './purchase-history.dto.js';
+import type { PurchaseHistoryRequest } from './purchase-history.schema.js';
 import type { SellBalanceRequest } from './sell-balance.schema.js';
 import { returnRate } from './return-rate.js';
 
@@ -249,6 +254,58 @@ export class BalanceService {
         saleDate,
       }),
     );
+  }
+
+  /**
+   * 종목 하나의 매수 내역 (매수일 최신순, 같은 날은 sequence 역순). 매도한 매수분도 saleDate와 함께 포함.
+   * 구매 환율은 USD 종목만 매수일(이전 최근) USD 종가 환율, KRW 종목은 null. 종목이 없으면 404.
+   */
+  async getPurchases(
+    authUser: AuthUser,
+    input: PurchaseHistoryRequest,
+  ): Promise<PurchaseHistoryResponse> {
+    const found = await this.securityRepository.findOneBy({
+      id: input.securityId,
+    });
+    if (!found) {
+      throw new NotFoundException('존재하지 않는 종목입니다.');
+    }
+    const { id, symbol, name, currency } = found;
+    const purchases = await this.purchaseDateBalanceRepository.find({
+      where: { userId: authUser.id, securityId: id },
+      order: { purchaseDate: 'DESC', sequence: 'DESC' },
+    });
+
+    const rates = new Map<string, DailyExchangeRate | null>();
+    const items: PurchaseHistoryItemDto[] = [];
+    for (const purchase of purchases) {
+      let rate: DailyExchangeRate | null = null;
+      if (currency === Currency.USD) {
+        if (!rates.has(purchase.purchaseDate)) {
+          rates.set(
+            purchase.purchaseDate,
+            await this.dailyExchangeRateRepository.findOne({
+              where: {
+                currency: Currency.USD,
+                date: LessThanOrEqual(purchase.purchaseDate),
+              },
+              order: { date: 'DESC' },
+            }),
+          );
+        }
+        rate = rates.get(purchase.purchaseDate) ?? null;
+      }
+      items.push({
+        purchaseDate: purchase.purchaseDate,
+        sequence: purchase.sequence,
+        amount: truncateByCurrency(purchase.amount, currency),
+        price: truncateByCurrency(purchase.price, currency),
+        saleDate: purchase.saleDate,
+        exchangeRate: rate ? new Decimal(rate.closingRate).toString() : null,
+        exchangeRateDate: rate?.date ?? null,
+      });
+    }
+    return { security: { id, symbol, name, currency }, items };
   }
 
   /**

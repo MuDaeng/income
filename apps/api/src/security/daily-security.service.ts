@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -80,34 +75,21 @@ export class DailySecurityService {
   ) {}
 
   /**
-   * 종목 일별 시세 조회. id(ISIN)·symbol·종목명 중 하나가 keyword와 정확히 같은 종목(대소문자 무시) 하나의 시세를
-   * 날짜 오름차순으로 돌려준다. 없으면 404, 여러 개면 400(후보 목록 포함). 기간은 생략 가능.
+   * 종목 일별 시세 조회. id(ISIN)가 securityId와 같은 종목의 시세를 날짜 오름차순으로 돌려준다.
+   * 종목이 없으면 404. 기간은 생략 가능. ISIN은 GET /securities(종목 검색)로 찾는다.
    */
   async getDailyPrices(input: DailyPriceRequest): Promise<DailyPriceResponse> {
-    const { keyword } = input;
     const from = input.from ?? null;
     const to = input.to ?? null;
 
-    const matches = await this.securityRepository.find({
-      where: [{ id: keyword }, { symbol: keyword }, { name: keyword }],
-      order: { id: 'ASC' },
+    const found = await this.securityRepository.findOneBy({
+      id: input.securityId,
     });
-    if (matches.length === 0) {
+    if (!found) {
       throw new NotFoundException('종목을 찾을 수 없습니다.');
     }
-    const candidates = matches.map(({ id, symbol, name, currency }) => ({
-      id,
-      symbol,
-      name,
-      currency,
-    }));
-    if (candidates.length > 1) {
-      throw new BadRequestException({
-        message: '여러 종목이 일치합니다. 후보의 id(ISIN)로 다시 조회하세요.',
-        candidates,
-      });
-    }
-    const security = candidates[0];
+    const { id, symbol, name, currency } = found;
+    const security = { id, symbol, name, currency };
 
     const date = dateFilter(from, to);
     const rows = await this.dailySecurityRepository.find({

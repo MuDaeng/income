@@ -4,8 +4,8 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const dailyPriceSchema = z
   .object({
-    /** 종목명·symbol·id(ISIN) 중 하나 (정확히 일치, 대소문자 무시) */
-    keyword: z.string().trim().min(1, '종목명 또는 symbol을 입력하세요.'),
+    /** 종목 ISIN 코드 (Security.id, 완전일치) */
+    securityId: z.string().trim().min(1, 'ISIN 코드를 입력하세요.'),
     /** 시작일 'YYYY-MM-DD'. 생략하면 처음부터 */
     from: z.iso.date().optional(),
     /** 종료일 'YYYY-MM-DD'. 생략하면 끝까지 */

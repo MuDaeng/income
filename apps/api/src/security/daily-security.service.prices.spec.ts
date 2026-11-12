@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Between, LessThanOrEqual } from 'typeorm';
 import type { Repository } from 'typeorm';
 import { Currency, DailySecurity, Security } from '@app/common';
@@ -15,7 +15,7 @@ const AAPL = {
 };
 
 describe('DailySecurityService.getDailyPrices', () => {
-  const securityFind = vi.fn();
+  const findOneBy = vi.fn();
   const dailyFind = vi.fn();
   let service: DailySecurityService;
 
@@ -23,14 +23,14 @@ describe('DailySecurityService.getDailyPrices', () => {
     vi.resetAllMocks();
     service = new DailySecurityService(
       { find: dailyFind } as unknown as Repository<DailySecurity>,
-      { find: securityFind } as unknown as Repository<Security>,
+      { findOneBy } as unknown as Repository<Security>,
       {} as DataGoKrClient,
       {} as MassiveClient,
     );
   });
 
-  it('id·symbol·종목명 중 정확히 일치하는 종목 하나의 시세를 통화별로 버려 날짜순으로 돌려준다', async () => {
-    securityFind.mockResolvedValue([AAPL]);
+  it('ISIN이 일치하는 종목의 시세를 통화별로 버려 날짜순으로 돌려준다', async () => {
+    findOneBy.mockResolvedValue(AAPL);
     dailyFind.mockResolvedValue([
       {
         id: AAPL.id,
@@ -43,15 +43,12 @@ describe('DailySecurityService.getDailyPrices', () => {
     ]);
 
     const result = await service.getDailyPrices({
-      keyword: 'AAPL',
+      securityId: AAPL.id,
       from: '2026-11-01',
       to: '2026-11-06',
     });
 
-    expect(securityFind).toHaveBeenCalledWith({
-      where: [{ id: 'AAPL' }, { symbol: 'AAPL' }, { name: 'AAPL' }],
-      order: { id: 'ASC' },
-    });
+    expect(findOneBy).toHaveBeenCalledWith({ id: AAPL.id });
     expect(dailyFind).toHaveBeenCalledWith({
       where: { id: AAPL.id, date: Between('2026-11-01', '2026-11-06') },
       order: { date: 'ASC' },
@@ -73,9 +70,12 @@ describe('DailySecurityService.getDailyPrices', () => {
   });
 
   it('KRW 종목 가격은 정수로 버리고, 기간이 한쪽만 있으면 그쪽만 제한한다', async () => {
-    securityFind.mockResolvedValue([
-      { id: 'KR7476800008', symbol: '476800', name: '리츠', currency: Currency.KRW },
-    ]);
+    findOneBy.mockResolvedValue({
+      id: 'KR7476800008',
+      symbol: '476800',
+      name: '리츠',
+      currency: Currency.KRW,
+    });
     dailyFind.mockResolvedValue([
       {
         id: 'KR7476800008',
@@ -87,7 +87,10 @@ describe('DailySecurityService.getDailyPrices', () => {
       },
     ]);
 
-    const result = await service.getDailyPrices({ keyword: '476800', to: '2026-11-05' });
+    const result = await service.getDailyPrices({
+      securityId: 'KR7476800008',
+      to: '2026-11-05',
+    });
 
     expect(dailyFind.mock.calls[0][0].where.date).toEqual(LessThanOrEqual('2026-11-05'));
     expect(result.prices[0]).toEqual({
@@ -101,41 +104,20 @@ describe('DailySecurityService.getDailyPrices', () => {
   });
 
   it('기간이 없으면 날짜 조건 없이 조회한다', async () => {
-    securityFind.mockResolvedValue([AAPL]);
+    findOneBy.mockResolvedValue(AAPL);
     dailyFind.mockResolvedValue([]);
 
-    await service.getDailyPrices({ keyword: 'AAPL' });
+    await service.getDailyPrices({ securityId: AAPL.id });
 
     expect(dailyFind.mock.calls[0][0].where).toEqual({ id: AAPL.id });
   });
 
-  it('일치하는 종목이 없으면 404', async () => {
-    securityFind.mockResolvedValue([]);
+  it('ISIN이 일치하는 종목이 없으면 404', async () => {
+    findOneBy.mockResolvedValue(null);
 
-    await expect(service.getDailyPrices({ keyword: '없는종목' })).rejects.toBeInstanceOf(
+    await expect(service.getDailyPrices({ securityId: 'AAPL' })).rejects.toBeInstanceOf(
       NotFoundException,
     );
-    expect(dailyFind).not.toHaveBeenCalled();
-  });
-
-  it('여러 종목이 일치하면 후보 목록과 함께 400', async () => {
-    securityFind.mockResolvedValue([
-      { id: 'A', symbol: 'X', name: '같은이름', currency: Currency.KRW },
-      { id: 'B', symbol: 'Y', name: '같은이름', currency: Currency.USD },
-    ]);
-
-    const error = await service
-      .getDailyPrices({ keyword: '같은이름' })
-      .catch((e: unknown) => e);
-
-    expect(error).toBeInstanceOf(BadRequestException);
-    expect((error as BadRequestException).getResponse()).toEqual({
-      message: '여러 종목이 일치합니다. 후보의 id(ISIN)로 다시 조회하세요.',
-      candidates: [
-        { id: 'A', symbol: 'X', name: '같은이름', currency: Currency.KRW },
-        { id: 'B', symbol: 'Y', name: '같은이름', currency: Currency.USD },
-      ],
-    });
     expect(dailyFind).not.toHaveBeenCalled();
   });
 });
