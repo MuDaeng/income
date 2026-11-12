@@ -26,8 +26,6 @@ export class DailySecurityController {
   constructor(private readonly dailySecurityService: DailySecurityService) {}
 
   @Get()
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
   @ApiOperation({
     summary:
       '종목 일별 시세 조회: 종목명·symbol·ISIN(정확히 일치)으로 일별 시가·종가·고가·저가 (기간 생략 시 전체)',
