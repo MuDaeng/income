@@ -1,7 +1,17 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -10,6 +20,10 @@ import { PurchaseDateBalance } from '@app/common';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthUser } from '../auth/jwt.strategy.js';
 import { BalanceService } from './balance.service.js';
+import {
+  type DeletePurchaseRequest,
+  deletePurchaseSchema,
+} from './delete-purchase.schema.js';
 import { DividendHistoryResponse } from './dividend-history.dto.js';
 import {
   type DividendHistoryRequest,
@@ -101,6 +115,22 @@ export class BalanceController {
     @Query({ schema: purchaseHistorySchema }) query: PurchaseHistoryRequest,
   ): Promise<PurchaseHistoryResponse> {
     return this.balanceService.getPurchases(user, query);
+  }
+
+  @Delete('purchases')
+  @HttpCode(204)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '매수 내역 삭제(오등록 정정): 종목·매수일·sequence로 매수분 하나 삭제, 남은 매수분이 없으면 보유 종목에서도 제거',
+  })
+  @ApiNoContentResponse()
+  deletePurchase(
+    @CurrentUser() user: AuthUser,
+    @Query({ schema: deletePurchaseSchema }) query: DeletePurchaseRequest,
+  ): Promise<void> {
+    return this.balanceService.deletePurchase(user, query);
   }
 
   @Get('dividends')

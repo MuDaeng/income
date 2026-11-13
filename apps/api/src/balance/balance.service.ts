@@ -24,6 +24,7 @@ import type {
   BalanceItemDto,
   IntegratedBalanceResponse,
 } from './integrated-balance.dto.js';
+import type { DeletePurchaseRequest } from './delete-purchase.schema.js';
 import type { RegisterBalanceRequest } from './register-balance.schema.js';
 import type {
   PurchaseHistoryItemDto,
@@ -245,6 +246,47 @@ export class BalanceService {
         saleDate,
       }),
     );
+  }
+
+  /**
+   * 잘못 등록한 매수분 하나(종목·매수일·sequence) 삭제. 매도된 행도 지울 수 있다. 없으면 404.
+   * 그 종목의 매수분이 하나도 남지 않으면 UserBalance도 지운다(오등록한 종목이 보유 목록에 남지 않게).
+   * 다른 매수분의 sequence는 다시 매기지 않는다(매수 내역·매도 요청이 들고 있는 값이 바뀌지 않게).
+   * registerBalance·sellBalance와 같은 이유로 먼저 User 행을 잠가 같은 사용자의 변경을 순서대로 실행한다.
+   */
+  @Transactional()
+  async deletePurchase(
+    authUser: AuthUser,
+    input: DeletePurchaseRequest,
+  ): Promise<void> {
+    const userId = authUser.id;
+    const { securityId, purchaseDate, sequence } = input;
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!user) {
+      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
+    }
+
+    const { affected } = await this.purchaseDateBalanceRepository.delete({
+      userId,
+      securityId,
+      purchaseDate,
+      sequence,
+    });
+    if (!affected) {
+      throw new NotFoundException('삭제할 매수 내역이 없습니다.');
+    }
+
+    const remaining = await this.purchaseDateBalanceRepository.existsBy({
+      userId,
+      securityId,
+    });
+    if (!remaining) {
+      await this.userBalanceRepository.delete({ userId, securityId });
+    }
   }
 
   /**

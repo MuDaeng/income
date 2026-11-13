@@ -110,6 +110,8 @@ Security lookup is split in two public (no JWT) routes, because a name can equal
 
 `GET /balance/purchases?securityId` (JWT, `BalanceService.getPurchases`) lists the user's `PurchaseDateBalance` rows for one security, newest `purchaseDate` first (then `sequence` desc), sold rows included, with the purchase-date USD rate (latest on or before `purchaseDate`; null for KRW).
 
+`DELETE /balance/purchases?securityId&purchaseDate&sequence` (JWT, 204, `BalanceService.deletePurchase`) deletes one mis-registered `PurchaseDateBalance` row of the user (sold rows too; none → 404). `sequence` is only unique within a `purchaseDate`, so all three are required. When the security has no rows left, its `UserBalance` is deleted too. Other rows' sequences are not renumbered.
+
 `MassiveClient.getDividends(ticker, fromExDate, toExDate)` reads `/stocks/v1/dividends` (cash dividends, filtered by ex-dividend date, `limit=5000`, follows `next_url`). `DividendService` uses it for `USD` securities (see KIS Open API below). `MassiveClient` retries a 429 after `Retry-After` (default 15s), so a rate-limited plan just runs slower.
 
 ### data.go.kr
