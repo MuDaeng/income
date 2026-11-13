@@ -58,6 +58,39 @@ describe('TossClient', () => {
     expect(urlOf(2)).toContain('market=KOSDAQ');
   });
 
+  it('종목 목록이 401이면(다른 프로세스가 토큰을 새로 발급) 한 번 재발급해 다시 호출한다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ access_token: 'old', expires_in: 86400 }))
+      .mockResolvedValueOnce(json({ error: 'invalid_token' }, 401))
+      .mockResolvedValueOnce(json({ access_token: 'new', expires_in: 86400 }))
+      .mockResolvedValueOnce(json({ result: [{ symbol: 'AAPL' }] }));
+
+    await expect(client.listStocks('NASDAQ')).resolves.toEqual([
+      { symbol: 'AAPL' },
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls[1][1]?.headers).toEqual({
+      Authorization: 'Bearer old',
+    });
+    expect(fetchMock.mock.calls[3][1]?.headers).toEqual({
+      Authorization: 'Bearer new',
+    });
+  });
+
+  it('재발급 후에도 401이면 더 재시도하지 않고 502', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ access_token: 'old', expires_in: 86400 }))
+      .mockResolvedValueOnce(json({ error: 'invalid_token' }, 401))
+      .mockResolvedValueOnce(json({ access_token: 'new', expires_in: 86400 }))
+      .mockResolvedValueOnce(json({ error: 'invalid_token' }, 401));
+
+    await expect(client.listStocks('NASDAQ')).rejects.toBeInstanceOf(
+      BadGatewayException,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it('만료(1분 전)가 지나면 새로 발급한다', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     fetchMock

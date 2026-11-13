@@ -2,8 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Between, LessThanOrEqual } from 'typeorm';
 import type { Repository } from 'typeorm';
 import { Currency, DailySecurity, Security } from '@app/common';
-import type { DataGoKrClient } from '../clients/data-go-kr/data-go-kr.client.js';
-import type { MassiveClient } from '../clients/massive/massive.client.js';
+import type { DataGoKrClient, MassiveClient } from '@app/core';
 import { DailySecurityService } from './daily-security.service.js';
 
 const AAPL = {

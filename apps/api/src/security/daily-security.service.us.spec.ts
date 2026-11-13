@@ -1,8 +1,10 @@
 import { Currency, DailySecurity, Security } from '@app/common';
 import type { Repository } from 'typeorm';
-import type { DataGoKrClient } from '../clients/data-go-kr/data-go-kr.client.js';
-import type { MassiveClient } from '../clients/massive/massive.client.js';
-import type { MassiveGroupedBar } from '../clients/massive/massive.types.js';
+import type {
+  DataGoKrClient,
+  MassiveClient,
+  MassiveGroupedBar,
+} from '@app/core';
 import { DailySecurityService } from './daily-security.service.js';
 
 const bar = (T: string, c = 190.1234567): MassiveGroupedBar => ({

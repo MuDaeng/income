@@ -1,10 +1,7 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import {
-  type ImportExchangeRatesResult,
-  ExchangeRateService,
-} from './exchange-rate.service.js';
+import { type ImportExchangeRatesResult, ExchangeRateService } from '@app/core';
 import {
   type ImportExchangeRatesRequest,
   importExchangeRatesSchema,

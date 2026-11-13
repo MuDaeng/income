@@ -10,11 +10,13 @@ import {
   SecuritySearch,
   truncateByCurrency,
 } from '@app/common';
-import { KisClient } from '../clients/kis/kis.client.js';
-import type { KisDividendItem } from '../clients/kis/kis.types.js';
-import { toMassiveTicker } from '../clients/massive/massive-ticker.js';
-import { MassiveClient } from '../clients/massive/massive.client.js';
-import type { MassiveDividend } from '../clients/massive/massive.types.js';
+import {
+  KisClient,
+  MassiveClient,
+  toMassiveTicker,
+  type KisDividendItem,
+  type MassiveDividend,
+} from '@app/core';
 
 /** 지난 배당은 이만큼 거슬러 받는다 (Massive Stocks Basic도 2년치까지) */
 const PAST_YEARS = 2;

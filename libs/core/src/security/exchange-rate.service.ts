@@ -4,13 +4,20 @@ import { Decimal } from 'decimal.js';
 import { Repository } from 'typeorm';
 import { Currency, DailyExchangeRate } from '@app/common';
 import { MassiveClient } from '../clients/massive/massive.client.js';
-import type { ImportExchangeRatesRequest } from './import-exchange-rates.schema.js';
 
 /** 달러당 원화 (DailyExchangeRate의 currency=USD 행) */
 const USD_KRW_TICKER = 'C:USDKRW';
 /** 기간을 생략했을 때 가져올 햇수 (Currencies Basic 플랜은 2년치만 제공) */
 const DEFAULT_YEARS = 2;
 const UPSERT_CHUNK = 1_000;
+
+/** 가져올 기간 'YYYY-MM-DD' (둘 다 생략 가능) */
+export interface ImportExchangeRatesInput {
+  /** 시작일. 생략하면 종료일의 2년 전 */
+  from?: string;
+  /** 종료일. 생략하면 오늘(UTC) */
+  to?: string;
+}
 
 export interface ImportExchangeRatesResult {
   from: string;
@@ -33,7 +40,7 @@ export class ExchangeRateService {
    * 날짜는 바 시작 시각의 UTC 날짜. 이미 있는 날짜는 갱신하므로(upsert) 다시 실행해도 된다.
    */
   async importFromMassive(
-    input: ImportExchangeRatesRequest,
+    input: ImportExchangeRatesInput,
   ): Promise<ImportExchangeRatesResult> {
     const to = input.to ?? toIsoDate(new Date());
     const from = input.from ?? yearsBefore(to, DEFAULT_YEARS);

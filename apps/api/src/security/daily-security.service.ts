@@ -13,14 +13,14 @@ import {
   Security,
   truncateByCurrency,
 } from '@app/common';
-import { DataGoKrClient } from '../clients/data-go-kr/data-go-kr.client.js';
-import type {
-  PriceItem,
-  PricePage,
-  PriceQuery,
-} from '../clients/data-go-kr/data-go-kr.types.js';
-import { toMassiveTicker } from '../clients/massive/massive-ticker.js';
-import { MassiveClient } from '../clients/massive/massive.client.js';
+import {
+  DataGoKrClient,
+  MassiveClient,
+  toMassiveTicker,
+  type PriceItem,
+  type PricePage,
+  type PriceQuery,
+} from '@app/core';
 import type { DailyPriceResponse } from './daily-price.dto.js';
 import type { DailyPriceRequest } from './daily-price.schema.js';
 import type { ImportDailySecuritiesRequest } from './import-daily-securities.schema.js';

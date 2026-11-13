@@ -6,10 +6,12 @@ import {
   type SecuritySearch,
 } from '@app/common';
 import type { Repository } from 'typeorm';
-import type { KisClient } from '../clients/kis/kis.client.js';
-import type { KisDividendItem } from '../clients/kis/kis.types.js';
-import type { MassiveClient } from '../clients/massive/massive.client.js';
-import type { MassiveDividend } from '../clients/massive/massive.types.js';
+import type {
+  KisClient,
+  KisDividendItem,
+  MassiveClient,
+  MassiveDividend,
+} from '@app/core';
 import { DividendService } from './dividend.service.js';
 
 const SAMSUNG = {

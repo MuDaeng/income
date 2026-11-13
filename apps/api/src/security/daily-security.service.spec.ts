@@ -1,12 +1,12 @@
 import { Currency, DailySecurity, Security } from '@app/common';
 import type { Repository } from 'typeorm';
-import type { DataGoKrClient } from '../clients/data-go-kr/data-go-kr.client.js';
 import type {
-  StockPriceItem,
+  DataGoKrClient,
+  MassiveClient,
   PricePage,
   PriceQuery,
-} from '../clients/data-go-kr/data-go-kr.types.js';
-import type { MassiveClient } from '../clients/massive/massive.client.js';
+  StockPriceItem,
+} from '@app/core';
 import { DailySecurityService } from './daily-security.service.js';
 
 const item = (isinCd: string, basDt: string, clpr = '72000'): StockPriceItem => ({

@@ -1,7 +1,6 @@
 import { Like } from 'typeorm';
 import type { Repository } from 'typeorm';
 import { Currency, DailySecurity, Security } from '@app/common';
-import type { TossClient } from '../clients/toss/toss.client.js';
 import { searchSecuritiesSchema } from './search-securities.schema.js';
 import { SEARCH_LIMIT, SecurityService } from './security.service.js';
 
@@ -22,7 +21,6 @@ describe('SecurityService.searchSecurities', () => {
     service = new SecurityService(
       { find } as unknown as Repository<Security>,
       { findOne } as unknown as Repository<DailySecurity>,
-      {} as TossClient,
     );
   });
 

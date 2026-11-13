@@ -28,6 +28,12 @@
       ],
       "@app/common/*": [
         "./libs/common/src/*"
+      ],
+      "@app/core": [
+        "./libs/core/src/index.ts"
+      ],
+      "@app/core/*": [
+        "./libs/core/src/*"
       ]
     }
   },
@@ -35,6 +41,9 @@
   "references": [
     {
       "path": "./apps/api/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/batch/tsconfig.app.json"
     },
     {
       "path": "./tsconfig.spec.json"

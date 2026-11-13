@@ -21,14 +21,24 @@ export class TossClient {
     private readonly toss: ConfigType<typeof tossConfig>,
   ) {}
 
-  /** 시장의 전체 상장 종목 (상장 중인 종목만, 페이지 없이 한 번에) */
+  /**
+   * 시장의 전체 상장 종목 (상장 중인 종목만, 페이지 없이 한 번에).
+   * 401이면 메모리 토큰을 버리고 한 번만 재발급해서 다시 호출한다 — api와 batch가 각자 토큰을 들고 있어서
+   * 한쪽이 새로 발급하면 다른 쪽 토큰은 바로 무효가 된다.
+   */
   async listStocks(market: TossMarket): Promise<TossListedStock[]> {
     const url = new URL('/api/v1/stocks/all', this.toss.baseUrl);
     url.searchParams.set('market', market);
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${await this.getAccessToken()}` },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
+    const call = async () =>
+      fetch(url, {
+        headers: { Authorization: `Bearer ${await this.getAccessToken()}` },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+    let response = await call();
+    if (response.status === 401) {
+      this.token = null;
+      response = await call();
+    }
     const body = (await this.parse(response, `종목 목록(${market})`)) as {
       result: TossListedStock[];
     };
