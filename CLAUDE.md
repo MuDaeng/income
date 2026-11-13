@@ -6,7 +6,7 @@ See also `AGENTS.md` (NestJS 12 specifics: first-party packages to prefer, ESM r
 
 ## Commands
 
-- `npm run start` / `npm run start:dev` — run the `api` app (Nest CLI, rspack builder). Listens on `PORT` (default 8080); Swagger UI at `/api-docs`.
+- `npm run start` / `npm run start:dev` — run the `api` app (Nest CLI, rspack builder). Listens on `PORT` (default 8080); Swagger UI at `/api-docs` (not served when `NODE_ENV=production`).
 - `npm run build` — build to `dist/apps/api`; `npm run start:prod` runs the built output.
 - `npm run build:batch` / `npm run start:batch` / `npm run start:batch:dev` / `npm run start:batch:prod` — the `batch` app (daily jobs, no HTTP; `dist/apps/batch`). Run one job now and exit: `node dist/apps/batch/main --run=<exchange-rates|domestic-securities|overseas-securities|us-daily-prices>` (exit code 1 on failure).
 - `npm run lint` — oxlint, type-aware. `typescript/no-floating-promises` is an error, so always `await` repository calls.
@@ -94,7 +94,7 @@ Nest monorepo (`nest-cli.json`, `monorepo: true`), ESM throughout (relative impo
 
 ## Environment
 
-`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (must differ), `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` (seconds), `FRONTEND_URL`, `TOSS_CLIENT_ID` / `TOSS_CLIENT_SECRET` (Toss Open API; the calling machine's IP must be on Toss's allowed-IP list, otherwise 403), `MASSIVE_API_KEY` (Massive REST API, sent as `Authorization: Bearer`), `DATA_GO_KR_SERVICE_KEY` (data.go.kr decoding key, sent as the `serviceKey` query param), `KIS_CLIENT_ID` / `KIS_CLIENT_SECRET` (Korea Investment & Securities Open API appkey/appsecret).
+`.env` (not committed) supplies `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `PORT`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `API_URL` (the API's public origin, e.g. `http://localhost:8080` locally, `https://api.mudaeng.online` in production) + `GOOGLE_CALLBACK_URI` (path only, `/auth/google/callback`; the Google callback URL is `API_URL + GOOGLE_CALLBACK_URI` and must be registered in Google Cloud Console), `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (must differ), `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` (seconds), `FRONTEND_URL1` / `FRONTEND_URL2` (CORS origins, e.g. `https://www.mudaeng.online` / `https://mudaeng.online`; `FRONTEND_URL1` is also the post-login redirect target), `NODE_ENV` (`production` disables Swagger and makes the refresh cookie `secure`), `HOST` (listen address, default `127.0.0.1`; production runs behind Nginx with `PORT=3000`), `TOSS_CLIENT_ID` / `TOSS_CLIENT_SECRET` (Toss Open API; the calling machine's IP must be on Toss's allowed-IP list, otherwise 403), `MASSIVE_API_KEY` (Massive REST API, sent as `Authorization: Bearer`), `DATA_GO_KR_SERVICE_KEY` (data.go.kr decoding key, sent as the `serviceKey` query param), `KIS_CLIENT_ID` / `KIS_CLIENT_SECRET` (Korea Investment & Securities Open API appkey/appsecret).
 
 ### Toss Open API
 
@@ -134,7 +134,7 @@ Dividends for `KRW` securities come from the KSD dividend schedule (`GET /uapi/d
 
 ### Auth flow
 
-1. `GET /auth/google` → Google → `GET /auth/google/callback`: the handler takes the Google user with `@GoogleUser()` (`auth/google-user.decorator.ts`, the `User` returned by `GoogleStrategy.validate`) and `AuthService.loginWithOauth` saves both tokens in `Token` (one row per user, PK `id` = user id), sets the refresh token as an httpOnly `refreshToken` cookie (`path: /auth`), and returns `{ url: ${FRONTEND_URL}/auth/callback }` for `@Redirect()`.
+1. `GET /auth/google` → Google → `GET /auth/google/callback`: the handler takes the Google user with `@GoogleUser()` (`auth/google-user.decorator.ts`, the `User` returned by `GoogleStrategy.validate`) and `AuthService.loginWithOauth` saves both tokens in `Token` (one row per user, PK `id` = user id), sets the refresh token as an httpOnly `refreshToken` cookie (`path: /auth`), and returns `{ url: ${FRONTEND_URL1}/auth/callback }` for `@Redirect()`.
 2. Frontend calls `POST /auth/access` with credentials: `AuthService.issueAccessToken` looks the refresh token up in `Token` and returns a new access token in the body (also stored in `Token`); the refresh token is unchanged.
 3. Frontend sends `Authorization: Bearer <accessToken>`; protect routes with `@UseGuards(AuthGuard('jwt'))` (`JwtStrategy`, access secret) and take the user with the `@CurrentUser()` param decorator (`auth/current-user.decorator.ts`, gives `AuthUser` = `{ id }`) instead of `@Req()`, passing it to the service (e.g. `GET /auth/me` → `AuthService.getMe`). An expired access token gets 401.
 4. On 401, frontend calls `POST /auth/reissue` with credentials: `AuthService.reissueTokens` looks the refresh token up in `Token` (missing → 401), deletes the old row, issues and saves a new access + refresh pair, resets the `refreshToken` cookie, and returns `{ accessToken }`. The old refresh token is unusable afterwards (rotation).
