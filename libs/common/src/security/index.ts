@@ -6,4 +6,5 @@ export * from './daily-security.entity.js';
 export * from './dividend-type.enum.js';
 export * from './dividend.entity.js';
 export * from './daily-exchange-rate.entity.js';
+export * from './search-type.enum.js';
 export * from './security-seacrh.entity.js';
