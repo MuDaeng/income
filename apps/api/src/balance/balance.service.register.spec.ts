@@ -1,4 +1,3 @@
-import { BadGatewayException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
@@ -10,7 +9,7 @@ import {
   User,
   UserBalance,
 } from '@app/common';
-import { DividendService } from '../security/dividend.service.js';
+import { SecurityRefreshService } from '../security/security-refresh.service.js';
 import { BalanceService } from './balance.service.js';
 
 // 단위 테스트에서는 트랜잭션 컨텍스트 없이 메서드만 실행
@@ -40,7 +39,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
   const userRepository = { findOne: vi.fn() };
   const securityRepository = { findOneBy: vi.fn() };
   const dailySecurityRepository = { findOneBy: vi.fn() };
-  const dividendService = { refreshDividends: vi.fn() };
+  const securityRefreshService = { refresh: vi.fn() };
   let service: BalanceService;
 
   beforeEach(async () => {
@@ -70,28 +69,17 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
         { provide: getRepositoryToken(Security), useValue: securityRepository },
         { provide: getRepositoryToken(DailySecurity), useValue: dailySecurityRepository },
         { provide: getRepositoryToken(DailyExchangeRate), useValue: {} },
-        { provide: DividendService, useValue: dividendService },
+        { provide: SecurityRefreshService, useValue: securityRefreshService },
       ],
     }).compile();
     service = moduleRef.get(BalanceService);
   });
 
-  it('잔고를 등록하고 그 종목의 배당 정보를 갱신한다', async () => {
+  it('잔고를 등록하고 그 종목의 배당·시세를 갱신한다', async () => {
     const saved = await service.registerBalance({ id: 1 }, INPUT);
 
-    expect(dividendService.refreshDividends).toHaveBeenCalledWith(SAMSUNG);
+    expect(securityRefreshService.refresh).toHaveBeenCalledWith(SAMSUNG);
     expect(saved).toMatchObject({ securityId: SAMSUNG.id, sequence: 1, amount: '10' });
-  });
-
-  it('배당 조회가 실패해도 잔고는 등록한다', async () => {
-    dividendService.refreshDividends.mockRejectedValue(
-      new BadGatewayException('KIS 배당 조회 실패'),
-    );
-
-    await expect(service.registerBalance({ id: 1 }, INPUT)).resolves.toMatchObject({
-      securityId: SAMSUNG.id,
-    });
-    expect(purchaseDateBalanceRepository.save).toHaveBeenCalledTimes(1);
   });
 
   it('매수일 시세가 없어 등록이 실패하면 배당을 조회하지 않는다', async () => {
@@ -100,14 +88,14 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
     await expect(service.registerBalance({ id: 1 }, INPUT)).rejects.toThrow(
       '해당 매수일의 시세가 없습니다.',
     );
-    expect(dividendService.refreshDividends).not.toHaveBeenCalled();
+    expect(securityRefreshService.refresh).not.toHaveBeenCalled();
   });
 
   it('등록을 저장한 뒤에 배당을 갱신한다', async () => {
     await service.registerBalance({ id: 1 }, INPUT);
 
     expect(purchaseDateBalanceRepository.save.mock.invocationCallOrder[0]).toBeLessThan(
-      dividendService.refreshDividends.mock.invocationCallOrder[0],
+      securityRefreshService.refresh.mock.invocationCallOrder[0],
     );
   });
 
@@ -117,6 +105,6 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
     await expect(service.registerBalance({ id: 1 }, INPUT)).rejects.toThrow(
       '존재하지 않는 종목입니다.',
     );
-    expect(dividendService.refreshDividends).not.toHaveBeenCalled();
+    expect(securityRefreshService.refresh).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -20,7 +19,7 @@ import {
   UserBalance,
 } from '@app/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
-import { DividendService } from '../security/dividend.service.js';
+import { SecurityRefreshService } from '../security/security-refresh.service.js';
 import type {
   BalanceItemDto,
   IntegratedBalanceResponse,
@@ -36,8 +35,6 @@ import { returnRate } from './return-rate.js';
 
 @Injectable()
 export class BalanceService {
-  private readonly logger = new Logger(BalanceService.name);
-
   constructor(
     @InjectRepository(PurchaseDateBalance)
     private readonly purchaseDateBalanceRepository: Repository<PurchaseDateBalance>,
@@ -51,27 +48,21 @@ export class BalanceService {
     private readonly dailySecurityRepository: Repository<DailySecurity>,
     @InjectRepository(DailyExchangeRate)
     private readonly dailyExchangeRateRepository: Repository<DailyExchangeRate>,
-    private readonly dividendService: DividendService,
+    private readonly securityRefreshService: SecurityRefreshService,
   ) {}
 
   /**
-   * 매수 잔고 등록. 등록(saveBalance 트랜잭션)이 커밋된 뒤에 그 종목의 배당 정보를 갱신한다(하루 한 번).
-   * 배당 갱신을 트랜잭션 밖에서 하는 이유: 등록이 검증에서 실패하면 KIS를 호출하지 않고,
+   * 매수 잔고 등록. 등록(saveBalance 트랜잭션)이 커밋된 뒤에 그 종목의 배당·시세를 갱신한다(하루 한 번).
+   * 갱신을 트랜잭션 밖에서 하는 이유: 등록이 검증에서 실패하면 외부 API를 호출하지 않고,
    * 등록 실패로 배당·조회 기록까지 롤백되는 일도 없게 하려고.
-   * 배당 조회(KIS)가 실패해도 등록 결과는 그대로 돌려준다 (lastSearchDate가 그대로라 다음에 다시 조회됨).
+   * 갱신이 실패해도(SecurityRefreshService가 로그만 남김) 등록 결과는 그대로 돌려준다.
    */
   async registerBalance(
     authUser: AuthUser,
     input: RegisterBalanceRequest,
   ): Promise<PurchaseDateBalance> {
     const { saved, security } = await this.saveBalance(authUser, input);
-    try {
-      await this.dividendService.refreshDividends(security);
-    } catch (error) {
-      this.logger.warn(
-        `배당 갱신 실패 ${security.id}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+    await this.securityRefreshService.refresh(security);
     return saved;
   }
 

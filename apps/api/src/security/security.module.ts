@@ -8,10 +8,12 @@ import {
   MassiveModule,
   SecurityImportModule,
 } from '@app/core';
+import { DailyPriceFetcher } from './daily-price.fetcher.js';
 import { DailySecurityController } from './daily-security.controller.js';
 import { DailySecurityService } from './daily-security.service.js';
 import { DividendService } from './dividend.service.js';
 import { ExchangeRateController } from './exchange-rate.controller.js';
+import { SecurityRefreshService } from './security-refresh.service.js';
 import { SecurityController } from './security.controller.js';
 import { SecurityService } from './security.service.js';
 
@@ -38,7 +40,13 @@ import { SecurityService } from './security.service.js';
     DailySecurityController,
     ExchangeRateController,
   ],
-  providers: [SecurityService, DailySecurityService, DividendService],
-  exports: [DividendService],
+  providers: [
+    SecurityService,
+    DailySecurityService,
+    DividendService,
+    DailyPriceFetcher,
+    SecurityRefreshService,
+  ],
+  exports: [SecurityRefreshService],
 })
 export class SecurityModule {}

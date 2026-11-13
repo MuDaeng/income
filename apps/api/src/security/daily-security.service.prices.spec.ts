@@ -4,6 +4,7 @@ import type { Repository } from 'typeorm';
 import { Currency, DailySecurity, Security } from '@app/common';
 import type { DataGoKrClient, MassiveClient } from '@app/core';
 import { DailySecurityService } from './daily-security.service.js';
+import type { SecurityRefreshService } from './security-refresh.service.js';
 
 const AAPL = {
   id: 'US0378331005',
@@ -16,6 +17,7 @@ const AAPL = {
 describe('DailySecurityService.getDailyPrices', () => {
   const findOneBy = vi.fn();
   const dailyFind = vi.fn();
+  const refresh = vi.fn();
   let service: DailySecurityService;
 
   beforeEach(() => {
@@ -25,6 +27,7 @@ describe('DailySecurityService.getDailyPrices', () => {
       { findOneBy } as unknown as Repository<Security>,
       {} as DataGoKrClient,
       {} as MassiveClient,
+      { refresh } as unknown as SecurityRefreshService,
     );
   });
 
@@ -48,6 +51,11 @@ describe('DailySecurityService.getDailyPrices', () => {
     });
 
     expect(findOneBy).toHaveBeenCalledWith({ id: AAPL.id });
+    // 읽기 전에 그 종목을 온라인으로 갱신한다
+    expect(refresh).toHaveBeenCalledWith(AAPL);
+    expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
+      dailyFind.mock.invocationCallOrder[0],
+    );
     expect(dailyFind).toHaveBeenCalledWith({
       where: { id: AAPL.id, date: Between('2026-11-01', '2026-11-06') },
       order: { date: 'ASC' },

@@ -11,7 +11,7 @@ import {
   User,
   UserBalance,
 } from '@app/common';
-import { DividendService } from '../security/dividend.service.js';
+import { SecurityRefreshService } from '../security/security-refresh.service.js';
 import { BalanceService } from './balance.service.js';
 import { purchaseHistorySchema } from './purchase-history.schema.js';
 
@@ -35,7 +35,7 @@ describe('BalanceService.getPurchases', () => {
         { provide: getRepositoryToken(UserBalance), useValue: {} },
         { provide: getRepositoryToken(User), useValue: {} },
         { provide: getRepositoryToken(DailySecurity), useValue: {} },
-        { provide: DividendService, useValue: {} },
+        { provide: SecurityRefreshService, useValue: {} },
       ],
     }).compile();
     service = moduleRef.get(BalanceService);

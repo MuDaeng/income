@@ -44,6 +44,8 @@ export interface PriceQuery {
   endBasDt: string;
   pageNo: number;
   numOfRows: number;
+  /** 있으면 이 ISIN(완전일치) 종목만 */
+  isinCd?: string;
 }
 
 /** 정상 응답. 키 오류 등은 `OpenAPI_ServiceResponse` 같은 다른 형태로 옴 */

@@ -19,6 +19,7 @@ import {
   truncateByCurrency,
 } from '@app/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
+import { SecurityRefreshService } from '../security/security-refresh.service.js';
 import type {
   DividendHistoryResponse,
   DividendItemDto,
@@ -37,11 +38,13 @@ export class DividendHistoryService {
     private readonly dividendRepository: Repository<Dividend>,
     @InjectRepository(DailyExchangeRate)
     private readonly dailyExchangeRateRepository: Repository<DailyExchangeRate>,
+    private readonly securityRefreshService: SecurityRefreshService,
   ) {}
 
   /**
    * 배당금 내역 조회.
-   * 1. 사용자의 매수일별 잔고(매도분 포함)로 지금까지 보유한 종목을 구한다
+   * 1. 사용자의 매수일별 잔고(매도분 포함)로 지금까지 보유한 종목을 구하고, 종목마다 배당·시세를 원천에서 갱신한다
+   *    (종목별 하루 한 번, 실패해도 저장분으로 계속)
    * 2. 그 종목들의 현금배당(MONEY) 중 지급일이 [from, to]인 것 (입력이 없으면 그쪽은 제한 없음, 지급 예정 포함)
    * 3. 배당마다 기준일(noticeDate) 보유 수량 = purchaseDate <= 기준일 < saleDate(없으면 보유 중)인 매수분 수량 합.
    *    0이면 받지 않은 배당이라 제외
@@ -78,6 +81,10 @@ export class DividendHistoryService {
         .filter((s) => s.currency === Currency.KRW || s.currency === Currency.USD)
         .map((s) => [s.id, s]),
     );
+    // 외부 API 한도(Massive 분당 호출 수 등) 때문에 종목마다 순서대로
+    for (const security of securityById.values()) {
+      await this.securityRefreshService.refresh(security);
+    }
 
     // 2. 기간 내 현금배당
     const paymentDate = paymentDateFilter(from, to);

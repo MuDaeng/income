@@ -41,6 +41,18 @@ describe('MassiveClient', () => {
     expect(init?.headers).toEqual({ Authorization: 'Bearer key' });
   });
 
+  it('미국 주식 한 종목 일봉도 같은 Aggregates 경로로 호출한다', async () => {
+    const bar = { o: 1, h: 2, l: 0.5, c: 1.5, t: 1762318800000 };
+    fetchMock.mockResolvedValueOnce(json({ status: 'OK', results: [bar] }));
+
+    await expect(
+      client.getDailyStockBars('BACpP', '2026-11-01', '2026-11-05'),
+    ).resolves.toEqual([bar]);
+    expect((fetchMock.mock.calls[0][0] as URL).href).toBe(
+      'https://api.massive.com/v2/aggs/ticker/BACpP/range/1/day/2026-11-01/2026-11-05?adjusted=true&sort=asc&limit=50000',
+    );
+  });
+
   it('results가 없으면 빈 배열', async () => {
     fetchMock.mockResolvedValueOnce(
       json({ ticker: 'C:USDKRW', status: 'OK', resultsCount: 0 }),

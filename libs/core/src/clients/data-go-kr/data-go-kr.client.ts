@@ -52,6 +52,7 @@ export class DataGoKrClient {
       pageNo: String(query.pageNo),
       beginBasDt: query.beginBasDt,
       endBasDt: query.endBasDt,
+      ...(query.isinCd ? { isinCd: query.isinCd } : {}),
     }).toString();
 
     const response = await fetch(url, {

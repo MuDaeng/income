@@ -6,6 +6,7 @@ import type {
   MassiveGroupedBar,
 } from '@app/core';
 import { DailySecurityService } from './daily-security.service.js';
+import type { SecurityRefreshService } from './security-refresh.service.js';
 
 const bar = (T: string, c = 190.1234567): MassiveGroupedBar => ({
   T,
@@ -35,6 +36,7 @@ describe('DailySecurityService.importUsFromMassive', () => {
       { find } as unknown as Repository<Security>,
       {} as DataGoKrClient,
       { getGroupedDailyStocks } as unknown as MassiveClient,
+      {} as SecurityRefreshService,
     );
   });
 

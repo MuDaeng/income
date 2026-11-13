@@ -11,7 +11,7 @@ import {
   User,
   UserBalance,
 } from '@app/common';
-import { DividendService } from '../security/dividend.service.js';
+import { SecurityRefreshService } from '../security/security-refresh.service.js';
 import { BalanceService } from './balance.service.js';
 
 const KRW_SECURITY = { id: '005930', name: '삼성전자', currency: Currency.KRW };
@@ -47,7 +47,7 @@ describe('BalanceService.getIntegratedBalance', () => {
         },
         { provide: getRepositoryToken(User), useValue: {} },
         { provide: getRepositoryToken(Security), useValue: {} },
-        { provide: DividendService, useValue: {} },
+        { provide: SecurityRefreshService, useValue: {} },
       ],
     }).compile();
     service = moduleRef.get(BalanceService);

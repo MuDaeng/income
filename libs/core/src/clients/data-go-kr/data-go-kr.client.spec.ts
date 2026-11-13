@@ -59,6 +59,15 @@ describe('DataGoKrClient.getStockPrices', () => {
     });
   });
 
+  it('isinCd를 주면 그 종목만 조회하도록 쿼리에 붙인다', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ item: samsung }));
+
+    await client.getStockPrices({ ...query, isinCd: 'KR7005930003' });
+
+    const url = fetchMock.mock.calls[0][0] as URL;
+    expect(url.searchParams.get('isinCd')).toBe('KR7005930003');
+  });
+
   it('item이 객체 하나면 배열로 감싸고, items가 빈 문자열이면 빈 배열', async () => {
     fetchMock
       .mockResolvedValueOnce(ok({ item: samsung }))

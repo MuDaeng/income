@@ -9,6 +9,7 @@ import {
   PurchaseDateBalance,
   Security,
 } from '@app/common';
+import { SecurityRefreshService } from '../security/security-refresh.service.js';
 import { DividendHistoryService } from './dividend-history.service.js';
 
 const KRW_SECURITY = { id: 'KR7005930003', name: '삼성전자', currency: Currency.KRW };
@@ -26,6 +27,7 @@ describe('DividendHistoryService.getDividendHistory', () => {
   const securityRepository = { findBy: vi.fn() };
   const dividendRepository = { find: vi.fn() };
   const dailyExchangeRateRepository = { findOne: vi.fn() };
+  const securityRefreshService = { refresh: vi.fn() };
   let service: DividendHistoryService;
 
   beforeEach(async () => {
@@ -43,6 +45,7 @@ describe('DividendHistoryService.getDividendHistory', () => {
           provide: getRepositoryToken(DailyExchangeRate),
           useValue: dailyExchangeRateRepository,
         },
+        { provide: SecurityRefreshService, useValue: securityRefreshService },
       ],
     }).compile();
     service = moduleRef.get(DividendHistoryService);
@@ -61,6 +64,7 @@ describe('DividendHistoryService.getDividendHistory', () => {
       months: [],
     });
     expect(dividendRepository.find).not.toHaveBeenCalled();
+    expect(securityRefreshService.refresh).not.toHaveBeenCalled();
   });
 
   it('기준일 보유 수량 × 주당 배당금으로 계산하고 USD는 지급일 이전 최근 환율로 환산해 월별로 묶는다', async () => {
@@ -91,6 +95,14 @@ describe('DividendHistoryService.getDividendHistory', () => {
       { from: '2026-04-01', to: '2026-06-30' },
     );
 
+    // 배당을 읽기 전에 보유했던 종목마다 온라인 갱신
+    expect(securityRefreshService.refresh.mock.calls).toEqual([
+      [KRW_SECURITY],
+      [USD_SECURITY],
+    ]);
+    expect(securityRefreshService.refresh.mock.invocationCallOrder[1]).toBeLessThan(
+      dividendRepository.find.mock.invocationCallOrder[0],
+    );
     expect(dividendRepository.find).toHaveBeenCalledWith({
       where: {
         id: In([KRW_SECURITY.id, USD_SECURITY.id]),

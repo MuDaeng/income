@@ -11,7 +11,7 @@ import {
   User,
   UserBalance,
 } from '@app/common';
-import { DividendService } from '../security/dividend.service.js';
+import { SecurityRefreshService } from '../security/security-refresh.service.js';
 import { BalanceService } from './balance.service.js';
 
 // 단위 테스트에서는 트랜잭션 컨텍스트 없이 메서드만 실행
@@ -79,7 +79,7 @@ describe('BalanceService.sellBalance', () => {
         },
         { provide: getRepositoryToken(User), useValue: userRepository },
         { provide: getRepositoryToken(Security), useValue: securityRepository },
-        { provide: DividendService, useValue: {} },
+        { provide: SecurityRefreshService, useValue: {} },
         { provide: getRepositoryToken(UserBalance), useValue: {} },
         { provide: getRepositoryToken(DailySecurity), useValue: {} },
         { provide: getRepositoryToken(DailyExchangeRate), useValue: {} },

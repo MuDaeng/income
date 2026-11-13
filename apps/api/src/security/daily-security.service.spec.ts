@@ -8,6 +8,7 @@ import type {
   StockPriceItem,
 } from '@app/core';
 import { DailySecurityService } from './daily-security.service.js';
+import type { SecurityRefreshService } from './security-refresh.service.js';
 
 const item = (isinCd: string, basDt: string, clpr = '72000'): StockPriceItem => ({
   basDt,
@@ -35,6 +36,7 @@ describe('DailySecurityService.importFromDataGoKr', () => {
       { find } as unknown as Repository<Security>,
       { getStockPrices } as unknown as DataGoKrClient,
       {} as MassiveClient,
+      {} as SecurityRefreshService,
     );
   });
 
@@ -146,6 +148,7 @@ describe('DailySecurityService.importEtfFromDataGoKr', () => {
       { find } as unknown as Repository<Security>,
       { getEtfPrices } as unknown as DataGoKrClient,
       {} as MassiveClient,
+      {} as SecurityRefreshService,
     );
   });
 

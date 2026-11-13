@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
 import { Repository } from 'typeorm';
@@ -7,7 +7,6 @@ import {
   Dividend,
   DividendType,
   Security,
-  SecuritySearch,
   truncateByCurrency,
 } from '@app/common';
 import {
@@ -17,52 +16,36 @@ import {
   type KisDividendItem,
   type MassiveDividend,
 } from '@app/core';
-
-/** 지난 배당은 이만큼 거슬러 받는다 (Massive Stocks Basic도 2년치까지) */
-const PAST_YEARS = 2;
-/** 공시된 앞으로의 배당까지 받으려고 오늘 이후로도 조회 */
-const FUTURE_YEARS = 1;
+import { toYmd } from './iso-date.js';
 
 type DividendRow = Pick<
   Dividend,
   'id' | 'paymentDate' | 'noticeDate' | 'amount' | 'type'
 >;
 
-/** 종목 배당 정보 갱신. 잔고 등록·종목 조회 등에서 쓴다 */
+/**
+ * 종목 하나의 배당을 원천에서 받아 dividend에 upsert한다. 언제 부를지(하루 한 번)는 SecurityRefreshService가 정한다.
+ * - KRW: KIS 예탁원 배당일정 (6자리 symbol, 기간은 기준일)
+ * - USD: Massive Dividends (symbol을 Massive 티커로, 기간은 배당락일)
+ */
 @Injectable()
 export class DividendService {
-  private readonly logger = new Logger(DividendService.name);
-
   constructor(
     @InjectRepository(Dividend)
     private readonly dividendRepository: Repository<Dividend>,
-    @InjectRepository(SecuritySearch)
-    private readonly securitySearchRepository: Repository<SecuritySearch>,
     private readonly kisClient: KisClient,
     private readonly massiveClient: MassiveClient,
   ) {}
 
-  /**
-   * 종목의 배당 정보를 갱신한다. 하루에 한 번만 조회한다.
-   * - security_search.lastSearchDate가 오늘(한국 시간)이면 아무것도 하지 않음
-   * - 행이 없거나 오늘이 아니면 통화별 원천에서 조회 → dividend upsert → lastSearchDate = 오늘
-   *   - KRW: KIS 예탁원 배당일정 (6자리 symbol)
-   *   - USD: Massive Dividends (symbol을 Massive 티커로)
-   */
-  async refreshDividends(security: Security): Promise<void> {
+  /** [from, to] 배당을 저장하고 { 받은 건수, 저장한 행 수 }를 돌려준다. KRW·USD 외 통화는 0 */
+  async fetchAndSave(
+    security: Security,
+    from: string,
+    to: string,
+  ): Promise<{ fetched: number; saved: number }> {
     if (security.currency !== Currency.KRW && security.currency !== Currency.USD) {
-      return;
+      return { fetched: 0, saved: 0 };
     }
-    const today = todayInSeoul();
-    const search = await this.securitySearchRepository.findOneBy({
-      id: security.id,
-    });
-    if (search?.lastSearchDate === today) {
-      return;
-    }
-
-    const from = shiftYears(today, -PAST_YEARS);
-    const to = shiftYears(today, FUTURE_YEARS);
     const { fetched, rows } =
       security.currency === Currency.KRW
         ? await this.fetchKrwDividends(security, from, to)
@@ -70,13 +53,7 @@ export class DividendService {
     if (rows.length > 0) {
       await this.dividendRepository.upsert(rows, ['id', 'paymentDate']);
     }
-    await this.securitySearchRepository.upsert(
-      { id: security.id, lastSearchDate: today },
-      ['id'],
-    );
-    this.logger.log(
-      `배당 갱신 ${security.symbol}(${security.currency}): ${fetched}건 중 ${rows.length}건 저장`,
-    );
+    return { fetched, saved: rows.length };
   }
 
   /** KIS 배당일정. 기간은 기준일 */
@@ -180,17 +157,4 @@ const toIsoDate = (date: string | undefined) => {
   return /^\d{8}$/.test(value)
     ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
     : null;
-};
-
-/** 'YYYY-MM-DD' → 'YYYYMMDD' */
-const toYmd = (isoDate: string) => isoDate.replaceAll('-', '');
-
-/** 한국 시간 기준 오늘 'YYYY-MM-DD' */
-const todayInSeoul = () =>
-  new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
-
-const shiftYears = (isoDate: string, years: number) => {
-  const date = new Date(`${isoDate}T00:00:00Z`);
-  date.setUTCFullYear(date.getUTCFullYear() + years);
-  return date.toISOString().slice(0, 10);
 };

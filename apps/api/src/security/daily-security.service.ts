@@ -17,13 +17,21 @@ import {
   DataGoKrClient,
   MassiveClient,
   toMassiveTicker,
-  type PriceItem,
   type PricePage,
   type PriceQuery,
 } from '@app/core';
 import type { DailyPriceResponse } from './daily-price.dto.js';
+import { type DailySecurityRow, toDailySecurity } from './daily-price.fetcher.js';
 import type { DailyPriceRequest } from './daily-price.schema.js';
 import type { ImportDailySecuritiesRequest } from './import-daily-securities.schema.js';
+import {
+  addDays,
+  addYears,
+  formatIsoDate,
+  parseIsoDate,
+  toYmd,
+} from './iso-date.js';
+import { SecurityRefreshService } from './security-refresh.service.js';
 
 /** 날짜 기간 조건. 둘 다 없으면 null(조건 없음) */
 const dateFilter = (
@@ -72,11 +80,13 @@ export class DailySecurityService {
     private readonly securityRepository: Repository<Security>,
     private readonly dataGoKrClient: DataGoKrClient,
     private readonly massiveClient: MassiveClient,
+    private readonly securityRefreshService: SecurityRefreshService,
   ) {}
 
   /**
    * 종목 일별 시세 조회. id(ISIN)가 securityId와 같은 종목의 시세를 날짜 오름차순으로 돌려준다.
    * 종목이 없으면 404. 기간은 생략 가능. ISIN은 GET /securities(종목 검색)로 찾는다.
+   * 읽기 전에 그 종목의 시세·배당을 원천에서 갱신한다(종목별 하루 한 번, 실패해도 저장분으로 응답).
    */
   async getDailyPrices(input: DailyPriceRequest): Promise<DailyPriceResponse> {
     const from = input.from ?? null;
@@ -88,6 +98,7 @@ export class DailySecurityService {
     if (!found) {
       throw new NotFoundException('종목을 찾을 수 없습니다.');
     }
+    await this.securityRefreshService.refresh(found);
     const { id, symbol, name, currency } = found;
     const security = { id, symbol, name, currency };
 
@@ -143,8 +154,8 @@ export class DailySecurityService {
     label: string,
     fetchPage: (query: PriceQuery) => Promise<PricePage>,
   ): Promise<ImportDailySecuritiesResult> {
-    const to = input.to ?? toIsoDate(new Date());
-    const from = input.from ?? yearsBefore(to, DEFAULT_YEARS);
+    const to = input.to ?? formatIsoDate(new Date());
+    const from = input.from ?? addYears(to, -DEFAULT_YEARS);
 
     const krwSecurities = await this.securityRepository.find({
       select: { id: true },
@@ -163,9 +174,9 @@ export class DailySecurityService {
     };
     for (let pageNo = 1; ; pageNo++) {
       const page = await fetchPage({
-        beginBasDt: toBasDt(from),
+        beginBasDt: toYmd(from),
         // endBasDt는 그 날짜를 포함하지 않으므로 다음 날을 넘김
-        endBasDt: toBasDt(addDays(to, 1)),
+        endBasDt: toYmd(addDays(to, 1)),
         pageNo,
         numOfRows: PAGE_SIZE,
       });
@@ -205,8 +216,8 @@ export class DailySecurityService {
   async importUsFromMassive(
     input: ImportDailySecuritiesRequest,
   ): Promise<ImportDailySecuritiesResult> {
-    const to = input.to ?? toIsoDate(new Date());
-    const from = input.from ?? yearsBefore(to, DEFAULT_YEARS);
+    const to = input.to ?? formatIsoDate(new Date());
+    const from = input.from ?? addYears(to, -DEFAULT_YEARS);
 
     const usdSecurities = await this.securityRepository.find({
       select: { id: true, symbol: true },
@@ -270,41 +281,3 @@ const isWeekend = (isoDate: string) => {
   const day = parseIsoDate(isoDate).getUTCDay();
   return day === 0 || day === 6;
 };
-
-type DailySecurityRow = Pick<
-  DailySecurity,
-  'id' | 'date' | 'openingPrice' | 'closingPrice' | 'highestPrice' | 'lowestPrice'
->;
-
-const toDailySecurity = (item: PriceItem): DailySecurityRow => ({
-  id: item.isinCd,
-  date: `${item.basDt.slice(0, 4)}-${item.basDt.slice(4, 6)}-${item.basDt.slice(6, 8)}`,
-  openingPrice: toPrice(item.mkp),
-  closingPrice: toPrice(item.clpr),
-  highestPrice: toPrice(item.hipr),
-  lowestPrice: toPrice(item.lopr),
-});
-
-/** 원화 정수로 버림. 빈 값이 오면 new Decimal('')가 예외라 0으로 둠 (거래정지 종목은 원천에서도 0) */
-const toPrice = (value: string) =>
-  truncateByCurrency(value?.trim() || '0', Currency.KRW);
-
-/** UTC 기준 'YYYY-MM-DD' */
-const toIsoDate = (date: Date) => date.toISOString().slice(0, 10);
-
-const parseIsoDate = (isoDate: string) => new Date(`${isoDate}T00:00:00Z`);
-
-const yearsBefore = (isoDate: string, years: number) => {
-  const date = parseIsoDate(isoDate);
-  date.setUTCFullYear(date.getUTCFullYear() - years);
-  return toIsoDate(date);
-};
-
-const addDays = (isoDate: string, days: number) => {
-  const date = parseIsoDate(isoDate);
-  date.setUTCDate(date.getUTCDate() + days);
-  return toIsoDate(date);
-};
-
-/** 'YYYY-MM-DD' → 'YYYYMMDD' */
-const toBasDt = (isoDate: string) => isoDate.replaceAll('-', '');
