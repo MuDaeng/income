@@ -8,7 +8,7 @@ import type { SecuritySearchItemDto } from './security-search.dto.js';
 /** 종목 검색 결과 최대 건수 */
 export const SEARCH_LIMIT = 20;
 
-/** 종목 검색. 종목 가져오기(Toss)는 @app/core SecurityImportService */
+/** 종목 검색. 종목 목록 가져오기(Toss)는 batch의 @app/core SecurityImportService */
 @Injectable()
 export class SecurityService {
   constructor(

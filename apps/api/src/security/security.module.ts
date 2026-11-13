@@ -6,7 +6,6 @@ import {
   ExchangeRateImportModule,
   KisModule,
   MassiveModule,
-  SecurityImportModule,
   UsDailyPriceImportModule,
 } from '@app/core';
 import { DailyPriceFetcher } from './daily-price.fetcher.js';
@@ -20,7 +19,8 @@ import { SecurityService } from './security.service.js';
 
 /**
  * libs/common `security/` 엔티티(종목·일별 시세·환율·배당·조회 기록)를 다루는 업무 모듈.
- * 종목·환율 가져오기는 batch와 같이 쓰는 @app/core 모듈(SecurityImportModule·ExchangeRateImportModule)
+ * 환율·미국 일별 시세 가져오기는 batch와 같이 쓰는 @app/core 모듈(ExchangeRateImportModule·UsDailyPriceImportModule).
+ * 종목 목록 가져오기(Toss)는 batch 전용(SecurityImportModule)
  */
 @Module({
   imports: [
@@ -30,7 +30,6 @@ import { SecurityService } from './security.service.js';
       Dividend,
       SecuritySearch,
     ]),
-    SecurityImportModule,
     ExchangeRateImportModule,
     UsDailyPriceImportModule,
     MassiveModule,
