@@ -2,7 +2,7 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   deploy:
@@ -15,10 +15,10 @@ jobs:
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
           cd ~/income
-          git pull origin main
+          git pull origin master
           npm ci
           npm run build
-          pm2 reload nest-api --update-env || pm2 start dist/main.js --name nest-api
+          pm2 reload nest-api --update-env || pm2 start dist/apps/api/main.js --name nest-api
           pm2 save
 
       - name: Health check
