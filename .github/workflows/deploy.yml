@@ -18,7 +18,12 @@ jobs:
           git pull origin master
           npm ci
           npm run build
+          npm run build:batch
           pm2 reload nest-api --update-env || pm2 start dist/apps/api/main.js --name nest-api
+          # 일배치(@Cron, KST 기준). HTTP가 없어 Nginx와 무관
+          # 이전 실행의 "다음 실행" 로그로 Batch check가 통과하지 않게 로그를 비운다(처음 배포 때는 프로세스가 없어 건너뜀)
+          if pm2 describe nest-batch >/dev/null 2>&1; then pm2 flush nest-batch; fi
+          pm2 reload nest-batch --update-env || pm2 start dist/apps/batch/main.js --name nest-batch
           pm2 save
 
       - name: Health check
@@ -34,4 +39,20 @@ jobs:
           done
           echo "health check failed (last HTTP $code)"
           pm2 logs nest-api --lines 50 --nostream || true
+          exit 1
+
+      - name: Batch check
+        shell: bash
+        run: |
+          # 배치는 시작하면 잡마다 "다음 실행 ..." 로그를 남긴다. 프로세스가 online이고 그 로그가 있으면 통과
+          for i in $(seq 1 20); do
+            if pm2 describe nest-batch 2>/dev/null | grep -q "status.*online" &&
+               pm2 logs nest-batch --lines 50 --nostream 2>/dev/null | grep -q "다음 실행"; then
+              pm2 logs nest-batch --lines 50 --nostream | grep "다음 실행" | tail -4
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "batch did not schedule jobs"
+          pm2 logs nest-batch --lines 50 --nostream || true
           exit 1
