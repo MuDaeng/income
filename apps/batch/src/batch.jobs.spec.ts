@@ -47,7 +47,7 @@ describe('BatchJobs', () => {
     vi.restoreAllMocks();
   });
 
-  it('잡마다 한국 시간 일정이 붙어 있다 (환율 16시, 국내 17시, 해외 8시, 미국 시세 8시 30분)', () => {
+  it('잡마다 한국 시간 일정이 붙어 있다 (환율 16시, 국내 17시, 해외 8시, 미국 시세 15시)', () => {
     expect(cronOf('importExchangeRates')).toMatchObject({
       cronTime: '0 16 * * *',
       timeZone: BATCH_TIME_ZONE,
@@ -62,7 +62,7 @@ describe('BatchJobs', () => {
       timeZone: 'Asia/Seoul',
     });
     expect(cronOf('importUsDailyPrices')).toMatchObject({
-      cronTime: '30 8 * * *',
+      cronTime: '0 15 * * *',
       timeZone: 'Asia/Seoul',
       name: 'us-daily-prices',
     });
@@ -80,16 +80,18 @@ describe('BatchJobs', () => {
     });
   });
 
-  it('미국 시세는 UTC 날짜(방금 끝난 미국 거래일)까지 최근 7일을 가져온다', async () => {
+  it.each([
+    // 한국 11-13 15:00 = 미국 동부 11-13 01:00
+    ['서머타임 아님', '2026-11-13T06:00:00Z', '2026-11-05', '2026-11-12'],
+    // 한국 07-14 15:00 = 미국 동부 07-14 02:00
+    ['서머타임', '2026-07-14T06:00:00Z', '2026-07-06', '2026-07-13'],
+  ])('미국 시세는 미국 동부 기준 어제까지 최근 7일을 가져온다 (%s)', async (_, now, from, to) => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-11-12T23:30:00Z')); // 한국 11-13 08:30
+    vi.setSystemTime(new Date(now));
     importUsFromMassive.mockResolvedValue({ saved: 52_000 });
 
     await expect(jobs.importUsDailyPrices()).resolves.toBe(true);
-    expect(importUsFromMassive).toHaveBeenCalledWith({
-      from: '2026-11-05',
-      to: '2026-11-12',
-    });
+    expect(importUsFromMassive).toHaveBeenCalledWith({ from, to });
     expect(importFromMassive).not.toHaveBeenCalled();
   });
 

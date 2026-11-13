@@ -20,6 +20,12 @@ const DIVIDEND_LIMIT = 5_000;
 const MAX_DIVIDEND_PAGES = 10;
 export const RATE_LIMIT_WAIT_MS = 15_000;
 
+/**
+ * 요금제가 아직 공개하지 않은 날짜를 요청했을 때 (403, "before end of day").
+ * Basic 요금제는 미국 동부 시간 자정이 지나야 그날 데이터를 준다. 원천 오류가 아니라 기다리면 되는 상황이라 따로 구분한다.
+ */
+export class MassiveDataNotReadyException extends BadGatewayException {}
+
 /** Massive REST API 호출. API 키는 Authorization: Bearer로 보냄 */
 @Injectable()
 export class MassiveClient {
@@ -113,9 +119,11 @@ export class MassiveClient {
         await sleep(waitMs);
         continue;
       }
-      throw new BadGatewayException(
-        `Massive ${what} 조회 실패: ${response.status} ${detail}`.trim(),
-      );
+      const message = `Massive ${what} 조회 실패: ${response.status} ${detail}`.trim();
+      if (response.status === 403 && detail.includes('before end of day')) {
+        throw new MassiveDataNotReadyException(message);
+      }
+      throw new BadGatewayException(message);
     }
   }
 }

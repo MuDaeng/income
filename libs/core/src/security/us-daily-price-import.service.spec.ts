@@ -1,6 +1,9 @@
 import { Currency, DailySecurity, Security } from '@app/common';
 import type { Repository } from 'typeorm';
-import type { MassiveClient } from '../clients/massive/massive.client.js';
+import {
+  type MassiveClient,
+  MassiveDataNotReadyException,
+} from '../clients/massive/massive.client.js';
 import type { MassiveGroupedBar } from '../clients/massive/massive.types.js';
 import { UsDailyPriceImportService } from './us-daily-price-import.service.js';
 
@@ -85,6 +88,34 @@ describe('UsDailyPriceImportService.importFromMassive', () => {
       firstDate: '2026-11-06',
       lastDate: '2026-11-06',
     });
+  });
+
+  it('아직 공개 전인 날짜를 만나면 그날부터 건너뛰고 받은 데까지 돌려준다', async () => {
+    getGroupedDailyStocks.mockImplementation((date) =>
+      date === '2026-11-12'
+        ? Promise.reject(new MassiveDataNotReadyException('403 before end of day'))
+        : Promise.resolve([bar('AAPL')]),
+    );
+
+    // 11-11(수) ~ 11-13(금): 11-12에서 멈추고 11-13은 호출하지 않음
+    const result = await service.importFromMassive({
+      from: '2026-11-11',
+      to: '2026-11-13',
+    });
+
+    expect(getGroupedDailyStocks.mock.calls.map(([date]) => date)).toEqual([
+      '2026-11-11',
+      '2026-11-12',
+    ]);
+    expect(result).toMatchObject({ saved: 1, lastDate: '2026-11-11' });
+  });
+
+  it('그 밖의 오류는 그대로 던진다', async () => {
+    getGroupedDailyStocks.mockRejectedValue(new Error('502'));
+
+    await expect(
+      service.importFromMassive({ from: '2026-11-11', to: '2026-11-11' }),
+    ).rejects.toThrow('502');
   });
 
   it('기간을 생략하면 오늘까지 최근 2년을 받는다', async () => {

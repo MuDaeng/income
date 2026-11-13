@@ -1,5 +1,8 @@
 import { BadGatewayException } from '@nestjs/common';
-import { MassiveClient } from './massive.client.js';
+import {
+  MassiveClient,
+  MassiveDataNotReadyException,
+} from './massive.client.js';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -93,6 +96,34 @@ describe('MassiveClient', () => {
     expect(error).toBeInstanceOf(BadGatewayException);
     expect((error as Error).message).toContain('401');
     expect((error as Error).message).toContain('Unknown API Key');
+  });
+
+  it('요금제가 아직 공개하지 않은 날짜(403 before end of day)는 MassiveDataNotReadyException', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json(
+        {
+          status: 'NOT_AUTHORIZED',
+          message: "Attempted to request today's data before end of day. Please upgrade your plan",
+        },
+        403,
+      ),
+    );
+
+    const error = await client
+      .getGroupedDailyStocks('2026-11-12')
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MassiveDataNotReadyException);
+    expect(error).toBeInstanceOf(BadGatewayException);
+  });
+
+  it('그 밖의 403은 일반 502', async () => {
+    fetchMock.mockResolvedValueOnce(json({ status: 'NOT_AUTHORIZED' }, 403));
+
+    const error = await client
+      .getGroupedDailyStocks('2026-11-12')
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BadGatewayException);
+    expect(error).not.toBeInstanceOf(MassiveDataNotReadyException);
   });
 
   it('배당은 티커·배당락일 기간·limit으로 조회하고 next_url을 따라 이어 받는다', async () => {

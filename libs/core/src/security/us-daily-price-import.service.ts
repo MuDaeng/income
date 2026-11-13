@@ -8,7 +8,11 @@ import {
   truncateByCurrency,
 } from '@app/common';
 import { toMassiveTicker } from '../clients/massive/massive-ticker.js';
-import { MassiveClient } from '../clients/massive/massive.client.js';
+import {
+  MassiveClient,
+  MassiveDataNotReadyException,
+} from '../clients/massive/massive.client.js';
+import type { MassiveGroupedBar } from '../clients/massive/massive.types.js';
 
 /** 기간을 생략했을 때 가져올 햇수 */
 const DEFAULT_YEARS = 2;
@@ -60,6 +64,7 @@ export class UsDailyPriceImportService {
    * Massive Daily Market Summary로 미국 주식 일봉을 받아 daily_security에 넣는다.
    * 하루에 한 번 호출해 그날 전체 종목을 받고(주말은 건너뜀, 휴장일은 빈 결과),
    * security의 USD 종목과 티커(symbol)로 맞춰 저장한다. 가격은 소수 6자리 버림.
+   * 요금제가 아직 공개하지 않은 날짜(미국 동부 자정 전)를 만나면 그날부터는 건너뛰고 받은 데까지 돌려준다.
    */
   async importFromMassive(
     input: ImportDailySecuritiesInput,
@@ -88,7 +93,18 @@ export class UsDailyPriceImportService {
       if (isWeekend(date)) {
         continue;
       }
-      const bars = await this.massiveClient.getGroupedDailyStocks(date);
+      let bars: MassiveGroupedBar[];
+      try {
+        bars = await this.massiveClient.getGroupedDailyStocks(date);
+      } catch (error) {
+        if (error instanceof MassiveDataNotReadyException) {
+          this.logger.warn(
+            `미국 일별 시세 ${date}: 아직 공개 전이라 ${date} ~ ${to}는 건너뜀`,
+          );
+          break;
+        }
+        throw error;
+      }
       const prices: DailySecurityRow[] = [];
       for (const bar of bars) {
         const id = idByTicker.get(bar.T);
