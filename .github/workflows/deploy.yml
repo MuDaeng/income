@@ -1,0 +1,32 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy
+        shell: bash
+        run: |
+          set -e
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          cd ~/income
+          git pull origin main
+          npm ci
+          npm run build
+          pm2 reload nest-api --update-env || pm2 start dist/main.js --name nest-api
+          pm2 save
+
+      - name: Health check
+        shell: bash
+        run: |
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true)
+            if [ "$code" != "000" ]; then echo "up (HTTP $code)"; exit 0; fi
+            sleep 3
+          done
+          echo "app did not start"; exit 1
