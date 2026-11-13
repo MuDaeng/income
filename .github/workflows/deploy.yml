@@ -24,9 +24,14 @@ jobs:
       - name: Health check
         shell: bash
         run: |
-          for i in $(seq 1 10); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true)
-            if [ "$code" != "000" ]; then echo "up (HTTP $code)"; exit 0; fi
+          # 공개 API + DB 조회까지 확인 (결과가 없어도 200)
+          url="http://127.0.0.1:3000/securities?keyword=AAPL"
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$url" || true)
+            if [ "$code" = "200" ]; then echo "healthy (HTTP 200)"; exit 0; fi
+            echo "attempt $i: HTTP $code"
             sleep 3
           done
-          echo "app did not start"; exit 1
+          echo "health check failed (last HTTP $code)"
+          pm2 logs nest-api --lines 50 --nostream || true
+          exit 1
