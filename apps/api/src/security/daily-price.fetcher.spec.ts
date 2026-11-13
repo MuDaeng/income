@@ -4,7 +4,7 @@ import {
   type Security,
   SecurityType,
 } from '@app/common';
-import type { DataGoKrClient, MassiveClient } from '@app/core';
+import type { DataGoKrClient } from '@app/core';
 import type { Repository } from 'typeorm';
 import { DailyPriceFetcher } from './daily-price.fetcher.js';
 
@@ -42,18 +42,15 @@ describe('DailyPriceFetcher.fetchAndSave', () => {
   const upsert = vi.fn();
   const getStockPrices = vi.fn<DataGoKrClient['getStockPrices']>();
   const getEtfPrices = vi.fn<DataGoKrClient['getEtfPrices']>();
-  const getDailyStockBars = vi.fn<MassiveClient['getDailyStockBars']>();
   let fetcher: DailyPriceFetcher;
 
   beforeEach(() => {
     vi.resetAllMocks();
     getStockPrices.mockResolvedValue({ totalCount: 0, items: [] });
     getEtfPrices.mockResolvedValue({ totalCount: 0, items: [] });
-    getDailyStockBars.mockResolvedValue([]);
     fetcher = new DailyPriceFetcher(
       { upsert } as unknown as Repository<DailySecurity>,
       { getStockPrices, getEtfPrices } as unknown as DataGoKrClient,
-      { getDailyStockBars } as unknown as MassiveClient,
     );
   });
 
@@ -104,39 +101,13 @@ describe('DailyPriceFetcher.fetchAndSave', () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
-  it('USD는 Massive 티커로 종목 일봉을 받아 UTC 날짜·소수 6자리 버림으로 저장한다', async () => {
-    getDailyStockBars.mockResolvedValue([
-      // 2026-11-05 00:00 미국 동부(EST) = 05:00 UTC
-      {
-        o: 25.1234567,
-        h: 25.5,
-        l: 25,
-        c: 25.3999999,
-        t: Date.UTC(2026, 10, 5, 5),
-      },
-    ]);
-
+  it('USD는 batch가 시세를 받으므로 조회하지 않는다', async () => {
     await expect(
       fetcher.fetchAndSave(BAC_P, '2024-11-09', '2026-11-09'),
-    ).resolves.toBe(1);
+    ).resolves.toBe(0);
 
-    expect(getDailyStockBars).toHaveBeenCalledWith(
-      'BACpP',
-      '2024-11-09',
-      '2026-11-09',
-    );
-    expect(upsert).toHaveBeenCalledWith(
-      [
-        {
-          id: BAC_P.id,
-          date: '2026-11-05',
-          openingPrice: '25.123456',
-          closingPrice: '25.399999',
-          highestPrice: '25.500000',
-          lowestPrice: '25.000000',
-        },
-      ],
-      ['id', 'date'],
-    );
+    expect(getStockPrices).not.toHaveBeenCalled();
+    expect(getEtfPrices).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
   });
 });

@@ -15,3 +15,5 @@ export * from './security/exchange-rate-import.module.js';
 export * from './security/exchange-rate.service.js';
 export * from './security/security-import.module.js';
 export * from './security/security-import.service.js';
+export * from './security/us-daily-price-import.module.js';
+export * from './security/us-daily-price-import.service.js';

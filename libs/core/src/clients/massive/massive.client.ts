@@ -36,28 +36,7 @@ export class MassiveClient {
    * @param from 'YYYY-MM-DD'
    * @param to 'YYYY-MM-DD'
    */
-  getDailyForexBars(
-    ticker: string,
-    from: string,
-    to: string,
-  ): Promise<MassiveAggregateBar[]> {
-    return this.getDailyBars(ticker, from, to);
-  }
-
-  /**
-   * 미국 주식 한 종목의 일봉 (오래된 순, 수정주가). 바의 t는 미국 동부 자정이라 UTC 날짜가 곧 거래일.
-   * @param ticker Massive 티커 (예: 'AAPL', 'BACpP')
-   */
-  getDailyStockBars(
-    ticker: string,
-    from: string,
-    to: string,
-  ): Promise<MassiveAggregateBar[]> {
-    return this.getDailyBars(ticker, from, to);
-  }
-
-  /** Aggregates(일봉) 공통 */
-  private async getDailyBars(
+  async getDailyForexBars(
     ticker: string,
     from: string,
     to: string,

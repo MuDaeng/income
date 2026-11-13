@@ -1,5 +1,9 @@
 import { Logger } from '@nestjs/common';
-import type { ExchangeRateService, SecurityImportService } from '@app/core';
+import type {
+  ExchangeRateService,
+  SecurityImportService,
+  UsDailyPriceImportService,
+} from '@app/core';
 import { DOMESTIC_MARKETS, OVERSEAS_MARKETS } from '@app/core';
 import { BATCH_TIME_ZONE, BatchJobs } from './batch.jobs.js';
 
@@ -19,6 +23,7 @@ const cronOf = (method: keyof BatchJobs) => {
 describe('BatchJobs', () => {
   const importFromMassive = vi.fn();
   const importFromToss = vi.fn();
+  const importUsFromMassive = vi.fn();
   let jobs: BatchJobs;
   let errorLog: ReturnType<typeof vi.spyOn>;
 
@@ -31,6 +36,9 @@ describe('BatchJobs', () => {
     jobs = new BatchJobs(
       { importFromMassive } as unknown as ExchangeRateService,
       { importFromToss } as unknown as SecurityImportService,
+      {
+        importFromMassive: importUsFromMassive,
+      } as unknown as UsDailyPriceImportService,
     );
   });
 
@@ -39,7 +47,7 @@ describe('BatchJobs', () => {
     vi.restoreAllMocks();
   });
 
-  it('잡마다 한국 시간 일정이 붙어 있다 (환율 16시, 국내 17시, 해외 8시)', () => {
+  it('잡마다 한국 시간 일정이 붙어 있다 (환율 16시, 국내 17시, 해외 8시, 미국 시세 8시 30분)', () => {
     expect(cronOf('importExchangeRates')).toMatchObject({
       cronTime: '0 16 * * *',
       timeZone: BATCH_TIME_ZONE,
@@ -53,6 +61,11 @@ describe('BatchJobs', () => {
       cronTime: '0 8 * * *',
       timeZone: 'Asia/Seoul',
     });
+    expect(cronOf('importUsDailyPrices')).toMatchObject({
+      cronTime: '30 8 * * *',
+      timeZone: 'Asia/Seoul',
+      name: 'us-daily-prices',
+    });
   });
 
   it('환율은 오늘(UTC)까지 최근 7일을 가져온다', async () => {
@@ -65,6 +78,19 @@ describe('BatchJobs', () => {
       from: '2026-11-06',
       to: '2026-11-13',
     });
+  });
+
+  it('미국 시세는 UTC 날짜(방금 끝난 미국 거래일)까지 최근 7일을 가져온다', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-12T23:30:00Z')); // 한국 11-13 08:30
+    importUsFromMassive.mockResolvedValue({ saved: 52_000 });
+
+    await expect(jobs.importUsDailyPrices()).resolves.toBe(true);
+    expect(importUsFromMassive).toHaveBeenCalledWith({
+      from: '2026-11-05',
+      to: '2026-11-12',
+    });
+    expect(importFromMassive).not.toHaveBeenCalled();
   });
 
   it('국내·해외 종목은 각자 시장만 가져온다', async () => {

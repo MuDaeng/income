@@ -7,6 +7,7 @@ import {
   KisModule,
   MassiveModule,
   SecurityImportModule,
+  UsDailyPriceImportModule,
 } from '@app/core';
 import { DailyPriceFetcher } from './daily-price.fetcher.js';
 import { DailySecurityController } from './daily-security.controller.js';
@@ -31,6 +32,7 @@ import { SecurityService } from './security.service.js';
     ]),
     SecurityImportModule,
     ExchangeRateImportModule,
+    UsDailyPriceImportModule,
     MassiveModule,
     DataGoKrModule,
     KisModule,

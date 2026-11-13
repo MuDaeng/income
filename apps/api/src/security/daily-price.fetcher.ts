@@ -8,13 +8,8 @@ import {
   SecurityType,
   truncateByCurrency,
 } from '@app/common';
-import {
-  DataGoKrClient,
-  MassiveClient,
-  toMassiveTicker,
-  type PriceItem,
-} from '@app/core';
-import { addDays, formatIsoDate, toYmd } from './iso-date.js';
+import { DataGoKrClient, type PriceItem } from '@app/core';
+import { addDays, toYmd } from './iso-date.js';
 
 /** 종목 하나 2년치는 수백 행이라 한 페이지면 충분 (data.go.kr 최대) */
 const PAGE_SIZE = 10_000;
@@ -31,9 +26,8 @@ export type DailySecurityRow = Pick<
 >;
 
 /**
- * 종목 하나의 일별 시세를 원천에서 받아 daily_security에 upsert한다 (조회 API의 온라인 갱신용).
- * - KRW: data.go.kr를 ISIN으로 조회. ETF는 증권상품시세, 나머지는 주식시세
- * - USD: Massive Aggregates(종목 일봉), symbol을 Massive 티커로
+ * 국내(KRW) 종목 하나의 일별 시세를 data.go.kr에서 ISIN으로 받아 daily_security에 upsert한다 (조회 API의 온라인 갱신용).
+ * ETF는 증권상품시세, 나머지는 주식시세. 미국(USD) 시세는 batch의 us-daily-prices 잡이 매일 전 종목을 받으므로 여기서는 받지 않는다.
  */
 @Injectable()
 export class DailyPriceFetcher {
@@ -41,10 +35,9 @@ export class DailyPriceFetcher {
     @InjectRepository(DailySecurity)
     private readonly dailySecurityRepository: Repository<DailySecurity>,
     private readonly dataGoKrClient: DataGoKrClient,
-    private readonly massiveClient: MassiveClient,
   ) {}
 
-  /** [from, to](포함) 시세를 저장하고 저장한 행 수를 돌려준다. KRW·USD 외 통화는 0 */
+  /** [from, to](포함) 시세를 저장하고 저장한 행 수를 돌려준다. KRW 외 통화는 0 */
   async fetchAndSave(
     security: Security,
     from: string,
@@ -53,9 +46,7 @@ export class DailyPriceFetcher {
     const rows =
       security.currency === Currency.KRW
         ? await this.fetchKrw(security, from, to)
-        : security.currency === Currency.USD
-          ? await this.fetchUsd(security, from, to)
-          : [];
+        : [];
     for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
       await this.dailySecurityRepository.upsert(
         rows.slice(i, i + UPSERT_CHUNK),
@@ -85,27 +76,6 @@ export class DailyPriceFetcher {
     return page.items
       .filter((item) => item.isinCd === security.id)
       .map(toDailySecurity);
-  }
-
-  private async fetchUsd(
-    security: Security,
-    from: string,
-    to: string,
-  ): Promise<DailySecurityRow[]> {
-    const bars = await this.massiveClient.getDailyStockBars(
-      toMassiveTicker(security.symbol),
-      from,
-      to,
-    );
-    return bars.map((bar) => ({
-      id: security.id,
-      // 미국 주식 일봉의 t는 미국 동부 자정이라 UTC 날짜가 곧 거래일
-      date: formatIsoDate(new Date(bar.t)),
-      openingPrice: truncateByCurrency(bar.o, Currency.USD),
-      closingPrice: truncateByCurrency(bar.c, Currency.USD),
-      highestPrice: truncateByCurrency(bar.h, Currency.USD),
-      lowestPrice: truncateByCurrency(bar.l, Currency.USD),
-    }));
   }
 }
 

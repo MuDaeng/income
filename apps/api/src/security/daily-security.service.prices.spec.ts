@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Between, LessThanOrEqual } from 'typeorm';
 import type { Repository } from 'typeorm';
 import { Currency, DailySecurity, Security } from '@app/common';
-import type { DataGoKrClient, MassiveClient } from '@app/core';
+import type { DataGoKrClient } from '@app/core';
 import { DailySecurityService } from './daily-security.service.js';
 import type { SecurityRefreshService } from './security-refresh.service.js';
 
@@ -26,7 +26,6 @@ describe('DailySecurityService.getDailyPrices', () => {
       { find: dailyFind } as unknown as Repository<DailySecurity>,
       { findOneBy } as unknown as Repository<Security>,
       {} as DataGoKrClient,
-      {} as MassiveClient,
       { refresh } as unknown as SecurityRefreshService,
     );
   });

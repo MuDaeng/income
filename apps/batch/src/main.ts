@@ -12,7 +12,7 @@ import { BatchModule } from './batch.module.js';
 
 /**
  * 일배치 앱. 기본은 상주하면서 @Cron 일정대로 실행한다.
- * `--run=<exchange-rates|domestic-securities|overseas-securities>`를 주면 그 잡만 한 번 실행하고 종료한다
+ * `--run=<exchange-rates|domestic-securities|overseas-securities|us-daily-prices>`를 주면 그 잡만 한 번 실행하고 종료한다
  * (수동 재실행·확인용, 실패하면 종료 코드 1).
  */
 async function bootstrap() {

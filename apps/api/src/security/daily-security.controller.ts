@@ -13,8 +13,9 @@ import {
 } from './daily-price.schema.js';
 import {
   type ImportDailySecuritiesResult,
-  DailySecurityService,
-} from './daily-security.service.js';
+  UsDailyPriceImportService,
+} from '@app/core';
+import { DailySecurityService } from './daily-security.service.js';
 import {
   type ImportDailySecuritiesRequest,
   importDailySecuritiesSchema,
@@ -23,7 +24,10 @@ import {
 @ApiTags('daily-security')
 @Controller('daily-securities')
 export class DailySecurityController {
-  constructor(private readonly dailySecurityService: DailySecurityService) {}
+  constructor(
+    private readonly dailySecurityService: DailySecurityService,
+    private readonly usDailyPriceImportService: UsDailyPriceImportService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -76,6 +80,6 @@ export class DailySecurityController {
     @Body({ schema: importDailySecuritiesSchema })
     body: ImportDailySecuritiesRequest,
   ): Promise<ImportDailySecuritiesResult> {
-    return this.dailySecurityService.importUsFromMassive(body);
+    return this.usDailyPriceImportService.importFromMassive(body);
   }
 }

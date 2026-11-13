@@ -110,6 +110,24 @@ describe('SecurityRefreshService.refresh', () => {
     expect(searchUpsert).not.toHaveBeenCalled();
   });
 
+  it('USD 종목은 시세를 batch가 받으므로 배당만 받고 lastSearchDate를 오늘로 둔다', async () => {
+    findOneBy.mockResolvedValue(null);
+    const apple = {
+      id: 'US0378331005',
+      symbol: 'AAPL',
+      currency: Currency.USD,
+    } as Security;
+
+    await service.refresh(apple);
+
+    expect(fetchDividends).toHaveBeenCalledWith(apple, '2024-11-09', '2027-11-09');
+    expect(fetchPrices).not.toHaveBeenCalled();
+    expect(searchUpsert).toHaveBeenCalledWith(
+      { id: apple.id, lastSearchDate: '2026-11-09' },
+      ['id'],
+    );
+  });
+
   it('KRW·USD 외 통화는 아무것도 하지 않는다', async () => {
     await service.refresh({ id: 'JP3633400001', symbol: '7203', currency: 'JPY' } as unknown as Security);
 

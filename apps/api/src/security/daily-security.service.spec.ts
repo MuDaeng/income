@@ -2,7 +2,6 @@ import { Currency, DailySecurity, Security } from '@app/common';
 import type { Repository } from 'typeorm';
 import type {
   DataGoKrClient,
-  MassiveClient,
   PricePage,
   PriceQuery,
   StockPriceItem,
@@ -35,7 +34,6 @@ describe('DailySecurityService.importFromDataGoKr', () => {
       { upsert } as unknown as Repository<DailySecurity>,
       { find } as unknown as Repository<Security>,
       { getStockPrices } as unknown as DataGoKrClient,
-      {} as MassiveClient,
       {} as SecurityRefreshService,
     );
   });
@@ -147,7 +145,6 @@ describe('DailySecurityService.importEtfFromDataGoKr', () => {
       { upsert } as unknown as Repository<DailySecurity>,
       { find } as unknown as Repository<Security>,
       { getEtfPrices } as unknown as DataGoKrClient,
-      {} as MassiveClient,
       {} as SecurityRefreshService,
     );
   });

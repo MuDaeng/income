@@ -14,8 +14,9 @@ const DIVIDEND_FUTURE_YEARS = 1;
 /**
  * 조회 API에서 종목 데이터를 온라인으로 갱신한다. 종목별로 하루에 한 번만 원천을 호출한다.
  * - security_search.lastSearchDate가 오늘(한국 시간)이면 아무것도 하지 않음
- * - 아니면 배당(오늘-2년 ~ 오늘+1년)과 일별 시세(오늘-2년 ~ 오늘)를 함께 받아 저장
+ * - 아니면 배당(오늘-2년 ~ 오늘+1년)과, KRW 종목은 일별 시세(오늘-2년 ~ 오늘)까지 함께 받아 저장
  *   (lastSearchDate 하나를 같이 쓰므로, 한쪽만 받고 날짜를 남기면 다른 쪽이 그날 빠진다)
+ *   USD 시세는 batch의 us-daily-prices 잡이 매일 전 종목을 받으므로 여기서는 배당만 받는다.
  * - 둘 다 성공했을 때만 lastSearchDate = 오늘. 실패는 로그만 남기고 예외를 던지지 않아
  *   호출한 API는 저장분으로 응답하고, 다음 조회 때 다시 시도한다.
  */
@@ -55,14 +56,16 @@ export class SecurityRefreshService {
       );
       return `${fetched}건 중 ${saved}건 저장`;
     });
-    const pricesOk = await this.attempt(`시세 갱신 ${label}`, async () => {
-      const saved = await this.dailyPriceFetcher.fetchAndSave(
-        security,
-        from,
-        today,
-      );
-      return `${saved}건 저장`;
-    });
+    const pricesOk =
+      security.currency !== Currency.KRW ||
+      (await this.attempt(`시세 갱신 ${label}`, async () => {
+        const saved = await this.dailyPriceFetcher.fetchAndSave(
+          security,
+          from,
+          today,
+        );
+        return `${saved}건 저장`;
+      }));
 
     if (dividendsOk && pricesOk) {
       await this.securitySearchRepository.upsert(

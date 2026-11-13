@@ -1,12 +1,8 @@
 import { Currency, DailySecurity, Security } from '@app/common';
 import type { Repository } from 'typeorm';
-import type {
-  DataGoKrClient,
-  MassiveClient,
-  MassiveGroupedBar,
-} from '@app/core';
-import { DailySecurityService } from './daily-security.service.js';
-import type { SecurityRefreshService } from './security-refresh.service.js';
+import type { MassiveClient } from '../clients/massive/massive.client.js';
+import type { MassiveGroupedBar } from '../clients/massive/massive.types.js';
+import { UsDailyPriceImportService } from './us-daily-price-import.service.js';
 
 const bar = (T: string, c = 190.1234567): MassiveGroupedBar => ({
   T,
@@ -17,11 +13,11 @@ const bar = (T: string, c = 190.1234567): MassiveGroupedBar => ({
   t: 0,
 });
 
-describe('DailySecurityService.importUsFromMassive', () => {
+describe('UsDailyPriceImportService.importFromMassive', () => {
   const upsert = vi.fn();
   const find = vi.fn();
   const getGroupedDailyStocks = vi.fn<(date: string) => Promise<MassiveGroupedBar[]>>();
-  let service: DailySecurityService;
+  let service: UsDailyPriceImportService;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -31,12 +27,10 @@ describe('DailySecurityService.importUsFromMassive', () => {
       { id: 'US0846707026', symbol: 'BRK.B' },
     ]);
     getGroupedDailyStocks.mockResolvedValue([]);
-    service = new DailySecurityService(
+    service = new UsDailyPriceImportService(
       { upsert } as unknown as Repository<DailySecurity>,
       { find } as unknown as Repository<Security>,
-      {} as DataGoKrClient,
       { getGroupedDailyStocks } as unknown as MassiveClient,
-      {} as SecurityRefreshService,
     );
   });
 
@@ -54,7 +48,7 @@ describe('DailySecurityService.importUsFromMassive', () => {
     );
 
     // 2026-11-06(금) ~ 11-09(월)
-    const result = await service.importUsFromMassive({
+    const result = await service.importFromMassive({
       from: '2026-11-06',
       to: '2026-11-09',
     });
@@ -97,7 +91,7 @@ describe('DailySecurityService.importUsFromMassive', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-08T03:00:00Z'));
 
-    const result = await service.importUsFromMassive({});
+    const result = await service.importFromMassive({});
 
     const dates = getGroupedDailyStocks.mock.calls.map(([date]) => date);
     expect(dates[0]).toBe('2024-11-08');
