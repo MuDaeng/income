@@ -1,132 +1,112 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# income
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+국내(KOSPI·KOSDAQ)·미국(NYSE·NASDAQ·AMEX) 주식과 ETF의 매수·매도 내역을 기록하고, 보유 잔고의 평가금액·수익률과 배당금을 원화 기준으로 보여주는 자산 관리 서비스의 백엔드입니다.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+- API: `https://api.mudaeng.online`
+- 프론트엔드: `https://www.mudaeng.online`
 
-## Description
+## 주요 기능
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **Google 로그인**: Google OAuth 후 JWT 액세스 토큰과 httpOnly 쿠키의 리프레시 토큰(재발급 시 교체)으로 인증
+- **종목 검색**: 종목코드(심볼) 또는 종목명으로 검색하고, 종목별 일별 시세 조회
+- **잔고 관리**: 매수 등록, 매도 처리, 잘못 등록한 매수분 삭제, 매수 내역 조회
+- **통합잔고**: 종목별 매입평균가·평가금액·수익률과 한국/미국/전체 합계 (USD는 최신 환율로 원화 환산)
+- **배당금 내역**: 기준일 보유수량 × 주당배당금, 월별·기간 합계 (USD는 지급일 환율로 원화 환산)
+- **기간 수익률**: 기간 말 평가수익 + 기간 배당금, 원금 대비 수익금·수익률 (매수 시점 환율 기준이라 환차익 포함)
+- **데이터 자동 수집**: 매일 종목 목록·미국 시세·환율을 가져오는 배치, 조회 시 국내 시세·배당을 하루 한 번 갱신
 
-## Project setup
+## 기술 스택
 
-```bash
-$ npm install
+- NestJS 12 (모노레포, ESM), TypeScript, rspack
+- MySQL + TypeORM (`typeorm-transactional`), decimal.js로 금액 계산
+- Zod 요청 검증, Swagger (`/api-docs`, 운영 환경에서는 비활성)
+- Passport (Google OAuth 2.0, JWT), `@nestjs/schedule`
+- Vitest, oxlint
+- 배포: GitHub Actions → EC2 (pm2 + Nginx)
+
+## 외부 데이터
+
+| 제공처 | 용도 |
+|---|---|
+| Toss Open API | 국내·미국 상장 종목 목록 |
+| Massive | USD/KRW 환율, 미국 일별 시세, 미국 배당 |
+| 공공데이터포털 (금융위원회) | 국내 주식·ETF 일별 시세 |
+| 한국투자증권 Open API | 국내 배당 일정 |
+
+## 구조
+
+```
+apps/
+  api/     HTTP API (auth, balance, security)
+  batch/   매일 도는 수집 작업 (HTTP 없음)
+libs/
+  common/  DB 설정, TypeORM 엔티티, 통화별 소수점 처리
+  core/    외부 API 클라이언트와 수집 서비스 (api·batch 공용)
+deploy/    Nginx 설정
 ```
 
-## Compile and run the project
+### 배치 작업 (Asia/Seoul)
+
+| 시각 | 작업 | 내용 |
+|---|---|---|
+| 08:00 | `overseas-securities` | 미국 상장 종목 목록 |
+| 15:00 | `us-daily-prices` | 미국 일별 시세 (최근 7일) |
+| 16:00 | `exchange-rates` | USD/KRW 환율 (최근 7일) |
+| 17:00 | `domestic-securities` | 국내 상장 종목 목록 |
+
+## API
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/auth/google` | Google 로그인 시작 |
+| GET | `/auth/google/callback` | 로그인 완료, 리프레시 토큰 쿠키 발급 후 프론트엔드로 리다이렉트 |
+| POST | `/auth/access` | 로그인 직후 액세스 토큰 발급 |
+| POST | `/auth/reissue` | 액세스·리프레시 토큰 재발급 |
+| GET | `/auth/me` | 내 정보 |
+| GET | `/securities` | 종목 검색 |
+| GET | `/daily-securities` | 종목 일별 시세 |
+| POST | `/balance` | 매수 등록 |
+| POST | `/balance/sale` | 매도 등록 |
+| GET | `/balance` | 통합잔고 |
+| GET | `/balance/purchases` | 종목 매수 내역 |
+| DELETE | `/balance/purchases` | 매수 내역 삭제 |
+| GET | `/balance/dividends` | 배당금 내역 |
+| GET | `/balance/returns` | 기간 수익률 |
+| POST | `/daily-securities/import`, `/import/etf`, `/import/us` | 시세 수동 수집 (국내 주식·국내 ETF·미국) |
+| POST | `/exchange-rates/import` | 환율 수동 수집 |
+
+요청·응답 형식은 로컬 실행 후 Swagger UI(`http://localhost:8080/api-docs`)에서 볼 수 있습니다.
+
+## 실행
 
 ```bash
-# development
-$ npm run start
+npm install
 
-# watch mode
-$ npm run start:dev
+# API (기본 포트 8080)
+npm run start:dev
 
-# production mode
-$ npm run start:prod
+# 배치
+npm run start:batch:dev
+
+# 배치 작업 하나만 바로 실행하고 종료 (빌드 후)
+npm run build:batch
+node dist/apps/batch/main --run=exchange-rates
 ```
 
-## Run tests
+MySQL과 루트의 `.env`가 필요합니다. 주요 항목:
+
+- DB: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- 서버: `PORT`, `HOST`, `API_URL`, `FRONTEND_URL1`, `FRONTEND_URL2`, `NODE_ENV`
+- 인증: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_ACCESS_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN`
+- 외부 API: `TOSS_CLIENT_ID`, `TOSS_CLIENT_SECRET`, `MASSIVE_API_KEY`, `DATA_GO_KR_SERVICE_KEY`, `KIS_CLIENT_ID`, `KIS_CLIENT_SECRET`
+
+DB 스키마는 엔티티 정의로 자동 동기화됩니다 (`synchronize: true`).
+
+## 빌드·테스트
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run build        # dist/apps/api
+npm run build:batch  # dist/apps/batch
+npm run lint
+npm test
 ```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
-
-```bash
-$ npx @nestjs/observe link
-```
-
-It installs `@nestjs/observe`, wires it into `AppModule` and `main.ts`, and writes the app key and secret into `.env`, which every `nest start` script (`start`, `start:dev`, `start:debug`) then loads. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
-
-Or do it by hand:
-
-```bash
-$ npm install @nestjs/observe
-```
-
-Then follow the [setup guide](https://docs.nestjs.com/observability/sdk) - it takes a single import and an app key.
-
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
