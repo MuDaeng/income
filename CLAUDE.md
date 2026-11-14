@@ -10,9 +10,9 @@ See also `AGENTS.md` (NestJS 12 specifics: first-party packages to prefer, ESM r
 - `npm run build` — build to `dist/apps/api`; `npm run start:prod` runs the built output.
 - `npm run build:batch` / `npm run start:batch` / `npm run start:batch:dev` / `npm run start:batch:prod` — the `batch` app (daily jobs, no HTTP; `dist/apps/batch`). Run one job now and exit: `node dist/apps/batch/main --run=<exchange-rates|domestic-securities|overseas-securities|us-daily-prices>` (exit code 1 on failure).
 - `npm run lint` — oxlint, type-aware. `typescript/no-floating-promises` is an error, so always `await` repository calls.
-- `npm test` — Vitest unit tests (`**/*.spec.ts`). Single file: `npx vitest run apps/api/test/api.controller.spec.ts`; single test: add `-t "<name>"`.
+- `npm test` — Vitest unit tests (`**/*.spec.ts`). Single file: `npx vitest run apps/api/test/balance/balance.service.spec.ts`; single test: add `-t "<name>"`.
   - **Test files never sit next to source.** Each project keeps its tests in `test/` beside `src/`, mirroring the `src/` path: `apps/api/src/balance/balance.service.ts` → `apps/api/test/balance/balance.service.spec.ts`, `libs/core/src/clients/toss/toss.client.ts` → `libs/core/test/clients/toss/toss.client.spec.ts`. Import the code under test relatively through `src` (e.g. `../../src/balance/balance.service.js`); shared code still comes from `@app/common` / `@app/core`.
-- `npm run test:e2e` — Vitest with `vitest.config.e2e.ts` (`**/*.e2e-spec.ts`). E2E boots the real `ApiModule`, so it needs a reachable MySQL.
+- `npm run test:e2e` — Vitest with `vitest.config.e2e.ts` (`**/*.e2e-spec.ts`, none yet — passes with no tests). E2E boots the real `ApiModule`, so it needs a reachable MySQL.
 
 If port 8080 is already in use (the user often has a dev server running), start another instance with `PORT=8081` instead of killing the existing process.
 
