@@ -65,9 +65,9 @@ deploy/    Nginx 설정
 | GET | `/auth/me` | 내 정보 |
 | GET | `/securities` | 종목 검색 |
 | GET | `/daily-securities` | 종목 일별 시세 |
-| POST | `/balance` | 매수 등록 |
+| POST | `/balance` | 매수 등록 (증권사 `securityCompany` 필수) |
 | POST | `/balance/sale` | 매도 등록 |
-| GET | `/balance` | 통합잔고 |
+| GET | `/balance` | 통합잔고 (`securityCompany`를 주면 그 증권사만) |
 | GET | `/balance/purchases` | 종목 매수 내역 |
 | DELETE | `/balance/purchases` | 매수 내역 삭제 |
 | GET | `/balance/dividends` | 배당금 내역 |

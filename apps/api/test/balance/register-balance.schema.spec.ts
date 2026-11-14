@@ -2,6 +2,7 @@ import { registerBalanceSchema } from '../../src/balance/register-balance.schema
 
 const base = {
   securityId: '005930',
+  securityCompany: 'KIWOOM',
   purchaseDate: '2026-11-05',
   amount: '10',
   price: '70000',
@@ -68,6 +69,26 @@ describe('registerBalanceSchema exchangeRate', () => {
     expect(result.success).toBe(false);
     expect(result.error?.issues.map((issue) => issue.path)).toEqual([
       ['exchangeRate'],
+    ]);
+  });
+});
+
+describe('registerBalanceSchema securityCompany', () => {
+  it('국내 증권사 값이면 통과한다', () => {
+    expect(registerBalanceSchema.safeParse({ ...base, securityCompany: 'TOSS' }).success).toBe(true);
+  });
+
+  it.each([
+    ['생략', undefined],
+    ['null', null],
+    ['목록에 없는 값', 'ROBINHOOD'],
+    ['소문자', 'kiwoom'],
+  ])('%s이면 securityCompany 오류', (_, securityCompany) => {
+    const result = registerBalanceSchema.safeParse({ ...base, securityCompany });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path)).toEqual([
+      ['securityCompany'],
     ]);
   });
 });

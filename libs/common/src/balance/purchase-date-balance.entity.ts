@@ -1,7 +1,8 @@
 import {Column, Entity, JoinColumn, ManyToOne, PrimaryColumn} from "typeorm";
 import { BaseTimeEntity } from "../base/base-time.entity.js";
 import { decimalColumn } from "../base/decimal-column.js";
-import {UserBalance} from "@app/common/balance/user-balance.entity.js";
+import {UserBalance} from "./user-balance.entity.js";
+import {SecurityCompany} from "./security-company.enum.js";
 
 @Entity()
 export class PurchaseDateBalance extends BaseTimeEntity{
@@ -17,6 +18,9 @@ export class PurchaseDateBalance extends BaseTimeEntity{
 
     @PrimaryColumn()
     sequence: number;
+
+    @Column({ type: 'enum', enum: SecurityCompany })
+    securityCompany: SecurityCompany;
 
     @Column(decimalColumn)
     amount: string;

@@ -1,5 +1,6 @@
 import { Decimal } from 'decimal.js';
 import { z } from 'zod';
+import { SecurityCompany } from '@app/common';
 
 const DECIMAL_STRING = /^\d+(\.\d+)?$/;
 
@@ -42,6 +43,8 @@ export const SALE_DATE_BEFORE_PURCHASE_DATE_ERROR = {
 export const registerBalanceSchema = z
   .object({
     securityId: z.string().min(1),
+    /** 매수한 증권사 */
+    securityCompany: z.enum(SecurityCompany),
     /** 'YYYY-MM-DD' */
     purchaseDate: z.iso.date(),
     /** 수량 */

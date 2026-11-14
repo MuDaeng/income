@@ -8,6 +8,7 @@ import {
   DailySecurity,
   PurchaseDateBalance,
   Security,
+  SecurityCompany,
   User,
   UserBalance,
 } from '@app/common';
@@ -223,6 +224,47 @@ describe('BalanceService.getIntegratedBalance', () => {
     expect(result.exchangeRate).toBeNull();
     expect(dailySecurityRepository.findOne).toHaveBeenCalledTimes(1);
     expect(dailyExchangeRateRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('securityCompany를 주면 그 증권사의 미매도 매수분만 조회한다', async () => {
+    userBalanceRepository.find.mockResolvedValue([
+      { userId: 1, securityId: KRW_SECURITY.id, security: KRW_SECURITY },
+      { userId: 1, securityId: USD_SECURITY.id, security: USD_SECURITY },
+    ]);
+    // KIWOOM 조건으로 조회한 결과: AAPL은 다른 증권사에만 있어서 없음
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      { securityId: '005930', amount: '10.000000', price: '70000.000000' },
+    ]);
+    dailySecurityRepository.findOne.mockResolvedValue({
+      id: '005930',
+      closingPrice: '77000.000000',
+    });
+
+    const result = await service.getIntegratedBalance(
+      { id: 1 },
+      { securityCompany: SecurityCompany.KIWOOM },
+    );
+
+    expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
+      where: {
+        userId: 1,
+        saleDate: IsNull(),
+        securityCompany: SecurityCompany.KIWOOM,
+      },
+    });
+    expect(result.items.map((item) => item.securityId)).toEqual(['005930']);
+    expect(dailyExchangeRateRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('securityCompany가 없으면 전체 증권사로 조회한다', async () => {
+    userBalanceRepository.find.mockResolvedValue([]);
+    purchaseDateBalanceRepository.find.mockResolvedValue([]);
+
+    await service.getIntegratedBalance({ id: 1 }, {});
+
+    expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
+      where: { userId: 1, saleDate: IsNull() },
+    });
   });
 
   it('보유 종목이 없으면 빈 목록과 0 합계를 돌려주고 환율은 조회하지 않는다', async () => {

@@ -7,6 +7,7 @@ import {
   DailySecurity,
   PurchaseDateBalance,
   Security,
+  SecurityCompany,
   User,
   UserBalance,
 } from '@app/common';
@@ -25,6 +26,7 @@ const SAMSUNG = {
 };
 const INPUT = {
   securityId: SAMSUNG.id,
+  securityCompany: SecurityCompany.KIWOOM,
   purchaseDate: '2026-11-05',
   amount: '10',
   price: '72000',
@@ -81,7 +83,12 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
     const saved = await service.registerBalance({ id: 1 }, INPUT);
 
     expect(securityRefreshService.refresh).toHaveBeenCalledWith(SAMSUNG);
-    expect(saved).toMatchObject({ securityId: SAMSUNG.id, sequence: 1, amount: '10' });
+    expect(saved).toMatchObject({
+      securityId: SAMSUNG.id,
+      securityCompany: SecurityCompany.KIWOOM,
+      sequence: 1,
+      amount: '10',
+    });
   });
 
   it('매수일 시세가 없어 등록이 실패하면 배당을 조회하지 않는다', async () => {

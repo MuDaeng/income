@@ -26,6 +26,7 @@ import type {
   IntegratedBalanceResponse,
 } from './integrated-balance.dto.js';
 import type { DeletePurchaseRequest } from './delete-purchase.schema.js';
+import type { IntegratedBalanceRequest } from './integrated-balance.schema.js';
 import type { RegisterBalanceRequest } from './register-balance.schema.js';
 import type {
   PurchaseHistoryItemDto,
@@ -157,6 +158,7 @@ export class BalanceService {
         securityId,
         purchaseDate,
         sequence: (last?.sequence ?? 0) + 1,
+        securityCompany: input.securityCompany,
         amount,
         price,
         saleDate: input.saleDate ?? null,
@@ -173,7 +175,8 @@ export class BalanceService {
    * - 일부: 미매도 행에서 빼고, 같은 매도일·매수가의 매도 행이 있으면 거기에 더하고,
    *   없으면 새 행(saleDate·수량은 입력, 매수가는 미매도 행 값, sequence는 같은 매수일 안의 max + 1)을 저장
    *
-   * 매수가까지 같은 행만 합쳐서, 같은 날 다른 가격에 산 매수분과 섞이지 않게 한다.
+   * 매수가·구매 환율·증권사까지 같은 행만 합쳐서, 같은 날 다른 가격·다른 증권사에서 산 매수분과 섞이지 않게 한다.
+   * 새로 만드는 매도 행은 원래 매수분의 증권사를 그대로 가진다.
    * registerBalance와 같은 이유로 먼저 User 행을 잠가 같은 사용자의 매수·매도를 순서대로 실행한다.
    */
   @Transactional()
@@ -212,7 +215,7 @@ export class BalanceService {
       throw new BadRequestException('매도 수량이 보유 수량보다 많습니다.');
     }
 
-    // 매수가·구매 환율까지 같은 매도 행만 합친다
+    // 매수가·구매 환율·증권사까지 같은 매도 행만 합친다
     const sold = await this.purchaseDateBalanceRepository.findOne({
       where: {
         userId,
@@ -221,6 +224,7 @@ export class BalanceService {
         saleDate,
         price: source.price,
         exchangeRate: source.exchangeRate ?? IsNull(),
+        securityCompany: source.securityCompany,
       },
     });
 
@@ -261,6 +265,7 @@ export class BalanceService {
         securityId,
         purchaseDate,
         sequence: (last?.sequence ?? 0) + 1,
+        securityCompany: source.securityCompany,
         amount: truncateByCurrency(amount, currency),
         price: source.price,
         saleDate,
@@ -413,7 +418,7 @@ export class BalanceService {
   }
 
   /**
-   * 통합잔고 조회.
+   * 통합잔고 조회. securityCompany를 주면 그 증권사의 매수분만, 없으면 전체 증권사로 계산한다.
    * 1. 보유 종목(UserBalance + Security) 2. 매도하지 않은(saleDate IS NULL) 매수일별 잔고로 종목별 총수량·총매입금액·매입평균가
    *    (미매도 매수분이 없는 종목, 즉 전량 매도한 종목은 제외)
    *    - USD 원화 매입금액은 매수분마다 저장된 구매 환율, 없으면 매수일(이전 최근) USD 환율로 환산
@@ -424,8 +429,10 @@ export class BalanceService {
    */
   async getIntegratedBalance(
     authUser: AuthUser,
+    input: IntegratedBalanceRequest = {},
   ): Promise<IntegratedBalanceResponse> {
     const userId = authUser.id;
+    const { securityCompany } = input;
 
     // 1. 보유 종목
     const userBalances = await this.userBalanceRepository.find({
@@ -434,9 +441,13 @@ export class BalanceService {
       order: { securityId: 'ASC' },
     });
 
-    // 2. 매도하지 않은 매수일별 잔고를 종목별로 합산
+    // 2. 매도하지 않은 매수일별 잔고를 종목별로 합산 (증권사를 주면 그 증권사 매수분만)
     const purchases = await this.purchaseDateBalanceRepository.find({
-      where: { userId, saleDate: IsNull() },
+      where: {
+        userId,
+        saleDate: IsNull(),
+        ...(securityCompany ? { securityCompany } : {}),
+      },
     });
     const totals = new Map<
       string,

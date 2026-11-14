@@ -50,6 +50,10 @@ import {
 } from './purchase-history.schema.js';
 import { IntegratedBalanceResponse } from './integrated-balance.dto.js';
 import {
+  type IntegratedBalanceRequest,
+  integratedBalanceSchema,
+} from './integrated-balance.schema.js';
+import {
   type RegisterBalanceRequest,
   registerBalanceSchema,
 } from './register-balance.schema.js';
@@ -105,13 +109,14 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '통합잔고 조회: 종목별 매입평균가·평가금액(원화/외화)·수익률과 한국/미국/전체 합계',
+      '통합잔고 조회: 종목별 매입평균가·평가금액(원화/외화)·수익률과 한국/미국/전체 합계 (securityCompany를 주면 그 증권사 매수분만, 없으면 전체)',
   })
   @ApiOkResponse({ type: IntegratedBalanceResponse })
   getIntegratedBalance(
     @CurrentUser() user: AuthUser,
+    @Query({ schema: integratedBalanceSchema }) query: IntegratedBalanceRequest,
   ): Promise<IntegratedBalanceResponse> {
-    return this.balanceService.getIntegratedBalance(user);
+    return this.balanceService.getIntegratedBalance(user, query);
   }
 
   @Get('purchases')

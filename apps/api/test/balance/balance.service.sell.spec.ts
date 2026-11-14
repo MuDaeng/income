@@ -23,6 +23,7 @@ const KEY = { userId: 1, securityId: '005930', purchaseDate: '2026-11-05' };
 const unsold = (amount: string) => ({
   ...KEY,
   sequence: 1,
+  securityCompany: 'KIWOOM',
   amount,
   price: '70000.000000',
   saleDate: null,
@@ -88,7 +89,7 @@ describe('BalanceService.sellBalance', () => {
     service = moduleRef.get(BalanceService);
   });
 
-  it('미매도 대상은 sequence와 saleDate IS NULL로, 같은 매도일 행은 매수가·구매 환율까지 같은 것으로 찾는다', async () => {
+  it('미매도 대상은 sequence와 saleDate IS NULL로, 같은 매도일 행은 매수가·구매 환율·증권사까지 같은 것으로 찾는다', async () => {
     givenRows(unsold('10.000000'), null);
 
     await service.sellBalance({ id: 1 }, input('10'));
@@ -103,6 +104,7 @@ describe('BalanceService.sellBalance', () => {
         saleDate: '2026-11-08',
         price: '70000.000000',
         exchangeRate: IsNull(),
+        securityCompany: 'KIWOOM',
       },
     });
   });
@@ -126,6 +128,7 @@ describe('BalanceService.sellBalance', () => {
         saleDate: '2026-11-08',
         price: '70000.000000',
         exchangeRate: '1400.500000',
+        securityCompany: 'KIWOOM',
       },
     });
     expect(result).toMatchObject({
@@ -177,9 +180,11 @@ describe('BalanceService.sellBalance', () => {
       1,
       expect.objectContaining({ sequence: 1, amount: '7', saleDate: null }),
     );
+    // 새 매도 행은 원래 매수분의 증권사를 가진다
     expect(result).toEqual({
       ...KEY,
       sequence: 5,
+      securityCompany: 'KIWOOM',
       amount: '3',
       price: '70000.000000',
       saleDate: '2026-11-08',
