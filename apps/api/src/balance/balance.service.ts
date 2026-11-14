@@ -15,6 +15,7 @@ import {
   decimalPlacesOf,
   PurchaseDateBalance,
   Security,
+  SecurityCompany,
   truncateByCurrency,
   User,
   UserBalance,
@@ -28,6 +29,7 @@ import type {
 import type { DeletePurchaseRequest } from './delete-purchase.schema.js';
 import type { IntegratedBalanceRequest } from './integrated-balance.schema.js';
 import type { RegisterBalanceRequest } from './register-balance.schema.js';
+import type { SecurityCompanyListResponse } from './security-company-list.dto.js';
 import type {
   PurchaseHistoryItemDto,
   PurchaseHistoryResponse,
@@ -314,6 +316,25 @@ export class BalanceService {
     if (!remaining) {
       await this.userBalanceRepository.delete({ userId, securityId });
     }
+  }
+
+  /**
+   * 사용자가 매수 기록을 남긴 증권사 목록 (SELECT DISTINCT securityCompany ... WHERE userId, 매도분 포함).
+   * Repository find에는 DISTINCT가 없어 그 컬럼만 읽고 메모리에서 중복을 없앤다. 순서는 enum 선언 순서.
+   */
+  async getSecurityCompanies(
+    authUser: AuthUser,
+  ): Promise<SecurityCompanyListResponse> {
+    const rows = await this.purchaseDateBalanceRepository.find({
+      where: { userId: authUser.id },
+      select: { securityCompany: true },
+    });
+    const used = new Set(rows.map((row) => row.securityCompany));
+    return {
+      securityCompanies: Object.values(SecurityCompany).filter((company) =>
+        used.has(company),
+      ),
+    };
   }
 
   /**

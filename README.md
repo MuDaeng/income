@@ -69,6 +69,7 @@ deploy/    Nginx 설정
 | POST | `/balance/sale` | 매도 등록 |
 | GET | `/balance` | 통합잔고 (`securityCompany`를 주면 그 증권사만) |
 | GET | `/balance/purchases` | 종목 매수 내역 (`securityCompany`를 주면 그 증권사만) |
+| GET | `/balance/security-companies` | 매수 기록이 있는 증권사 목록 |
 | PATCH | `/balance/purchases` | 매수분 구매 환율 수정 |
 | PATCH | `/balance/purchases/security-company` | 매수분 증권사 수정 |
 | DELETE | `/balance/purchases` | 매수 내역 삭제 |

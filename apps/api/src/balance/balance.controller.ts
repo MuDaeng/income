@@ -53,6 +53,7 @@ import {
   type IntegratedBalanceRequest,
   integratedBalanceSchema,
 } from './integrated-balance.schema.js';
+import { SecurityCompanyListResponse } from './security-company-list.dto.js';
 import {
   type RegisterBalanceRequest,
   registerBalanceSchema,
@@ -150,6 +151,19 @@ export class BalanceController {
     @Body({ schema: updateExchangeRateSchema }) body: UpdateExchangeRateRequest,
   ): Promise<PurchaseDateBalance> {
     return this.balanceService.updateExchangeRate(user, body);
+  }
+
+  @Get('security-companies')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: '매수 기록이 있는 증권사 목록 (중복 없음, 매도한 매수분 포함)',
+  })
+  @ApiOkResponse({ type: SecurityCompanyListResponse })
+  getSecurityCompanies(
+    @CurrentUser() user: AuthUser,
+  ): Promise<SecurityCompanyListResponse> {
+    return this.balanceService.getSecurityCompanies(user);
   }
 
   @Patch('purchases/security-company')
