@@ -7,6 +7,15 @@ describe('periodReturnSchema', () => {
     ).toBe(true);
   });
 
+  it('securityCompany는 선택이고, 목록에 없는 값이면 securityCompany 오류', () => {
+    const range = { from: '2026-01-01', to: '2026-01-31' };
+    expect(periodReturnSchema.safeParse({ ...range, securityCompany: 'TOSS' }).success).toBe(true);
+
+    const result = periodReturnSchema.safeParse({ ...range, securityCompany: 'ROBINHOOD' });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].path).toEqual(['securityCompany']);
+  });
+
   it('시작일·종료일이 없거나 형식이 틀리면 거절한다', () => {
     expect(periodReturnSchema.safeParse({}).success).toBe(false);
     expect(periodReturnSchema.safeParse({ from: '2026-01-01' }).success).toBe(false);

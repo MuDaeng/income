@@ -184,7 +184,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '기간 총수익률 조회: 종료일 보유분 평가수익 + 기간 배당금, 원금 대비 수익금·수익률',
+      '기간 총수익률 조회: 종료일 보유분 평가수익 + 기간 배당금, 원금 대비 수익금·수익률 (securityCompany를 주면 그 증권사만)',
   })
   @ApiOkResponse({ type: PeriodReturnResponse })
   getPeriodReturn(

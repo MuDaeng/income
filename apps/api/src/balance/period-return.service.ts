@@ -43,16 +43,18 @@ export class PeriodReturnService {
    * 3. 기간 배당금 = DividendHistoryService 결과(지급일이 [from, to])를 종목별로 합산
    * 4. 종목 = 종료일 보유 종목 ∪ 기간 중 배당 받은 종목. 총합 = 평가금액 + 배당금, 원금 대비 수익금·수익률
    * 합계는 응답에 보이는 종목별 값(버림 후)을 더한다.
+   * securityCompany를 주면 그 증권사 매수분만으로 원금·평가·배당을 계산, 없으면 전체 증권사.
    */
   async getPeriodReturn(
     authUser: AuthUser,
     input: PeriodReturnRequest,
   ): Promise<PeriodReturnResponse> {
-    const { from, to } = input;
+    const { from, to, securityCompany } = input;
+    const companyFilter = securityCompany ? { securityCompany } : {};
 
-    // 1. 종료일 보유분
+    // 1. 종료일 보유분 (증권사를 주면 그 증권사 매수분만)
     const purchases = await this.purchaseDateBalanceRepository.find({
-      where: { userId: authUser.id },
+      where: { userId: authUser.id, ...companyFilter },
     });
     const heldBySecurity = new Map<string, PurchaseDateBalance[]>();
     for (const purchase of purchases) {
@@ -67,10 +69,10 @@ export class PeriodReturnService {
       heldBySecurity.set(purchase.securityId, list);
     }
 
-    // 3. 기간 배당금
+    // 3. 기간 배당금 (증권사를 주면 그 증권사 보유 수량 기준)
     const history = await this.dividendHistoryService.getDividendHistory(
       authUser,
-      { from, to },
+      { from, to, ...companyFilter },
     );
     const dividends = new Map<string, { usd: Decimal; krw: Decimal }>();
     for (const item of history.months.flatMap((month) => month.items)) {
