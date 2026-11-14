@@ -1,7 +1,7 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import { authConfig, Oauth, OAuthType, Token, User } from '@app/common';
 import type { AuthUser } from './jwt.strategy.js';
@@ -41,17 +41,24 @@ export class AuthService {
   }
 
   /**
-   * OAuth 로그인 성공 시 access/refresh token 발급 후 Token 테이블에 저장 (사용자당 1행, 덮어씀),
-   * refresh token을 cookie에 설정하고 프론트엔드 callback 주소를 반환
+   * OAuth 로그인 성공 시 access/refresh token 발급 후 Token 테이블에 새 행으로 저장
+   * (기기마다 1행이라 다른 기기의 로그인은 유지됨), refresh token을 cookie에 설정하고 프론트엔드 callback 주소를 반환.
+   * 로그아웃 API가 없어 버려진 세션이 쌓이므로, 이 사용자의 행 중 refresh token 만료 기간 동안 갱신되지 않은 행은 지운다
    */
   @Transactional()
   async loginWithOauth(user: User): Promise<{ url: string }> {
+    await this.tokenRepository.delete({
+      userId: user.id,
+      updatedAt: LessThan(
+        new Date(Date.now() - this.auth.jwtRefreshExpiresIn * 1000),
+      ),
+    });
+
     const accessToken = await this.tokenProvider.createAccessToken(user.id);
     const refreshToken = await this.tokenProvider.createRefreshToken(user.id);
     await this.tokenRepository.save(
       this.tokenRepository.create({
-        id: user.id,
-        user,
+        userId: user.id,
         accessToken,
         refreshToken,
       }),
@@ -68,34 +75,25 @@ export class AuthService {
   async issueAccessToken(): Promise<{ accessToken: string }> {
     const token = await this.findTokenInContext();
 
-    token.accessToken = await this.tokenProvider.createAccessToken(token.id);
+    token.accessToken = await this.tokenProvider.createAccessToken(token.userId);
     await this.tokenRepository.save(token);
     return { accessToken: token.accessToken };
   }
 
   /**
    * access token 만료 시 재발급 (refresh token rotation).
-   * Token 테이블 조회 (없으면 401) → 기존 Token 삭제 → access/refresh token 새로 발급해서 저장
-   * → refresh token cookie 교체
+   * Token 테이블 조회 (없으면 401) → 그 세션(기기)의 행만 새 access/refresh token으로 교체
+   * → refresh token cookie 교체. 이전 refresh token은 더 이상 테이블에 없어 쓸 수 없고, 다른 기기의 행은 그대로
    */
   @Transactional()
   async reissueTokens(): Promise<{ accessToken: string }> {
     const token = await this.findTokenInContext();
 
-    await this.tokenRepository.delete({ id: token.id });
-
-    const accessToken = await this.tokenProvider.createAccessToken(token.id);
-    const refreshToken = await this.tokenProvider.createRefreshToken(token.id);
-    await this.tokenRepository.save(
-      this.tokenRepository.create({
-        id: token.id,
-        user: { id: token.id },
-        accessToken,
-        refreshToken,
-      }),
-    );
-    this.refreshTokenContext.setRefreshTokenCookie(refreshToken);
-    return { accessToken };
+    token.accessToken = await this.tokenProvider.createAccessToken(token.userId);
+    token.refreshToken = await this.tokenProvider.createRefreshToken(token.userId);
+    await this.tokenRepository.save(token);
+    this.refreshTokenContext.setRefreshTokenCookie(token.refreshToken);
+    return { accessToken: token.accessToken };
   }
 
   /** Bearer access token의 사용자를 DB에서 조회. 삭제된 사용자면 401 */
@@ -115,7 +113,7 @@ export class AuthService {
     const token = await this.tokenRepository.findOne({
       where: { refreshToken },
     });
-    if (!token || token.id !== sub) {
+    if (!token || token.userId !== sub) {
       throw new UnauthorizedException('등록되지 않은 refresh token입니다.');
     }
     return token;

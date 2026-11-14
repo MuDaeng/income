@@ -1,15 +1,21 @@
-import {Column, Entity, Index, JoinColumn, OneToOne, PrimaryColumn} from "typeorm";
+import {Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn} from "typeorm";
 import {BaseTimeEntity} from "../base/base-time.entity.js";
 import {User} from "../user/user.entity.js";
 
-/** 사용자당 1행. 다시 로그인하면 토큰이 교체됨 */
+/**
+ * 로그인 세션(기기)당 1행. 한 사용자가 여러 기기(PC·휴대폰)에서 동시에 로그인할 수 있도록
+ * 로그인할 때마다 행을 추가하고, 재발급은 그 행만 교체한다
+ */
 @Entity()
 export class Token extends BaseTimeEntity {
-    @PrimaryColumn()
+    @PrimaryGeneratedColumn()
     id: number;
 
-    @OneToOne(() => User, {onDelete: 'CASCADE'})
-    @JoinColumn({name: 'id'})
+    @Column()
+    userId: number;
+
+    @ManyToOne(() => User, {onDelete: 'CASCADE'})
+    @JoinColumn({name: 'userId'})
     user: User;
 
     @Column({type: 'varchar', length: 512})
