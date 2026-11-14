@@ -365,7 +365,7 @@ export class BalanceService {
   /**
    * 종목 하나의 매수 내역 (매수일 최신순, 같은 날은 sequence 역순). 매도한 매수분도 saleDate와 함께 포함.
    * 구매 환율은 USD 종목만: 매수분에 저장된 환율(exchangeRateDate null), 없으면 매수일(이전 최근) USD 종가 환율.
-   * KRW 종목은 null. 종목이 없으면 404.
+   * KRW 종목은 null. 종목이 없으면 404. securityCompany를 주면 그 증권사 매수분만, 없으면 전체 증권사.
    */
   async getPurchases(
     authUser: AuthUser,
@@ -378,8 +378,13 @@ export class BalanceService {
       throw new NotFoundException('존재하지 않는 종목입니다.');
     }
     const { id, symbol, name, currency } = found;
+    const { securityCompany } = input;
     const purchases = await this.purchaseDateBalanceRepository.find({
-      where: { userId: authUser.id, securityId: id },
+      where: {
+        userId: authUser.id,
+        securityId: id,
+        ...(securityCompany ? { securityCompany } : {}),
+      },
       order: { purchaseDate: 'DESC', sequence: 'DESC' },
     });
 

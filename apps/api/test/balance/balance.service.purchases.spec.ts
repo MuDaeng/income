@@ -8,6 +8,7 @@ import {
   DailySecurity,
   PurchaseDateBalance,
   Security,
+  SecurityCompany,
   User,
   UserBalance,
 } from '@app/common';
@@ -113,6 +114,33 @@ describe('BalanceService.getPurchases', () => {
     ]);
   });
 
+  it('securityCompany를 주면 그 증권사 매수분만 조회한다', async () => {
+    securityRepository.findOneBy.mockResolvedValue(REIT);
+    purchaseDateBalanceRepository.find.mockResolvedValue([]);
+
+    await service.getPurchases(
+      { id: 6 },
+      { securityId: REIT.id, securityCompany: SecurityCompany.TOSS },
+    );
+
+    expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
+      where: { userId: 6, securityId: REIT.id, securityCompany: SecurityCompany.TOSS },
+      order: { purchaseDate: 'DESC', sequence: 'DESC' },
+    });
+  });
+
+  it('securityCompany가 없으면 전체 증권사로 조회한다', async () => {
+    securityRepository.findOneBy.mockResolvedValue(REIT);
+    purchaseDateBalanceRepository.find.mockResolvedValue([]);
+
+    await service.getPurchases({ id: 6 }, { securityId: REIT.id });
+
+    expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
+      where: { userId: 6, securityId: REIT.id },
+      order: { purchaseDate: 'DESC', sequence: 'DESC' },
+    });
+  });
+
   it('매수 내역이 없으면 빈 목록, 종목이 없으면 404', async () => {
     securityRepository.findOneBy.mockResolvedValueOnce(REIT);
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
@@ -135,5 +163,15 @@ describe('purchaseHistorySchema', () => {
     });
     expect(purchaseHistorySchema.safeParse({}).success).toBe(false);
     expect(purchaseHistorySchema.safeParse({ securityId: ' ' }).success).toBe(false);
+  });
+
+  it('securityCompany는 선택이고, 목록에 없는 값이면 거절한다', () => {
+    expect(
+      purchaseHistorySchema.parse({ securityId: 'US0378331005', securityCompany: 'KIWOOM' }),
+    ).toEqual({ securityId: 'US0378331005', securityCompany: 'KIWOOM' });
+    expect(
+      purchaseHistorySchema.safeParse({ securityId: 'US0378331005', securityCompany: 'ROBINHOOD' })
+        .success,
+    ).toBe(false);
   });
 });
