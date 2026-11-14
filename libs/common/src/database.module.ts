@@ -13,6 +13,8 @@ import { dbConfig } from './config/db.config.js';
             useFactory: (db: ConfigType<typeof dbConfig>) => ({
                 type: 'mysql',
                 ...db,
+                // DB 서버 time_zone(+09:00)과 맞춤: mysql2가 TIMESTAMP/DATETIME 값을 Node 서버 시간대(EC2는 UTC)가 아닌 KST로 해석·전송
+                timezone: '+09:00',
                 synchronize: true,
                 autoLoadEntities: true,
             }),
