@@ -410,6 +410,7 @@ export class BalanceService {
       items.push({
         purchaseDate: purchase.purchaseDate,
         sequence: purchase.sequence,
+        securityCompany: purchase.securityCompany,
         amount: truncateByCurrency(purchase.amount, currency),
         price: new Decimal(purchase.price)
           .toDecimalPlaces(pricePlaces, Decimal.ROUND_DOWN)

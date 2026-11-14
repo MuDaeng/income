@@ -45,9 +45,9 @@ describe('BalanceService.getPurchases', () => {
   it('USD 종목은 매수일 최신순으로 수량·매수가·매도일과 매수일(이전 최근) 환율을 돌려준다', async () => {
     securityRepository.findOneBy.mockResolvedValue({ ...AAPL, shortenedName: '애플' });
     purchaseDateBalanceRepository.find.mockResolvedValue([
-      { purchaseDate: '2026-02-07', sequence: 2, amount: '1.500000', price: '230.120000', saleDate: null },
-      { purchaseDate: '2026-02-07', sequence: 1, amount: '2.000000', price: '231.000000', saleDate: '2026-05-01' },
-      { purchaseDate: '2026-01-02', sequence: 1, amount: '10.000000', price: '271.010000', saleDate: null },
+      { purchaseDate: '2026-02-07', sequence: 2, securityCompany: 'TOSS', amount: '1.500000', price: '230.120000', saleDate: null },
+      { purchaseDate: '2026-02-07', sequence: 1, securityCompany: 'KIWOOM', amount: '2.000000', price: '231.000000', saleDate: '2026-05-01' },
+      { purchaseDate: '2026-01-02', sequence: 1, securityCompany: 'TOSS', amount: '10.000000', price: '271.010000', saleDate: null },
     ]);
     dailyExchangeRateRepository.findOne.mockImplementation(
       ({ where }: { where: { date: { value: string } } }) =>
@@ -73,9 +73,9 @@ describe('BalanceService.getPurchases', () => {
     expect(result).toEqual({
       security: AAPL,
       items: [
-        { purchaseDate: '2026-02-07', sequence: 2, amount: '1.500000', price: '230.12', saleDate: null, exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
-        { purchaseDate: '2026-02-07', sequence: 1, amount: '2.000000', price: '231.00', saleDate: '2026-05-01', exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
-        { purchaseDate: '2026-01-02', sequence: 1, amount: '10.000000', price: '271.01', saleDate: null, exchangeRate: '1441.57', exchangeRateDate: '2026-01-02' },
+        { purchaseDate: '2026-02-07', sequence: 2, securityCompany: 'TOSS', amount: '1.500000', price: '230.12', saleDate: null, exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
+        { purchaseDate: '2026-02-07', sequence: 1, securityCompany: 'KIWOOM', amount: '2.000000', price: '231.00', saleDate: '2026-05-01', exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
+        { purchaseDate: '2026-01-02', sequence: 1, securityCompany: 'TOSS', amount: '10.000000', price: '271.01', saleDate: null, exchangeRate: '1441.57', exchangeRateDate: '2026-01-02' },
       ],
     });
   });
@@ -103,14 +103,14 @@ describe('BalanceService.getPurchases', () => {
   it('KRW 종목은 정수로 버리고 환율은 null (환율 조회 안 함)', async () => {
     securityRepository.findOneBy.mockResolvedValue(REIT);
     purchaseDateBalanceRepository.find.mockResolvedValue([
-      { purchaseDate: '2026-01-02', sequence: 1, amount: '5000.000000', price: '4900.000000', saleDate: null },
+      { purchaseDate: '2026-01-02', sequence: 1, securityCompany: 'MIRAE_ASSET', amount: '5000.000000', price: '4900.000000', saleDate: null },
     ]);
 
     const result = await service.getPurchases({ id: 6 }, { securityId: REIT.id });
 
     expect(dailyExchangeRateRepository.findOne).not.toHaveBeenCalled();
     expect(result.items).toEqual([
-      { purchaseDate: '2026-01-02', sequence: 1, amount: '5000', price: '4900', saleDate: null, exchangeRate: null, exchangeRateDate: null },
+      { purchaseDate: '2026-01-02', sequence: 1, securityCompany: 'MIRAE_ASSET', amount: '5000', price: '4900', saleDate: null, exchangeRate: null, exchangeRateDate: null },
     ]);
   });
 
