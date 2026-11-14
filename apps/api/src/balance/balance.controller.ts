@@ -31,6 +31,12 @@ import {
   dividendHistorySchema,
 } from './dividend-history.schema.js';
 import { DividendHistoryService } from './dividend-history.service.js';
+import { MonthlyBalanceResponse } from './monthly-balance.dto.js';
+import {
+  type MonthlyBalanceRequest,
+  monthlyBalanceSchema,
+} from './monthly-balance.schema.js';
+import { MonthlyBalanceService } from './monthly-balance.service.js';
 import { PeriodReturnResponse } from './period-return.dto.js';
 import {
   type PeriodReturnRequest,
@@ -63,6 +69,7 @@ export class BalanceController {
     private readonly balanceService: BalanceService,
     private readonly dividendHistoryService: DividendHistoryService,
     private readonly periodReturnService: PeriodReturnService,
+    private readonly monthlyBalanceService: MonthlyBalanceService,
   ) {}
 
   @Post()
@@ -180,5 +187,20 @@ export class BalanceController {
     @Query({ schema: periodReturnSchema }) query: PeriodReturnRequest,
   ): Promise<PeriodReturnResponse> {
     return this.periodReturnService.getPeriodReturn(user, query);
+  }
+
+  @Get('monthly')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '월말별 원금·평가금액·평가금액+누적배당금 조회 (from~to 년월, 이번 달은 오늘 기준, 월별 합계 + 종목별)',
+  })
+  @ApiOkResponse({ type: MonthlyBalanceResponse })
+  getMonthlyBalance(
+    @CurrentUser() user: AuthUser,
+    @Query({ schema: monthlyBalanceSchema }) query: MonthlyBalanceRequest,
+  ): Promise<MonthlyBalanceResponse> {
+    return this.monthlyBalanceService.getMonthlyBalance(user, query);
   }
 }

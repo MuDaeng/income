@@ -13,6 +13,7 @@ import { SecurityModule } from '../security/security.module.js';
 import { BalanceController } from './balance.controller.js';
 import { BalanceService } from './balance.service.js';
 import { DividendHistoryService } from './dividend-history.service.js';
+import { MonthlyBalanceService } from './monthly-balance.service.js';
 import { PeriodReturnService } from './period-return.service.js';
 
 @Module({
@@ -29,7 +30,12 @@ import { PeriodReturnService } from './period-return.service.js';
     ]),
   ],
   controllers: [BalanceController],
-  providers: [BalanceService, DividendHistoryService, PeriodReturnService],
+  providers: [
+    BalanceService,
+    DividendHistoryService,
+    PeriodReturnService,
+    MonthlyBalanceService,
+  ],
   exports: [BalanceService],
 })
 export class BalanceModule {}
