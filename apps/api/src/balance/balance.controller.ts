@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -50,6 +51,10 @@ import {
   type SellBalanceRequest,
   sellBalanceSchema,
 } from './sell-balance.schema.js';
+import {
+  type UpdateExchangeRateRequest,
+  updateExchangeRateSchema,
+} from './update-exchange-rate.schema.js';
 
 @ApiTags('balance')
 @Controller('balance')
@@ -115,6 +120,20 @@ export class BalanceController {
     @Query({ schema: purchaseHistorySchema }) query: PurchaseHistoryRequest,
   ): Promise<PurchaseHistoryResponse> {
     return this.balanceService.getPurchases(user, query);
+  }
+
+  @Patch('purchases')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '매수분 구매 환율 수정: 종목·매수일·sequence로 매수분 하나의 환율 변경(USD 종목만), null이면 저장 환율 삭제',
+  })
+  updateExchangeRate(
+    @CurrentUser() user: AuthUser,
+    @Body({ schema: updateExchangeRateSchema }) body: UpdateExchangeRateRequest,
+  ): Promise<PurchaseDateBalance> {
+    return this.balanceService.updateExchangeRate(user, body);
   }
 
   @Delete('purchases')

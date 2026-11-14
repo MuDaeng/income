@@ -33,6 +33,7 @@ import type {
 } from './purchase-history.dto.js';
 import type { PurchaseHistoryRequest } from './purchase-history.schema.js';
 import type { SellBalanceRequest } from './sell-balance.schema.js';
+import type { UpdateExchangeRateRequest } from './update-exchange-rate.schema.js';
 import { returnRate } from './return-rate.js';
 
 @Injectable()
@@ -307,6 +308,53 @@ export class BalanceService {
     if (!remaining) {
       await this.userBalanceRepository.delete({ userId, securityId });
     }
+  }
+
+  /**
+   * 매수분 하나(종목·매수일·sequence)의 구매 환율 수정. 매도된 행도 수정할 수 있다.
+   * exchangeRate는 소수 6자리 버림, null이면 저장 환율을 지운다(조회 시 매수일 환율로 계산).
+   * - 매수분이 없으면 404, 종목 통화가 KRW면 400 (원화 종목은 환율을 저장하지 않음)
+   * registerBalance·sellBalance와 같은 이유로 먼저 User 행을 잠가 같은 사용자의 변경을 순서대로 실행한다.
+   */
+  @Transactional()
+  async updateExchangeRate(
+    authUser: AuthUser,
+    input: UpdateExchangeRateRequest,
+  ): Promise<PurchaseDateBalance> {
+    const userId = authUser.id;
+    const { securityId, purchaseDate, sequence } = input;
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!user) {
+      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
+    }
+
+    const purchase = await this.purchaseDateBalanceRepository.findOneBy({
+      userId,
+      securityId,
+      purchaseDate,
+      sequence,
+    });
+    if (!purchase) {
+      throw new NotFoundException('수정할 매수 내역이 없습니다.');
+    }
+
+    const security = await this.securityRepository.findOneBy({
+      id: securityId,
+    });
+    if (!security) {
+      throw new NotFoundException('존재하지 않는 종목입니다.');
+    }
+    if (security.currency === Currency.KRW) {
+      throw new BadRequestException('원화 종목은 구매 환율을 저장하지 않습니다.');
+    }
+
+    purchase.exchangeRate =
+      input.exchangeRate === null ? null : toRate(input.exchangeRate);
+    return this.purchaseDateBalanceRepository.save(purchase);
   }
 
   /**
