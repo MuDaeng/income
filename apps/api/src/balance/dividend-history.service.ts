@@ -16,7 +16,6 @@ import {
   DividendType,
   PurchaseDateBalance,
   Security,
-  SecurityCompany,
   truncateByCurrency,
 } from '@app/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
@@ -54,7 +53,7 @@ export class DividendHistoryService {
    */
   async getDividendHistory(
     authUser: AuthUser,
-    input: DividendHistoryRequest & { securityCompany?: SecurityCompany },
+    input: DividendHistoryRequest,
   ): Promise<DividendHistoryResponse> {
     const from = input.from ?? null;
     const to = input.to ?? null;

@@ -8,6 +8,7 @@ import {
   DividendType,
   PurchaseDateBalance,
   Security,
+  SecurityCompany,
 } from '@app/common';
 import { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
 import { DividendHistoryService } from '../../src/balance/dividend-history.service.js';
@@ -70,7 +71,7 @@ describe('DividendHistoryService.getDividendHistory', () => {
   it('securityCompany를 주면 그 증권사 매수분만으로 보유 수량을 계산하고, 없으면 전체', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    await service.getDividendHistory({ id: 1 }, { securityCompany: 'TOSS' as never });
+    await service.getDividendHistory({ id: 1 }, { securityCompany: SecurityCompany.TOSS });
     await service.getDividendHistory({ id: 1 }, {});
 
     expect(purchaseDateBalanceRepository.find.mock.calls).toEqual([

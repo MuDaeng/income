@@ -9,6 +9,14 @@ describe('dividendHistorySchema', () => {
     ).toBe(true);
   });
 
+  it('securityCompany는 선택이고, 목록에 없는 값이면 securityCompany 오류', () => {
+    expect(dividendHistorySchema.safeParse({ securityCompany: 'KIWOOM' }).success).toBe(true);
+
+    const result = dividendHistorySchema.safeParse({ securityCompany: 'ROBINHOOD' });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].path).toEqual(['securityCompany']);
+  });
+
   it('날짜 형식이 아니면 거절한다', () => {
     expect(dividendHistorySchema.safeParse({ from: '20260101' }).success).toBe(false);
   });

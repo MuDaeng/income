@@ -169,7 +169,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '배당금 내역 조회: 기준일 보유수량 × 주당배당금, USD는 지급일 환율로 원화 환산, 기간 총배당금과 월별 내역',
+      '배당금 내역 조회: 기준일 보유수량 × 주당배당금, USD는 지급일 환율로 원화 환산, 기간 총배당금과 월별 내역 (securityCompany를 주면 그 증권사 보유분만)',
   })
   @ApiOkResponse({ type: DividendHistoryResponse })
   getDividendHistory(
