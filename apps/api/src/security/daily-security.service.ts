@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -8,27 +8,12 @@ import {
   Repository,
 } from 'typeorm';
 import {
-  Currency,
   DailySecurity,
   Security,
   truncateByCurrency,
 } from '@app/common';
-import {
-  DataGoKrClient,
-  type ImportDailySecuritiesResult,
-  type PricePage,
-  type PriceQuery,
-} from '@app/core';
 import type { DailyPriceResponse } from './daily-price.dto.js';
-import { toDailySecurity } from './daily-price.fetcher.js';
 import type { DailyPriceRequest } from './daily-price.schema.js';
-import type { ImportDailySecuritiesRequest } from './import-daily-securities.schema.js';
-import {
-  addDays,
-  addYears,
-  formatIsoDate,
-  toYmd,
-} from './iso-date.js';
 import { SecurityRefreshService } from './security-refresh.service.js';
 
 /** 날짜 기간 조건. 둘 다 없으면 null(조건 없음) */
@@ -48,22 +33,13 @@ const dateFilter = (
   return null;
 };
 
-/** 기간을 생략했을 때 가져올 햇수 (환율 가져오기와 같은 기간) */
-const DEFAULT_YEARS = 2;
-/** data.go.kr 한 페이지 최대 행 수 */
-const PAGE_SIZE = 10_000;
-const UPSERT_CHUNK = 1_000;
-
 @Injectable()
 export class DailySecurityService {
-  private readonly logger = new Logger(DailySecurityService.name);
-
   constructor(
     @InjectRepository(DailySecurity)
     private readonly dailySecurityRepository: Repository<DailySecurity>,
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,
-    private readonly dataGoKrClient: DataGoKrClient,
     private readonly securityRefreshService: SecurityRefreshService,
   ) {}
 
@@ -105,90 +81,5 @@ export class DailySecurityService {
         lowestPrice: price(row.lowestPrice),
       })),
     };
-  }
-
-  /**
-   * data.go.kr 주식시세(국내 상장 주식)를 받아 daily_security에 넣는다.
-   * security에 있는 KRW 종목(ISIN)만 저장하고, 페이지(10,000행)마다 바로 upsert한다.
-   * 이미 있는 (종목, 날짜)는 갱신하므로 다시 실행해도 된다.
-   */
-  importFromDataGoKr(
-    input: ImportDailySecuritiesRequest,
-  ): Promise<ImportDailySecuritiesResult> {
-    return this.importDataGoKrPages(input, '일별 시세', (query) =>
-      this.dataGoKrClient.getStockPrices(query),
-    );
-  }
-
-  /**
-   * data.go.kr 증권상품시세(ETF)를 받아 daily_security에 넣는다. 주식시세와 같은 방식
-   * (security의 KRW 종목만, 페이지마다 upsert, 다시 실행해도 됨).
-   */
-  importEtfFromDataGoKr(
-    input: ImportDailySecuritiesRequest,
-  ): Promise<ImportDailySecuritiesResult> {
-    return this.importDataGoKrPages(input, 'ETF 일별 시세', (query) =>
-      this.dataGoKrClient.getEtfPrices(query),
-    );
-  }
-
-  /** data.go.kr 일별 시세 API(주식·ETF) 공통: 10,000행씩 페이지를 넘기며 KRW 종목만 upsert */
-  private async importDataGoKrPages(
-    input: ImportDailySecuritiesRequest,
-    label: string,
-    fetchPage: (query: PriceQuery) => Promise<PricePage>,
-  ): Promise<ImportDailySecuritiesResult> {
-    const to = input.to ?? formatIsoDate(new Date());
-    const from = input.from ?? addYears(to, -DEFAULT_YEARS);
-
-    const krwSecurities = await this.securityRepository.find({
-      select: { id: true },
-      where: { currency: Currency.KRW },
-    });
-    const knownIds = new Set(krwSecurities.map(({ id }) => id));
-
-    const result: ImportDailySecuritiesResult = {
-      from,
-      to,
-      fetched: 0,
-      saved: 0,
-      skipped: 0,
-      firstDate: null,
-      lastDate: null,
-    };
-    for (let pageNo = 1; ; pageNo++) {
-      const page = await fetchPage({
-        beginBasDt: toYmd(from),
-        // endBasDt는 그 날짜를 포함하지 않으므로 다음 날을 넘김
-        endBasDt: toYmd(addDays(to, 1)),
-        pageNo,
-        numOfRows: PAGE_SIZE,
-      });
-
-      const prices = page.items
-        .filter((item) => knownIds.has(item.isinCd))
-        .map(toDailySecurity);
-      for (let i = 0; i < prices.length; i += UPSERT_CHUNK) {
-        await this.dailySecurityRepository.upsert(
-          prices.slice(i, i + UPSERT_CHUNK),
-          ['id', 'date'],
-        );
-      }
-
-      result.fetched += page.items.length;
-      result.saved += prices.length;
-      result.skipped += page.items.length - prices.length;
-      for (const { date } of prices) {
-        if (!result.firstDate || date < result.firstDate) result.firstDate = date;
-        if (!result.lastDate || date > result.lastDate) result.lastDate = date;
-      }
-      this.logger.log(
-        `${label} ${pageNo}페이지: 누적 ${result.fetched}/${page.totalCount}행, 저장 ${result.saved}`,
-      );
-
-      if (page.items.length === 0 || pageNo * PAGE_SIZE >= page.totalCount) {
-        return result;
-      }
-    }
   }
 }

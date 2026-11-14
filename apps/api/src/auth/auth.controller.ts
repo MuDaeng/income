@@ -13,7 +13,9 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { User } from '@app/common';
+import { AUTH_THROTTLE } from '../rate-limit.js';
 import { AuthService } from './auth.service.js';
 import { CurrentUser } from './current-user.decorator.js';
 import { GoogleUser } from './google-user.decorator.js';
@@ -27,6 +29,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Get('google')
+  @Throttle(AUTH_THROTTLE)
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Google 로그인 시작 (Google 로그인 페이지로 리다이렉트)' })
   googleLogin(): void {
@@ -34,6 +37,7 @@ export class AuthController {
   }
 
   @Get('google/callback')
+  @Throttle(AUTH_THROTTLE)
   @UseGuards(AuthGuard('google'))
   @Redirect()
   @ApiOperation({
@@ -45,6 +49,7 @@ export class AuthController {
   }
 
   @Post('access')
+  @Throttle(AUTH_THROTTLE)
   @HttpCode(200)
   @UseGuards(RefreshTokenGuard)
   @ApiCookieAuth(REFRESH_TOKEN_COOKIE)
@@ -56,6 +61,7 @@ export class AuthController {
   }
 
   @Post('reissue')
+  @Throttle(AUTH_THROTTLE)
   @HttpCode(200)
   @UseGuards(RefreshTokenGuard)
   @ApiCookieAuth(REFRESH_TOKEN_COOKIE)

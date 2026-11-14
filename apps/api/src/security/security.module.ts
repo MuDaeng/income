@@ -3,24 +3,21 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DailySecurity, Dividend, Security, SecuritySearch } from '@app/common';
 import {
   DataGoKrModule,
-  ExchangeRateImportModule,
   KisModule,
   MassiveModule,
-  UsDailyPriceImportModule,
 } from '@app/core';
 import { DailyPriceFetcher } from './daily-price.fetcher.js';
 import { DailySecurityController } from './daily-security.controller.js';
 import { DailySecurityService } from './daily-security.service.js';
 import { DividendService } from './dividend.service.js';
-import { ExchangeRateController } from './exchange-rate.controller.js';
 import { SecurityRefreshService } from './security-refresh.service.js';
 import { SecurityController } from './security.controller.js';
 import { SecurityService } from './security.service.js';
 
 /**
  * libs/common `security/` 엔티티(종목·일별 시세·환율·배당·조회 기록)를 다루는 업무 모듈.
- * 환율·미국 일별 시세 가져오기는 batch와 같이 쓰는 @app/core 모듈(ExchangeRateImportModule·UsDailyPriceImportModule).
- * 종목 목록 가져오기(Toss)는 batch 전용(SecurityImportModule)
+ * 종목 목록·미국 일별 시세·환율 가져오기는 batch 전용(@app/core의 import 모듈). api에는 수집 API가 없고,
+ * 국내 시세·배당은 조회할 때 SecurityRefreshService가 종목별로 갱신한다
  */
 @Module({
   imports: [
@@ -30,8 +27,6 @@ import { SecurityService } from './security.service.js';
       Dividend,
       SecuritySearch,
     ]),
-    ExchangeRateImportModule,
-    UsDailyPriceImportModule,
     MassiveModule,
     DataGoKrModule,
     KisModule,
@@ -39,7 +34,6 @@ import { SecurityService } from './security.service.js';
   controllers: [
     SecurityController,
     DailySecurityController,
-    ExchangeRateController,
   ],
   providers: [
     SecurityService,
