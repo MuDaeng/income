@@ -182,6 +182,39 @@ describe('MonthlyBalanceService.getMonthlyBalance', () => {
     });
   });
 
+  it('securityCompany를 주면 그 증권사 매수분과 그 보유분의 배당만으로 계산', async () => {
+    purchaseDateBalanceRepository.find.mockResolvedValue([]);
+    dividendHistoryService.getDividendHistory.mockResolvedValue({ months: [] });
+
+    await service.getMonthlyBalance(
+      { id: 1 },
+      { from: '2026-10', to: '2026-11', securityCompany: 'KIWOOM' as never },
+    );
+
+    expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
+      where: { userId: 1, securityCompany: 'KIWOOM' },
+    });
+    expect(dividendHistoryService.getDividendHistory).toHaveBeenCalledWith(
+      { id: 1 },
+      { to: '2026-11-14', securityCompany: 'KIWOOM' },
+    );
+  });
+
+  it('securityCompany가 없으면 전체 증권사로 조회', async () => {
+    purchaseDateBalanceRepository.find.mockResolvedValue([]);
+    dividendHistoryService.getDividendHistory.mockResolvedValue({ months: [] });
+
+    await service.getMonthlyBalance({ id: 1 }, { from: '2026-11', to: '2026-11' });
+
+    expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
+      where: { userId: 1 },
+    });
+    expect(dividendHistoryService.getDividendHistory).toHaveBeenCalledWith(
+      { id: 1 },
+      { to: '2026-11-14' },
+    );
+  });
+
   it('보유 중인 종목의 기준일 이전 시세가 없으면 404', async () => {
     dailySecurityRepository.find.mockResolvedValue(
       PRICES.filter((p) => p.id !== KRW.id),

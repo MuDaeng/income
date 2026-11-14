@@ -71,7 +71,7 @@ deploy/    Nginx 설정
 | GET | `/balance/purchases` | 종목 매수 내역 (`securityCompany`를 주면 그 증권사만) |
 | DELETE | `/balance/purchases` | 매수 내역 삭제 |
 | GET | `/balance/dividends` | 배당금 내역 |
-| GET | `/balance/monthly` | 월말별 원금·평가금액·평가금액+누적배당금 (from~to 년월, 이번 달은 오늘 기준) |
+| GET | `/balance/monthly` | 월말별 원금·평가금액·평가금액+누적배당금 (from~to 년월, 이번 달은 오늘 기준, `securityCompany`를 주면 그 증권사만) |
 | GET | `/balance/returns` | 기간 수익률 |
 
 요청·응답 형식은 로컬 실행 후 Swagger UI(`http://localhost:8080/api-docs`)에서 볼 수 있습니다.

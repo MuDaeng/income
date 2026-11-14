@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SecurityCompany } from '@app/common';
 import { todayInSeoul } from '../security/iso-date.js';
 
 const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -25,6 +26,8 @@ export const monthlyBalanceSchema = z
     from: yearMonth,
     /** 종료 년월 'YYYY-MM' (이번 달까지) */
     to: yearMonth,
+    /** 증권사. 생략하면 전체 증권사 */
+    securityCompany: z.enum(SecurityCompany).optional(),
   })
   // 'YYYY-MM'은 문자열 비교가 날짜 순서와 같음. 형식이 틀린 값은 필드 검증이 잡으므로 건너뜀
   .refine(({ from, to }) => !valid(from) || !valid(to) || from <= to, {

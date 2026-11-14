@@ -67,6 +67,18 @@ describe('DividendHistoryService.getDividendHistory', () => {
     expect(securityRefreshService.refresh).not.toHaveBeenCalled();
   });
 
+  it('securityCompany를 주면 그 증권사 매수분만으로 보유 수량을 계산하고, 없으면 전체', async () => {
+    purchaseDateBalanceRepository.find.mockResolvedValue([]);
+
+    await service.getDividendHistory({ id: 1 }, { securityCompany: 'TOSS' as never });
+    await service.getDividendHistory({ id: 1 }, {});
+
+    expect(purchaseDateBalanceRepository.find.mock.calls).toEqual([
+      [{ where: { userId: 1, securityCompany: 'TOSS' } }],
+      [{ where: { userId: 1 } }],
+    ]);
+  });
+
   it('기준일 보유 수량 × 주당 배당금으로 계산하고 USD는 지급일 이전 최근 환율로 환산해 월별로 묶는다', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([
       // 기준일 당일 매수 → 포함

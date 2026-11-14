@@ -16,6 +16,7 @@ import {
   DividendType,
   PurchaseDateBalance,
   Security,
+  SecurityCompany,
   truncateByCurrency,
 } from '@app/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
@@ -53,14 +54,18 @@ export class DividendHistoryService {
    */
   async getDividendHistory(
     authUser: AuthUser,
-    input: DividendHistoryRequest,
+    input: DividendHistoryRequest & { securityCompany?: SecurityCompany },
   ): Promise<DividendHistoryResponse> {
     const from = input.from ?? null;
     const to = input.to ?? null;
+    const { securityCompany } = input;
 
-    // 1. 보유했던 종목
+    // 1. 보유했던 종목 (증권사를 주면 그 증권사 매수분만 → 보유 수량도 그 증권사 기준)
     const purchases = await this.purchaseDateBalanceRepository.find({
-      where: { userId: authUser.id },
+      where: {
+        userId: authUser.id,
+        ...(securityCompany ? { securityCompany } : {}),
+      },
     });
     const purchasesBySecurity = new Map<string, PurchaseDateBalance[]>();
     for (const purchase of purchases) {

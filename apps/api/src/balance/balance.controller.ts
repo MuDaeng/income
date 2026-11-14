@@ -199,7 +199,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '월말별 원금·평가금액·평가금액+누적배당금 조회 (from~to 년월, 이번 달은 오늘 기준, 월별 합계 + 종목별)',
+      '월말별 원금·평가금액·평가금액+누적배당금 조회 (from~to 년월, 이번 달은 오늘 기준, 월별 합계 + 종목별, securityCompany를 주면 그 증권사만)',
   })
   @ApiOkResponse({ type: MonthlyBalanceResponse })
   getMonthlyBalance(
