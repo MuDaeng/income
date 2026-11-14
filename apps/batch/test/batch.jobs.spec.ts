@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import type {
   ExchangeRateService,
   SecurityImportService,
+  TokenCleanupService,
   UsDailyPriceImportService,
 } from '@app/core';
 import { DOMESTIC_MARKETS, OVERSEAS_MARKETS } from '@app/core';
@@ -24,6 +25,7 @@ describe('BatchJobs', () => {
   const importFromMassive = vi.fn();
   const importFromToss = vi.fn();
   const importUsFromMassive = vi.fn();
+  const deleteExpiredRefreshTokens = vi.fn();
   let jobs: BatchJobs;
   let errorLog: ReturnType<typeof vi.spyOn>;
 
@@ -39,6 +41,7 @@ describe('BatchJobs', () => {
       {
         importFromMassive: importUsFromMassive,
       } as unknown as UsDailyPriceImportService,
+      { deleteExpiredRefreshTokens } as unknown as TokenCleanupService,
     );
   });
 
@@ -66,6 +69,19 @@ describe('BatchJobs', () => {
       timeZone: 'Asia/Seoul',
       name: 'us-daily-prices',
     });
+    expect(cronOf('deleteExpiredTokens')).toMatchObject({
+      cronTime: '0 0 * * *',
+      timeZone: 'Asia/Seoul',
+      name: 'expired-tokens',
+    });
+  });
+
+  it('자정 잡은 만료된 refresh token 행을 삭제한다 (--run=expired-tokens로도 실행)', async () => {
+    deleteExpiredRefreshTokens.mockResolvedValue({ deleted: 3 });
+
+    await expect(jobs.deleteExpiredTokens()).resolves.toBe(true);
+    await expect(jobs.runByName('expired-tokens')).resolves.toBe(true);
+    expect(deleteExpiredRefreshTokens).toHaveBeenCalledTimes(2);
   });
 
   it('환율은 오늘(UTC)까지 최근 7일을 가져온다', async () => {

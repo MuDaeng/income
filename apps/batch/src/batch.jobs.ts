@@ -5,6 +5,7 @@ import {
   ExchangeRateService,
   OVERSEAS_MARKETS,
   SecurityImportService,
+  TokenCleanupService,
   UsDailyPriceImportService,
 } from '@app/core';
 
@@ -23,6 +24,7 @@ export const BATCH_JOB_NAMES = [
   'domestic-securities',
   'overseas-securities',
   'us-daily-prices',
+  'expired-tokens',
 ] as const;
 export type BatchJobName = (typeof BATCH_JOB_NAMES)[number];
 
@@ -32,6 +34,7 @@ export type BatchJobName = (typeof BATCH_JOB_NAMES)[number];
  * - 17:00 국내 종목 목록 KOSPI·KOSDAQ (Toss) — 새로 상장된 종목 추가
  * - 08:00 해외 종목 목록 NYSE·NASDAQ·AMEX (Toss)
  * - 15:00 미국 주식 일별 시세 최근 7일 (Massive Daily Market Summary) — 미국 동부 자정이 지나야 전날 데이터가 공개됨
+ * - 00:00 refresh token이 만료된 로그인 세션(Token 행) 삭제 (updatedAt 기준)
  * 국내 시세와 배당은 배치가 아니라 조회 API에서 가져온다.
  * 각 잡은 실패해도 예외를 로그로 남기고 프로세스는 계속 돈다(다음 날 다시 실행).
  */
@@ -43,6 +46,7 @@ export class BatchJobs {
     private readonly exchangeRateService: ExchangeRateService,
     private readonly securityImportService: SecurityImportService,
     private readonly usDailyPriceImportService: UsDailyPriceImportService,
+    private readonly tokenCleanupService: TokenCleanupService,
   ) {}
 
   @Cron('0 16 * * *', {
@@ -98,6 +102,18 @@ export class BatchJobs {
     );
   }
 
+  /** 로그아웃 API가 없어 버려진 세션이 쌓이므로 매일 자정에 refresh token이 만료된 행을 지운다 */
+  @Cron('0 0 * * *', {
+    name: 'expired-tokens',
+    timeZone: BATCH_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  deleteExpiredTokens(): Promise<boolean> {
+    return this.run('expired-tokens', () =>
+      this.tokenCleanupService.deleteExpiredRefreshTokens(),
+    );
+  }
+
   /** 이름으로 잡 하나를 바로 실행 (main.ts의 --run) */
   runByName(name: BatchJobName): Promise<boolean> {
     switch (name) {
@@ -109,6 +125,8 @@ export class BatchJobs {
         return this.importOverseasSecurities();
       case 'us-daily-prices':
         return this.importUsDailyPrices();
+      case 'expired-tokens':
+        return this.deleteExpiredTokens();
     }
   }
 

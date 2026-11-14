@@ -4,6 +4,7 @@ import { DatabaseModule } from '@app/common';
 import {
   ExchangeRateImportModule,
   SecurityImportModule,
+  TokenCleanupModule,
   UsDailyPriceImportModule,
 } from '@app/core';
 import { BatchJobs } from './batch.jobs.js';
@@ -16,6 +17,7 @@ import { BatchJobs } from './batch.jobs.js';
     ExchangeRateImportModule,
     SecurityImportModule,
     UsDailyPriceImportModule,
+    TokenCleanupModule,
   ],
   providers: [BatchJobs],
 })
