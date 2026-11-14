@@ -65,6 +65,10 @@ import {
   type UpdateExchangeRateRequest,
   updateExchangeRateSchema,
 } from './update-exchange-rate.schema.js';
+import {
+  type UpdateSecurityCompanyRequest,
+  updateSecurityCompanySchema,
+} from './update-security-company.schema.js';
 
 @ApiTags('balance')
 @Controller('balance')
@@ -146,6 +150,21 @@ export class BalanceController {
     @Body({ schema: updateExchangeRateSchema }) body: UpdateExchangeRateRequest,
   ): Promise<PurchaseDateBalance> {
     return this.balanceService.updateExchangeRate(user, body);
+  }
+
+  @Patch('purchases/security-company')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '매수분 증권사 수정: 종목·매수일·sequence로 매수분 하나의 증권사 변경 (매도된 행도 가능)',
+  })
+  updateSecurityCompany(
+    @CurrentUser() user: AuthUser,
+    @Body({ schema: updateSecurityCompanySchema })
+    body: UpdateSecurityCompanyRequest,
+  ): Promise<PurchaseDateBalance> {
+    return this.balanceService.updateSecurityCompany(user, body);
   }
 
   @Delete('purchases')

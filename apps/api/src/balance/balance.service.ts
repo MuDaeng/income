@@ -35,6 +35,7 @@ import type {
 import type { PurchaseHistoryRequest } from './purchase-history.schema.js';
 import type { SellBalanceRequest } from './sell-balance.schema.js';
 import type { UpdateExchangeRateRequest } from './update-exchange-rate.schema.js';
+import type { UpdateSecurityCompanyRequest } from './update-security-company.schema.js';
 import { returnRate } from './return-rate.js';
 
 @Injectable()
@@ -313,6 +314,41 @@ export class BalanceService {
     if (!remaining) {
       await this.userBalanceRepository.delete({ userId, securityId });
     }
+  }
+
+  /**
+   * 매수분 하나(종목·매수일·sequence)의 증권사 수정. 매도된 행도 수정할 수 있고, 그 행 하나만 바꾼다(합치거나 나누지 않음).
+   * - 매수분이 없으면 404
+   * registerBalance·sellBalance와 같은 이유로 먼저 User 행을 잠가 같은 사용자의 변경을 순서대로 실행한다.
+   */
+  @Transactional()
+  async updateSecurityCompany(
+    authUser: AuthUser,
+    input: UpdateSecurityCompanyRequest,
+  ): Promise<PurchaseDateBalance> {
+    const userId = authUser.id;
+    const { securityId, purchaseDate, sequence } = input;
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!user) {
+      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
+    }
+
+    const purchase = await this.purchaseDateBalanceRepository.findOneBy({
+      userId,
+      securityId,
+      purchaseDate,
+      sequence,
+    });
+    if (!purchase) {
+      throw new NotFoundException('수정할 매수 내역이 없습니다.');
+    }
+
+    purchase.securityCompany = input.securityCompany;
+    return this.purchaseDateBalanceRepository.save(purchase);
   }
 
   /**
