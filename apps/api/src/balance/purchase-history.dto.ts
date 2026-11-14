@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { DailyPriceSecurityDto } from '../security/daily-price.dto.js';
 
-/** 수량·가격은 decimal 문자열 (KRW 정수, USD 소수 6자리 버림) */
+/** 수량·가격은 decimal 문자열 (KRW 정수; USD 수량은 소수 6자리, 가격은 소수 2자리 버림) */
 export class PurchaseHistoryItemDto {
   @ApiProperty({ description: '매수일 YYYY-MM-DD' })
   purchaseDate: string;
@@ -12,7 +12,7 @@ export class PurchaseHistoryItemDto {
   @ApiProperty({ description: '수량' })
   amount: string;
 
-  @ApiProperty({ description: '매수 가격 (종목 통화)' })
+  @ApiProperty({ description: '매수 가격 (종목 통화, KRW 정수·USD 소수 2자리 버림)' })
   price: string;
 
   @ApiProperty({ type: String, nullable: true, description: '매도일 YYYY-MM-DD (보유 중이면 null)' })

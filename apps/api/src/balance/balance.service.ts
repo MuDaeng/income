@@ -12,6 +12,7 @@ import {
   Currency,
   DailyExchangeRate,
   DailySecurity,
+  decimalPlacesOf,
   PurchaseDateBalance,
   Security,
   truncateByCurrency,
@@ -309,6 +310,8 @@ export class BalanceService {
       order: { purchaseDate: 'DESC', sequence: 'DESC' },
     });
 
+    // 응답 가격은 소수 2자리까지 버림 (KRW는 원래 정수)
+    const pricePlaces = Math.min(decimalPlacesOf(currency), 2);
     const rates = new Map<string, DailyExchangeRate | null>();
     const items: PurchaseHistoryItemDto[] = [];
     for (const purchase of purchases) {
@@ -332,7 +335,9 @@ export class BalanceService {
         purchaseDate: purchase.purchaseDate,
         sequence: purchase.sequence,
         amount: truncateByCurrency(purchase.amount, currency),
-        price: truncateByCurrency(purchase.price, currency),
+        price: new Decimal(purchase.price)
+          .toDecimalPlaces(pricePlaces, Decimal.ROUND_DOWN)
+          .toFixed(pricePlaces),
         saleDate: purchase.saleDate,
         exchangeRate: rate ? new Decimal(rate.closingRate).toString() : null,
         exchangeRateDate: rate?.date ?? null,

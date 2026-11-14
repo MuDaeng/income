@@ -72,9 +72,9 @@ describe('BalanceService.getPurchases', () => {
     expect(result).toEqual({
       security: AAPL,
       items: [
-        { purchaseDate: '2026-02-07', sequence: 2, amount: '1.500000', price: '230.120000', saleDate: null, exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
-        { purchaseDate: '2026-02-07', sequence: 1, amount: '2.000000', price: '231.000000', saleDate: '2026-05-01', exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
-        { purchaseDate: '2026-01-02', sequence: 1, amount: '10.000000', price: '271.010000', saleDate: null, exchangeRate: '1441.57', exchangeRateDate: '2026-01-02' },
+        { purchaseDate: '2026-02-07', sequence: 2, amount: '1.500000', price: '230.12', saleDate: null, exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
+        { purchaseDate: '2026-02-07', sequence: 1, amount: '2.000000', price: '231.00', saleDate: '2026-05-01', exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
+        { purchaseDate: '2026-01-02', sequence: 1, amount: '10.000000', price: '271.01', saleDate: null, exchangeRate: '1441.57', exchangeRateDate: '2026-01-02' },
       ],
     });
   });
