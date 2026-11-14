@@ -21,13 +21,13 @@ export class BalanceItemDto {
   @ApiProperty({ description: '최신 종가 (종목 통화)' })
   currentPrice: string;
 
-  @ApiProperty({ description: '원화 매입평균가' })
+  @ApiProperty({ description: '원화 매입평균가 (USD는 원화 총매입금액 ÷ 수량)' })
   krwAveragePrice: string;
 
   @ApiProperty({ type: String, nullable: true, description: '외화 매입평균가 (KRW 종목은 null)' })
   usdAveragePrice: string | null;
 
-  @ApiProperty({ description: '원화 총매입금액' })
+  @ApiProperty({ description: '원화 총매입금액 (USD는 매수분마다 저장된 구매 환율, 없으면 매수일 환율로 환산)' })
   krwPurchaseAmount: string;
 
   @ApiProperty({ type: String, nullable: true, description: '외화 총매입금액 (KRW 종목은 null)' })
@@ -84,7 +84,7 @@ export class IntegratedBalanceResponse {
   @ApiProperty({ type: BalanceSummaryDto, description: '한국 + 미국(원화 환산) 총합' })
   total: BalanceSummaryDto;
 
-  @ApiProperty({ type: String, nullable: true, description: '원화 환산에 쓴 USD 최신 종가 환율 (USD 종목이 없으면 null)' })
+  @ApiProperty({ type: String, nullable: true, description: '평가금액 원화 환산에 쓴 USD 최신 종가 환율 (USD 종목이 없으면 null)' })
   exchangeRate: string | null;
 
   @ApiProperty({ type: String, nullable: true, description: '환율 기준일 YYYY-MM-DD' })

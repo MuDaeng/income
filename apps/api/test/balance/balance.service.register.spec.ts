@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { LessThanOrEqual } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   Currency,
@@ -39,6 +40,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
   const userRepository = { findOne: vi.fn() };
   const securityRepository = { findOneBy: vi.fn() };
   const dailySecurityRepository = { findOneBy: vi.fn() };
+  const dailyExchangeRateRepository = { findOne: vi.fn() };
   const securityRefreshService = { refresh: vi.fn() };
   let service: BalanceService;
 
@@ -68,7 +70,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
         { provide: getRepositoryToken(User), useValue: userRepository },
         { provide: getRepositoryToken(Security), useValue: securityRepository },
         { provide: getRepositoryToken(DailySecurity), useValue: dailySecurityRepository },
-        { provide: getRepositoryToken(DailyExchangeRate), useValue: {} },
+        { provide: getRepositoryToken(DailyExchangeRate), useValue: dailyExchangeRateRepository },
         { provide: SecurityRefreshService, useValue: securityRefreshService },
       ],
     }).compile();
@@ -106,5 +108,67 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
       '존재하지 않는 종목입니다.',
     );
     expect(securityRefreshService.refresh).not.toHaveBeenCalled();
+  });
+
+  describe('구매 환율', () => {
+    const AAPL = { id: 'US0378331005', symbol: 'AAPL', currency: Currency.USD };
+    const USD_INPUT = { ...INPUT, securityId: AAPL.id, amount: '1', price: '230' };
+
+    beforeEach(() => {
+      securityRepository.findOneBy.mockResolvedValue(AAPL);
+      dailySecurityRepository.findOneBy.mockResolvedValue({
+        lowestPrice: '229.000000',
+        highestPrice: '231.000000',
+      });
+    });
+
+    it('USD 종목은 입력한 환율을 소수 6자리로 버려서 저장한다', async () => {
+      const saved = await service.registerBalance(
+        { id: 1 },
+        { ...USD_INPUT, exchangeRate: '1401.12345678' },
+      );
+
+      expect(saved).toMatchObject({ exchangeRate: '1401.123456' });
+      expect(dailyExchangeRateRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('USD 종목에 환율 입력이 없으면 매수일(이전 최근) USD 종가 환율을 저장한다', async () => {
+      dailyExchangeRateRepository.findOne.mockResolvedValue({
+        date: '2026-11-04',
+        closingRate: '1398.5',
+      });
+
+      const saved = await service.registerBalance({ id: 1 }, USD_INPUT);
+
+      expect(dailyExchangeRateRepository.findOne).toHaveBeenCalledWith({
+        where: { currency: Currency.USD, date: LessThanOrEqual('2026-11-05') },
+        order: { date: 'DESC' },
+      });
+      expect(saved).toMatchObject({ exchangeRate: '1398.500000' });
+    });
+
+    it('입력도 매수일 환율도 없으면 null로 저장한다', async () => {
+      dailyExchangeRateRepository.findOne.mockResolvedValue(null);
+
+      const saved = await service.registerBalance({ id: 1 }, USD_INPUT);
+
+      expect(saved).toMatchObject({ exchangeRate: null });
+    });
+
+    it('KRW 종목은 환율을 입력해도 null로 저장한다', async () => {
+      securityRepository.findOneBy.mockResolvedValue(SAMSUNG);
+      dailySecurityRepository.findOneBy.mockResolvedValue({
+        lowestPrice: '71500.000000',
+        highestPrice: '72300.000000',
+      });
+
+      const saved = await service.registerBalance(
+        { id: 1 },
+        { ...INPUT, exchangeRate: '1400' },
+      );
+
+      expect(saved).toMatchObject({ exchangeRate: null });
+      expect(dailyExchangeRateRepository.findOne).not.toHaveBeenCalled();
+    });
   });
 });

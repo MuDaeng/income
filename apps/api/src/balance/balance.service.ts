@@ -125,6 +125,15 @@ export class BalanceService {
       );
     }
 
+    // 구매 환율: KRW 종목은 null, 그 외는 입력값 → 없으면 매수일(이전 최근) USD 환율 → 그것도 없으면 null
+    let exchangeRate: string | null = null;
+    if (security.currency !== Currency.KRW) {
+      const rate =
+        input.exchangeRate ??
+        (await this.findUsdRateOnOrBefore(purchaseDate))?.closingRate;
+      exchangeRate = rate ? toRate(rate) : null;
+    }
+
     // 5. 등록
     const userBalance = await this.userBalanceRepository.findOneBy({
       userId,
@@ -150,6 +159,7 @@ export class BalanceService {
         amount,
         price,
         saleDate: input.saleDate ?? null,
+        exchangeRate,
       }),
     );
     return { saved, security };
@@ -201,8 +211,16 @@ export class BalanceService {
       throw new BadRequestException('매도 수량이 보유 수량보다 많습니다.');
     }
 
+    // 매수가·구매 환율까지 같은 매도 행만 합친다
     const sold = await this.purchaseDateBalanceRepository.findOne({
-      where: { userId, securityId, purchaseDate, saleDate, price: source.price },
+      where: {
+        userId,
+        securityId,
+        purchaseDate,
+        saleDate,
+        price: source.price,
+        exchangeRate: source.exchangeRate ?? IsNull(),
+      },
     });
 
     // 3. 전량 매도
@@ -245,6 +263,7 @@ export class BalanceService {
         amount: truncateByCurrency(amount, currency),
         price: source.price,
         saleDate,
+        exchangeRate: source.exchangeRate,
       }),
     );
   }
@@ -292,7 +311,8 @@ export class BalanceService {
 
   /**
    * 종목 하나의 매수 내역 (매수일 최신순, 같은 날은 sequence 역순). 매도한 매수분도 saleDate와 함께 포함.
-   * 구매 환율은 USD 종목만 매수일(이전 최근) USD 종가 환율, KRW 종목은 null. 종목이 없으면 404.
+   * 구매 환율은 USD 종목만: 매수분에 저장된 환율(exchangeRateDate null), 없으면 매수일(이전 최근) USD 종가 환율.
+   * KRW 종목은 null. 종목이 없으면 404.
    */
   async getPurchases(
     authUser: AuthUser,
@@ -315,21 +335,19 @@ export class BalanceService {
     const rates = new Map<string, DailyExchangeRate | null>();
     const items: PurchaseHistoryItemDto[] = [];
     for (const purchase of purchases) {
-      let rate: DailyExchangeRate | null = null;
+      let exchangeRate: string | null = null;
+      let exchangeRateDate: string | null = null;
       if (currency === Currency.USD) {
-        if (!rates.has(purchase.purchaseDate)) {
-          rates.set(
+        if (purchase.exchangeRate != null) {
+          exchangeRate = new Decimal(purchase.exchangeRate).toString();
+        } else {
+          const rate = await this.findUsdRateOnOrBefore(
             purchase.purchaseDate,
-            await this.dailyExchangeRateRepository.findOne({
-              where: {
-                currency: Currency.USD,
-                date: LessThanOrEqual(purchase.purchaseDate),
-              },
-              order: { date: 'DESC' },
-            }),
+            rates,
           );
+          exchangeRate = rate ? new Decimal(rate.closingRate).toString() : null;
+          exchangeRateDate = rate?.date ?? null;
         }
-        rate = rates.get(purchase.purchaseDate) ?? null;
       }
       items.push({
         purchaseDate: purchase.purchaseDate,
@@ -339,8 +357,8 @@ export class BalanceService {
           .toDecimalPlaces(pricePlaces, Decimal.ROUND_DOWN)
           .toFixed(pricePlaces),
         saleDate: purchase.saleDate,
-        exchangeRate: rate ? new Decimal(rate.closingRate).toString() : null,
-        exchangeRateDate: rate?.date ?? null,
+        exchangeRate,
+        exchangeRateDate,
       });
     }
     return { security: { id, symbol, name, currency }, items };
@@ -350,7 +368,8 @@ export class BalanceService {
    * 통합잔고 조회.
    * 1. 보유 종목(UserBalance + Security) 2. 매도하지 않은(saleDate IS NULL) 매수일별 잔고로 종목별 총수량·총매입금액·매입평균가
    *    (미매도 매수분이 없는 종목, 즉 전량 매도한 종목은 제외)
-   * 3. 최신 종가 × 총수량 = 평가금액 4. USD 종목은 최신 USD 환율(closingRate, 1 USD당 원화)을 곱해 원화로 환산
+   *    - USD 원화 매입금액은 매수분마다 저장된 구매 환율, 없으면 매수일(이전 최근) USD 환율로 환산
+   * 3. 최신 종가 × 총수량 = 평가금액 4. USD 평가금액은 최신 USD 환율(closingRate, 1 USD당 원화)을 곱해 원화로 환산
    * 5. 한국(KRW)·미국(USD)·전체(원화) 합계 6. 각 항목의 수익률(%).
    *
    * 합계는 응답에 보이는 종목별 값(통화별로 버림한 값)을 더해서 행의 합과 맞춘다.
@@ -371,11 +390,15 @@ export class BalanceService {
     const purchases = await this.purchaseDateBalanceRepository.find({
       where: { userId, saleDate: IsNull() },
     });
-    const totals = new Map<string, { amount: Decimal; cost: Decimal }>();
+    const totals = new Map<
+      string,
+      { amount: Decimal; cost: Decimal; krwCost: Decimal }
+    >();
     for (const purchase of purchases) {
       const total = totals.get(purchase.securityId) ?? {
         amount: new Decimal(0),
         cost: new Decimal(0),
+        krwCost: new Decimal(0),
       };
       total.amount = total.amount.plus(purchase.amount);
       total.cost = total.cost.plus(
@@ -388,6 +411,24 @@ export class BalanceService {
     const heldBalances = userBalances.filter((balance) =>
       totals.has(balance.securityId),
     );
+
+    // USD 원화 매입금액: 매수분마다 구매 환율(저장값 → 매수일 환율)
+    const usdIds = new Set(
+      heldBalances
+        .filter((balance) => balance.security.currency === Currency.USD)
+        .map((balance) => balance.securityId),
+    );
+    const rateCache = new Map<string, DailyExchangeRate | null>();
+    for (const purchase of purchases) {
+      if (!usdIds.has(purchase.securityId)) {
+        continue;
+      }
+      const rate = await this.purchaseRateOf(purchase, rateCache);
+      const total = totals.get(purchase.securityId)!;
+      total.krwCost = total.krwCost.plus(
+        new Decimal(purchase.amount).times(purchase.price).times(rate),
+      );
+    }
 
     // 4. USD 종목이 있을 때만 최신 환율
     const hasUsd = heldBalances.some(
@@ -419,6 +460,7 @@ export class BalanceService {
           security,
           total.amount,
           total.cost,
+          total.krwCost,
           latest.closingPrice,
           exchangeRate?.closingRate ?? null,
         ),
@@ -465,11 +507,15 @@ export class BalanceService {
     };
   }
 
-  /** 종목 하나의 매입평균가·총매입금액·평가금액(원화/외화)·수익률 */
+  /**
+   * 종목 하나의 매입평균가·총매입금액·평가금액(원화/외화)·수익률.
+   * krwCost: USD 종목의 원화 매입금액(매수분별 구매 환율로 환산한 합), usdRate: 평가에 쓰는 최신 환율
+   */
   private toBalanceItem(
     security: Security,
     amount: Decimal,
     cost: Decimal,
+    krwCost: Decimal,
     closingPrice: string,
     usdRate: string | null,
   ): BalanceItemDto {
@@ -490,11 +536,14 @@ export class BalanceService {
 
     if (currency === Currency.USD) {
       const rate = new Decimal(usdRate!);
+      const krwAveragePrice = amount.isZero()
+        ? new Decimal(0)
+        : krwCost.dividedBy(amount);
       return {
         ...base,
-        krwAveragePrice: toKrw(averagePrice.times(rate)),
+        krwAveragePrice: toKrw(krwAveragePrice),
         usdAveragePrice: toUsd(averagePrice),
-        krwPurchaseAmount: toKrw(cost.times(rate)),
+        krwPurchaseAmount: toKrw(krwCost),
         usdPurchaseAmount: toUsd(cost),
         krwEvaluationAmount: toKrw(evaluation.times(rate)),
         usdEvaluationAmount: toUsd(evaluation),
@@ -511,6 +560,39 @@ export class BalanceService {
     };
   }
 
+  /** 매수분의 구매 환율: 저장된 환율, 없으면 매수일(이전 최근) USD 환율. 둘 다 없으면 404 */
+  private async purchaseRateOf(
+    purchase: PurchaseDateBalance,
+    cache: Map<string, DailyExchangeRate | null>,
+  ): Promise<string> {
+    if (purchase.exchangeRate != null) {
+      return purchase.exchangeRate;
+    }
+    const rate = await this.findUsdRateOnOrBefore(purchase.purchaseDate, cache);
+    if (!rate) {
+      throw new NotFoundException(
+        `${purchase.purchaseDate} 이전의 USD 환율 정보가 없습니다.`,
+      );
+    }
+    return rate.closingRate;
+  }
+
+  /** date(포함) 이전 가장 최근 USD 환율. cache가 있으면 날짜별로 한 번만 조회 */
+  private async findUsdRateOnOrBefore(
+    date: string,
+    cache?: Map<string, DailyExchangeRate | null>,
+  ): Promise<DailyExchangeRate | null> {
+    if (cache?.has(date)) {
+      return cache.get(date) ?? null;
+    }
+    const rate = await this.dailyExchangeRateRepository.findOne({
+      where: { currency: Currency.USD, date: LessThanOrEqual(date) },
+      order: { date: 'DESC' },
+    });
+    cache?.set(date, rate);
+    return rate;
+  }
+
   private sum(values: (string | null)[]): Decimal {
     return values.reduce<Decimal>(
       (acc, value) => (value === null ? acc : acc.plus(value)),
@@ -523,4 +605,7 @@ const toKrw = (value: Decimal.Value): string =>
   truncateByCurrency(value, Currency.KRW);
 const toUsd = (value: Decimal.Value): string =>
   truncateByCurrency(value, Currency.USD);
+/** 환율은 통화와 무관하게 소수 6자리 버림 (truncateByCurrency(KRW)를 쓰면 정수로 잘림) */
+const toRate = (value: Decimal.Value): string =>
+  new Decimal(value).toDecimalPlaces(6, Decimal.ROUND_DOWN).toFixed(6);
 

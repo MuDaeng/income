@@ -88,7 +88,7 @@ describe('BalanceService.sellBalance', () => {
     service = moduleRef.get(BalanceService);
   });
 
-  it('미매도 대상은 sequence와 saleDate IS NULL로, 같은 매도일 행은 매수가까지 같은 것으로 찾는다', async () => {
+  it('미매도 대상은 sequence와 saleDate IS NULL로, 같은 매도일 행은 매수가·구매 환율까지 같은 것으로 찾는다', async () => {
     givenRows(unsold('10.000000'), null);
 
     await service.sellBalance({ id: 1 }, input('10'));
@@ -96,8 +96,43 @@ describe('BalanceService.sellBalance', () => {
     expect(purchaseDateBalanceRepository.findOne).toHaveBeenNthCalledWith(1, {
       where: { ...KEY, sequence: 1, saleDate: IsNull() },
     });
+    // 미매도 행의 환율이 null이면 환율 IS NULL인 행만
     expect(purchaseDateBalanceRepository.findOne).toHaveBeenNthCalledWith(2, {
-      where: { ...KEY, saleDate: '2026-11-08', price: '70000.000000' },
+      where: {
+        ...KEY,
+        saleDate: '2026-11-08',
+        price: '70000.000000',
+        exchangeRate: IsNull(),
+      },
+    });
+  });
+
+  it('구매 환율이 있는 매수분: 같은 환율의 매도 행만 찾고, 새 매도 행에 환율을 복사한다', async () => {
+    securityRepository.findOneBy.mockResolvedValue({
+      id: '005930',
+      currency: Currency.USD,
+    });
+    givenRows(
+      { ...unsold('10.000000'), exchangeRate: '1400.500000' },
+      null,
+      { ...KEY, sequence: 1 },
+    );
+
+    const result = await service.sellBalance({ id: 1 }, input('3'));
+
+    expect(purchaseDateBalanceRepository.findOne).toHaveBeenNthCalledWith(2, {
+      where: {
+        ...KEY,
+        saleDate: '2026-11-08',
+        price: '70000.000000',
+        exchangeRate: '1400.500000',
+      },
+    });
+    expect(result).toMatchObject({
+      sequence: 2,
+      amount: '3.000000',
+      saleDate: '2026-11-08',
+      exchangeRate: '1400.500000',
     });
   });
 

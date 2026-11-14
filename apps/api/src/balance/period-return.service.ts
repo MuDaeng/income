@@ -38,7 +38,7 @@ export class PeriodReturnService {
   /**
    * 기간 총수익률.
    * 1. 종료일 보유분(매수일 <= to, 미매도 또는 매도일 > to)으로 종목별 수량·원금
-   *    - USD 원화 원금은 매수분마다 매수일(이전 최근) USD 환율로 환산
+   *    - USD 원화 원금은 매수분마다 저장된 구매 환율, 없으면 매수일(이전 최근) USD 환율로 환산
    * 2. 평가금액 = 종료일(이전 최근) 종가 × 수량, USD는 종료일(이전 최근) 환율로 원화 환산
    * 3. 기간 배당금 = DividendHistoryService 결과(지급일이 [from, to])를 종목별로 합산
    * 4. 종목 = 종료일 보유 종목 ∪ 기간 중 배당 받은 종목. 총합 = 평가금액 + 배당금, 원금 대비 수익금·수익률
@@ -205,13 +205,18 @@ export class PeriodReturnService {
       quantity = quantity.plus(purchase.amount);
       cost = cost.plus(purchaseCost);
       if (isUsd) {
-        const rate = await this.findUsdRate(purchase.purchaseDate, rateCache);
-        if (!rate) {
-          throw new NotFoundException(
-            `${purchase.purchaseDate} 이전의 USD 환율 정보가 없습니다.`,
-          );
+        // 저장된 구매 환율 우선, 없으면 매수일(이전 최근) USD 환율
+        let rate = purchase.exchangeRate;
+        if (rate == null) {
+          const daily = await this.findUsdRate(purchase.purchaseDate, rateCache);
+          if (!daily) {
+            throw new NotFoundException(
+              `${purchase.purchaseDate} 이전의 USD 환율 정보가 없습니다.`,
+            );
+          }
+          rate = daily.closingRate;
         }
-        krwCost = krwCost.plus(purchaseCost.times(rate.closingRate));
+        krwCost = krwCost.plus(purchaseCost.times(rate));
       }
     }
     if (!isUsd) {

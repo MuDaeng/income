@@ -21,11 +21,16 @@ export class PurchaseHistoryItemDto {
   @ApiProperty({
     type: String,
     nullable: true,
-    description: '구매 환율: USD 종목은 매수일(이전 최근) USD 종가 환율, KRW 종목·환율 없음은 null',
+    description:
+      '구매 환율: USD 종목은 매수분에 저장된 환율, 없으면 매수일(이전 최근) USD 종가 환율. KRW 종목·환율 없음은 null',
   })
   exchangeRate: string | null;
 
-  @ApiProperty({ type: String, nullable: true, description: '환율 기준일 YYYY-MM-DD' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: '대체로 쓴 USD 종가 환율의 기준일 YYYY-MM-DD (저장된 구매 환율이면 null)',
+  })
   exchangeRateDate: string | null;
 }
 

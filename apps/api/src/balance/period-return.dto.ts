@@ -30,7 +30,7 @@ export class EvaluationItemDto {
   @ApiProperty({ type: String, nullable: true, description: '외화 평가금액 (KRW 종목은 null)' })
   usdEvaluationAmount: string | null;
 
-  @ApiProperty({ description: '원화 원금 (USD는 매수분마다 매수일 환율로 환산)' })
+  @ApiProperty({ description: '원화 원금 (USD는 매수분마다 저장된 구매 환율, 없으면 매수일 환율로 환산)' })
   krwPurchaseAmount: string;
 
   @ApiProperty({ description: '원화 평가금액 (USD는 종료일 환율로 환산)' })

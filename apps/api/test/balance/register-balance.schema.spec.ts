@@ -47,3 +47,27 @@ describe('registerBalanceSchema saleDate', () => {
     expect(result.error?.issues[0].path).toEqual(['saleDate']);
   });
 });
+
+describe('registerBalanceSchema exchangeRate', () => {
+  it('생략·null·양수 문자열이면 통과한다', () => {
+    expect(registerBalanceSchema.safeParse(base).success).toBe(true);
+    expect(
+      registerBalanceSchema.safeParse({ ...base, exchangeRate: null }).success,
+    ).toBe(true);
+    expect(
+      registerBalanceSchema.safeParse({ ...base, exchangeRate: '1400.25' })
+        .success,
+    ).toBe(true);
+  });
+
+  it.each(['0', 'abc', '-1400', '1,400'])('%s이면 exchangeRate 오류', (value) => {
+    const result = registerBalanceSchema.safeParse({
+      ...base,
+      exchangeRate: value,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path)).toEqual([
+      ['exchangeRate'],
+    ]);
+  });
+});

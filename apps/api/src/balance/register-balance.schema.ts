@@ -50,6 +50,8 @@ export const registerBalanceSchema = z
     price: positiveDecimalString,
     /** 매도일 'YYYY-MM-DD'. 보유 중이면 생략하거나 null */
     saleDate: z.iso.date().nullish(),
+    /** 구매 환율(1 USD당 원화). KRW 종목은 무시, USD 종목에서 생략하면 매수일(이전 최근) USD 종가 환율 */
+    exchangeRate: positiveDecimalString.nullish(),
   })
   .refine(isSaleDateNotBeforePurchaseDate, SALE_DATE_BEFORE_PURCHASE_DATE_ERROR);
 

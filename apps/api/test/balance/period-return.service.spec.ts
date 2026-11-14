@@ -180,6 +180,28 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     });
   });
 
+  it('USD 매수분에 저장된 구매 환율이 있으면 매수일 환율 대신 그 환율로 원금을 환산한다', async () => {
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      // 저장 환율 1300 (매수일 환율 1400은 안 씀), 매수일 이전 환율이 없어도 404가 아님
+      { ...purchase(USD.id, '2025-12-31', '10.000000', '100.000000'), exchangeRate: '1300.000000' },
+      // 저장 환율 없음 → 2026-02-02 환율 1450
+      { ...purchase(USD.id, '2026-02-03', '5.000000', '104.000000'), exchangeRate: null },
+    ]);
+    dividendHistoryService.getDividendHistory.mockResolvedValue({ months: [] });
+
+    const result = await service.getPeriodReturn(
+      { id: 1 },
+      { from: '2026-01-01', to: '2026-11-30' },
+    );
+
+    // 1000 × 1300 + 520 × 1450 = 2,054,000
+    expect(
+      result.evaluation.items.find((item) => item.securityId === USD.id),
+    ).toMatchObject({ krwPurchaseAmount: '2054000' });
+    // 매수일 환율은 저장 환율이 없는 매수분과 종료일 환율만 조회
+    expect(dailyExchangeRateRepository.findOne).toHaveBeenCalledTimes(2);
+  });
+
   it('USD 매수일 이전 환율이 없으면 404', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([
       purchase(USD.id, '2025-12-31', '1.000000', '100.000000'),

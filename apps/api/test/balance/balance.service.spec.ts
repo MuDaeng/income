@@ -134,6 +134,70 @@ describe('BalanceService.getIntegratedBalance', () => {
     });
   });
 
+  it('USD 원화 매입금액은 매수분의 저장 환율, 없으면 매수일 환율로 환산하고 평가는 최신 환율로 한다', async () => {
+    userBalanceRepository.find.mockResolvedValue([
+      { userId: 1, securityId: USD_SECURITY.id, security: USD_SECURITY },
+    ]);
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      // 저장 환율 1300 → 200 × 1300 = 260000
+      { securityId: 'AAPL', purchaseDate: '2026-01-05', amount: '2.000000', price: '100.000000', exchangeRate: '1300.000000' },
+      // 저장 환율 없음 → 매수일(이전 최근) 환율 1350 → 100 × 1350 = 135000
+      { securityId: 'AAPL', purchaseDate: '2026-03-02', amount: '1.000000', price: '100.000000', exchangeRate: null },
+    ]);
+    dailySecurityRepository.findOne.mockResolvedValue({
+      id: 'AAPL',
+      closingPrice: '110.000000',
+    });
+    // 매수일 환율 조회(date 조건 있음)와 최신 환율 조회(date 조건 없음)를 구분
+    dailyExchangeRateRepository.findOne.mockImplementation(
+      ({ where }: { where: { date?: unknown } }) =>
+        Promise.resolve(
+          where.date
+            ? { date: '2026-02-27', currency: Currency.USD, closingRate: '1350.000000' }
+            : { date: '2026-11-06', currency: Currency.USD, closingRate: '1400.000000' },
+        ),
+    );
+
+    const result = await service.getIntegratedBalance({ id: 1 });
+
+    expect(result.items[0]).toMatchObject({
+      krwPurchaseAmount: '395000', // 260000 + 135000
+      krwAveragePrice: '131666', // 395000 / 3
+      usdPurchaseAmount: '300.000000',
+      krwEvaluationAmount: '462000', // 330 × 1400
+      returnRate: '10.00', // 외화 기준 30 / 300
+    });
+    expect(result.total).toEqual({
+      purchaseAmount: '395000',
+      evaluationAmount: '462000',
+      returnRate: '16.96', // 67000 / 395000 (환차익 포함)
+    });
+    expect(result.exchangeRate).toBe('1400');
+    // 매수일 환율은 저장 환율이 없는 매수분 하나만 조회
+    expect(dailyExchangeRateRepository.findOne).toHaveBeenCalledTimes(2);
+  });
+
+  it('저장 환율도 매수일 환율도 없는 USD 매수분이 있으면 404', async () => {
+    userBalanceRepository.find.mockResolvedValue([
+      { userId: 1, securityId: USD_SECURITY.id, security: USD_SECURITY },
+    ]);
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      { securityId: 'AAPL', purchaseDate: '2020-01-02', amount: '1.000000', price: '100.000000', exchangeRate: null },
+    ]);
+    dailyExchangeRateRepository.findOne.mockImplementation(
+      ({ where }: { where: { date?: unknown } }) =>
+        Promise.resolve(
+          where.date
+            ? null
+            : { date: '2026-11-06', currency: Currency.USD, closingRate: '1400.000000' },
+        ),
+    );
+
+    await expect(service.getIntegratedBalance({ id: 1 })).rejects.toThrow(
+      '2020-01-02 이전의 USD 환율 정보가 없습니다.',
+    );
+  });
+
   it('미매도 매수분이 없는(전량 매도한) 종목은 제외하고 시세·환율도 조회하지 않는다', async () => {
     userBalanceRepository.find.mockResolvedValue([
       { userId: 1, securityId: KRW_SECURITY.id, security: KRW_SECURITY },

@@ -79,6 +79,26 @@ describe('BalanceService.getPurchases', () => {
     });
   });
 
+  it('USD 매수분에 저장된 환율이 있으면 그 환율(기준일 null), 없으면 매수일 환율을 돌려준다', async () => {
+    securityRepository.findOneBy.mockResolvedValue(AAPL);
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      { purchaseDate: '2026-02-07', sequence: 1, amount: '1.000000', price: '230.000000', saleDate: null, exchangeRate: '1430.250000' },
+      { purchaseDate: '2026-01-02', sequence: 1, amount: '1.000000', price: '271.000000', saleDate: null, exchangeRate: null },
+    ]);
+    dailyExchangeRateRepository.findOne.mockResolvedValue({
+      date: '2026-01-02',
+      closingRate: '1441.570000',
+    });
+
+    const result = await service.getPurchases({ id: 6 }, { securityId: AAPL.id });
+
+    expect(dailyExchangeRateRepository.findOne).toHaveBeenCalledTimes(1);
+    expect(result.items.map(({ exchangeRate, exchangeRateDate }) => ({ exchangeRate, exchangeRateDate }))).toEqual([
+      { exchangeRate: '1430.25', exchangeRateDate: null },
+      { exchangeRate: '1441.57', exchangeRateDate: '2026-01-02' },
+    ]);
+  });
+
   it('KRW 종목은 정수로 버리고 환율은 null (환율 조회 안 함)', async () => {
     securityRepository.findOneBy.mockResolvedValue(REIT);
     purchaseDateBalanceRepository.find.mockResolvedValue([
