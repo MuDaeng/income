@@ -7,3 +7,4 @@ export * from './user/index.js';
 export * from './security/index.js';
 export * from './balance/index.js';
 export * from './client/index.js';
+export * from './batch/index.js';

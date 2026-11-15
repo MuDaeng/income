@@ -8,6 +8,8 @@ import {
   TokenCleanupService,
   UsDailyPriceImportService,
 } from '@app/core';
+import { BatchStatus } from '@app/common';
+import { BatchHistoryService } from './batch-history.service.js';
 
 /** 모든 잡의 실행 시각 기준 */
 export const BATCH_TIME_ZONE = 'Asia/Seoul';
@@ -47,6 +49,7 @@ export class BatchJobs {
     private readonly securityImportService: SecurityImportService,
     private readonly usDailyPriceImportService: UsDailyPriceImportService,
     private readonly tokenCleanupService: TokenCleanupService,
+    private readonly batchHistoryService: BatchHistoryService,
   ) {}
 
   @Cron('0 16 * * *', {
@@ -130,21 +133,23 @@ export class BatchJobs {
     }
   }
 
-  /** 시작·결과·소요 시간을 로그로 남긴다. 실패는 로그만 하고 false */
+  /** 시작·결과·소요 시간을 로그와 BatchHistory에 남긴다. 실패는 로그만 하고 false */
   private async run(name: BatchJobName, job: () => Promise<unknown>) {
     const startedAt = Date.now();
     this.logger.log(`[${name}] 시작`);
+    const history = await this.batchHistoryService.start(name);
     try {
-      const result = await job();
-      this.logger.log(
-        `[${name}] 완료 ${Date.now() - startedAt}ms ${JSON.stringify(result)}`,
-      );
+      const result = JSON.stringify(await job()) ?? null;
+      this.logger.log(`[${name}] 완료 ${Date.now() - startedAt}ms ${result}`);
+      await this.batchHistoryService.finish(history, BatchStatus.SUCCESS, result);
       return true;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `[${name}] 실패 ${Date.now() - startedAt}ms: ${error instanceof Error ? error.message : String(error)}`,
+        `[${name}] 실패 ${Date.now() - startedAt}ms: ${message}`,
         error instanceof Error ? error.stack : undefined,
       );
+      await this.batchHistoryService.finish(history, BatchStatus.FAILED, message);
       return false;
     }
   }

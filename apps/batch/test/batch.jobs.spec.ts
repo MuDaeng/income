@@ -6,7 +6,9 @@ import type {
   UsDailyPriceImportService,
 } from '@app/core';
 import { DOMESTIC_MARKETS, OVERSEAS_MARKETS } from '@app/core';
+import { BatchStatus } from '@app/common';
 import { BATCH_TIME_ZONE, BatchJobs } from '../src/batch.jobs.js';
+import type { BatchHistoryService } from '../src/batch-history.service.js';
 
 /** @Cron이 남기는 메타데이터 (@nestjs/schedule 내부 키) */
 const cronOf = (method: keyof BatchJobs) => {
@@ -26,6 +28,9 @@ describe('BatchJobs', () => {
   const importFromToss = vi.fn();
   const importUsFromMassive = vi.fn();
   const deleteExpiredRefreshTokens = vi.fn();
+  const start = vi.fn();
+  const finish = vi.fn();
+  const HISTORY = { id: 1, name: 'job' };
   let jobs: BatchJobs;
   let errorLog: ReturnType<typeof vi.spyOn>;
 
@@ -42,7 +47,9 @@ describe('BatchJobs', () => {
         importFromMassive: importUsFromMassive,
       } as unknown as UsDailyPriceImportService,
       { deleteExpiredRefreshTokens } as unknown as TokenCleanupService,
+      { start, finish } as unknown as BatchHistoryService,
     );
+    start.mockResolvedValue(HISTORY);
   });
 
   afterEach(() => {
@@ -133,6 +140,35 @@ describe('BatchJobs', () => {
       expect.stringContaining('[domestic-securities] 실패'),
       expect.any(String),
     );
+  });
+
+  it('성공하면 잡 이름으로 이력을 시작하고 결과 JSON과 함께 SUCCESS로 끝낸다', async () => {
+    deleteExpiredRefreshTokens.mockResolvedValue({ deleted: 3 });
+
+    await jobs.deleteExpiredTokens();
+
+    expect(start).toHaveBeenCalledWith('expired-tokens');
+    expect(finish).toHaveBeenCalledWith(
+      HISTORY,
+      BatchStatus.SUCCESS,
+      '{"deleted":3}',
+    );
+  });
+
+  it('실패하면 에러 메시지와 함께 FAILED로 끝낸다', async () => {
+    importFromToss.mockRejectedValue(new Error('403'));
+
+    await jobs.importOverseasSecurities();
+
+    expect(start).toHaveBeenCalledWith('overseas-securities');
+    expect(finish).toHaveBeenCalledWith(HISTORY, BatchStatus.FAILED, '403');
+  });
+
+  it('잡 결과가 undefined면 result는 null', async () => {
+    deleteExpiredRefreshTokens.mockResolvedValue(undefined);
+
+    await expect(jobs.deleteExpiredTokens()).resolves.toBe(true);
+    expect(finish).toHaveBeenCalledWith(HISTORY, BatchStatus.SUCCESS, null);
   });
 
   it('runByName은 이름에 맞는 잡을 실행한다', async () => {
