@@ -11,7 +11,7 @@ import {
 import { DataGoKrClient, type PriceItem } from '@app/core';
 import { addDays, toYmd } from './iso-date.js';
 
-/** 종목 하나 2년치는 수백 행이라 한 페이지면 충분 (data.go.kr 최대) */
+/** 종목 하나 2020년부터 전부여도 2천 행이 안 돼 한 페이지면 충분 (data.go.kr 최대) */
 const PAGE_SIZE = 10_000;
 const UPSERT_CHUNK = 1_000;
 
