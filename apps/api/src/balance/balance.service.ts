@@ -26,6 +26,7 @@ import type {
   BalanceItemDto,
   IntegratedBalanceResponse,
 } from './integrated-balance.dto.js';
+import type { BulkSellBalanceRequest } from './bulk-sell-balance.schema.js';
 import type { DeletePurchaseRequest } from './delete-purchase.schema.js';
 import type { IntegratedBalanceRequest } from './integrated-balance.schema.js';
 import type { RegisterBalanceRequest } from './register-balance.schema.js';
@@ -213,10 +214,90 @@ export class BalanceService {
     }
     const { currency } = security;
     const amount = new Decimal(truncateByCurrency(input.amount, currency));
-    const held = new Decimal(source.amount);
+    if (amount.gt(source.amount)) {
+      throw new BadRequestException('매도 수량이 보유 수량보다 많습니다.');
+    }
+    return this.sellFromRow(source, amount, saleDate, currency);
+  }
+
+  /**
+   * 증권사별 일괄매도. 그 증권사의 미매도 매수분 중 매도일 이전(포함)에 산 것을
+   * 매수일이 오래된 순(같은 날은 sequence 순)으로 매도 수량만큼 매도 처리한다.
+   * - 대상 보유 수량 합계 < 매도 수량: 400 (아무것도 매도하지 않음)
+   * - 행마다의 전량/일부 매도·같은 매도 행 병합 규칙은 sellBalance와 같다(sellFromRow).
+   * 매도 처리된 행(saleDate가 찍힌 행, 합쳐진 행, 새 매도 행)을 처리 순서대로 돌려준다.
+   * registerBalance·sellBalance와 같은 이유로 먼저 User 행을 잠가 같은 사용자의 변경을 순서대로 실행한다.
+   */
+  @Transactional()
+  async bulkSellBalance(
+    authUser: AuthUser,
+    input: BulkSellBalanceRequest,
+  ): Promise<PurchaseDateBalance[]> {
+    const userId = authUser.id;
+    const { securityId, securityCompany, saleDate } = input;
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!user) {
+      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
+    }
+
+    const security = await this.securityRepository.findOneBy({
+      id: securityId,
+    });
+    if (!security) {
+      throw new NotFoundException('존재하지 않는 종목입니다.');
+    }
+    const { currency } = security;
+    const amount = new Decimal(truncateByCurrency(input.amount, currency));
+
+    const sources = await this.purchaseDateBalanceRepository.find({
+      where: {
+        userId,
+        securityId,
+        securityCompany,
+        saleDate: IsNull(),
+        purchaseDate: LessThanOrEqual(saleDate),
+      },
+      order: { purchaseDate: 'ASC', sequence: 'ASC' },
+    });
+    const held = sources.reduce(
+      (acc, source) => acc.plus(source.amount),
+      new Decimal(0),
+    );
     if (amount.gt(held)) {
       throw new BadRequestException('매도 수량이 보유 수량보다 많습니다.');
     }
+
+    const results: PurchaseDateBalance[] = [];
+    let remaining = amount;
+    for (const source of sources) {
+      if (remaining.lte(0)) {
+        break;
+      }
+      const portion = Decimal.min(remaining, source.amount);
+      results.push(await this.sellFromRow(source, portion, saleDate, currency));
+      remaining = remaining.minus(portion);
+    }
+    return results;
+  }
+
+  /**
+   * 미매도 매수분 하나(source)에서 amount(≤ 보유 수량)만큼 saleDate로 매도 처리한다.
+   * - 전량: 같은 매도일·매수가·환율·증권사의 매도 행이 있으면 거기에 더하고 미매도 행은 삭제, 없으면 미매도 행에 saleDate만 저장
+   * - 일부: 미매도 행에서 빼고, 같은 매도 행이 있으면 거기에 더하고,
+   *   없으면 새 행(매수가·환율·증권사는 미매도 행 값, sequence는 같은 매수일 안의 max + 1)을 저장
+   */
+  private async sellFromRow(
+    source: PurchaseDateBalance,
+    amount: Decimal,
+    saleDate: string,
+    currency: Currency,
+  ): Promise<PurchaseDateBalance> {
+    const { userId, securityId, purchaseDate, sequence } = source;
+    const held = new Decimal(source.amount);
 
     // 매수가·구매 환율·증권사까지 같은 매도 행만 합친다
     const sold = await this.purchaseDateBalanceRepository.findOne({

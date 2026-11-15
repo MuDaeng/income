@@ -67,6 +67,7 @@ deploy/    Nginx 설정
 | GET | `/daily-securities` | 종목 일별 시세 |
 | POST | `/balance` | 매수 등록 (증권사 `securityCompany` 필수) |
 | POST | `/balance/sale` | 매도 등록 |
+| POST | `/balance/sale/bulk` | 증권사별 일괄매도 (매수일 오래된 순) |
 | GET | `/balance` | 통합잔고 (`securityCompany`를 주면 그 증권사만) |
 | GET | `/balance/purchases` | 종목 매수 내역 (`securityCompany`를 주면 그 증권사만) |
 | GET | `/balance/security-companies` | 매수 기록이 있는 증권사 목록 |

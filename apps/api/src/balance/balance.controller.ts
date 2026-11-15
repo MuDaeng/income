@@ -22,6 +22,10 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthUser } from '../auth/jwt.strategy.js';
 import { BalanceService } from './balance.service.js';
 import {
+  type BulkSellBalanceRequest,
+  bulkSellBalanceSchema,
+} from './bulk-sell-balance.schema.js';
+import {
   type DeletePurchaseRequest,
   deletePurchaseSchema,
 } from './delete-purchase.schema.js';
@@ -107,6 +111,20 @@ export class BalanceController {
     @Body({ schema: sellBalanceSchema }) body: SellBalanceRequest,
   ): Promise<PurchaseDateBalance> {
     return this.balanceService.sellBalance(user, body);
+  }
+
+  @Post('sale/bulk')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '증권사별 일괄매도: 해당 증권사의 미매도 매수분(매도일 이전 매수)을 매수일 오래된 순으로 수량만큼 매도',
+  })
+  bulkSell(
+    @CurrentUser() user: AuthUser,
+    @Body({ schema: bulkSellBalanceSchema }) body: BulkSellBalanceRequest,
+  ): Promise<PurchaseDateBalance[]> {
+    return this.balanceService.bulkSellBalance(user, body);
   }
 
   @Get()
