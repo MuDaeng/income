@@ -27,6 +27,8 @@ import type {
   IntegratedBalanceResponse,
 } from './integrated-balance.dto.js';
 import type { BulkSellBalanceRequest } from './bulk-sell-balance.schema.js';
+import { companyAmountsOf } from './company-amount.js';
+import type { CompanyAmountDto } from './company-amount.dto.js';
 import type { DeletePurchaseRequest } from './delete-purchase.schema.js';
 import type { IntegratedBalanceRequest } from './integrated-balance.schema.js';
 import type { RegisterBalanceRequest } from './register-balance.schema.js';
@@ -558,7 +560,18 @@ export class BalanceService {
         exchangeRateDate,
       });
     }
-    return { security: { id, symbol, name, currency }, items };
+    // 보유 수량 요약: 매도하지 않은 매수분만 (증권사 필터가 있으면 그 증권사만)
+    const unsold = purchases.filter((purchase) => purchase.saleDate === null);
+    const amount = unsold.reduce(
+      (acc, purchase) => acc.plus(purchase.amount),
+      new Decimal(0),
+    );
+    return {
+      security: { id, symbol, name, currency },
+      amount: truncateByCurrency(amount, currency),
+      companyAmounts: companyAmountsOf(unsold, currency),
+      items,
+    };
   }
 
   /**
@@ -666,6 +679,10 @@ export class BalanceService {
           total.krwCost,
           latest.closingPrice,
           exchangeRate?.closingRate ?? null,
+          companyAmountsOf(
+            purchases.filter((p) => p.securityId === securityId),
+            security.currency,
+          ),
         ),
       );
     }
@@ -721,6 +738,7 @@ export class BalanceService {
     krwCost: Decimal,
     closingPrice: string,
     usdRate: string | null,
+    companyAmounts: CompanyAmountDto[],
   ): BalanceItemDto {
     const { currency } = security;
     const averagePrice = amount.isZero()
@@ -733,6 +751,7 @@ export class BalanceService {
       name: security.name,
       currency,
       amount: truncateByCurrency(amount, currency),
+      companyAmounts,
       currentPrice: truncateByCurrency(closingPrice, currency),
       returnRate: returnRate(cost, evaluation),
     };

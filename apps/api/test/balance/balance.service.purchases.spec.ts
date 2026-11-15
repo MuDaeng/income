@@ -72,6 +72,9 @@ describe('BalanceService.getPurchases', () => {
     });
     expect(result).toEqual({
       security: AAPL,
+      // 보유 수량은 미매도분만 (매도한 KIWOOM 2주 제외)
+      amount: '11.500000',
+      companyAmounts: [{ securityCompany: 'TOSS', amount: '11.500000' }],
       items: [
         { purchaseDate: '2026-02-07', sequence: 2, securityCompany: 'TOSS', amount: '1.500000', price: '230.12', saleDate: null, exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
         { purchaseDate: '2026-02-07', sequence: 1, securityCompany: 'KIWOOM', amount: '2.000000', price: '231.00', saleDate: '2026-05-01', exchangeRate: '1445.1', exchangeRateDate: '2026-02-06' },
@@ -114,6 +117,25 @@ describe('BalanceService.getPurchases', () => {
     ]);
   });
 
+  it('보유 수량을 전체·증권사별(enum 순서)로 나누고, 매도분과 수량 0인 증권사는 뺀다', async () => {
+    securityRepository.findOneBy.mockResolvedValue(REIT);
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      { purchaseDate: '2026-03-02', sequence: 1, securityCompany: 'TOSS', amount: '7.000000', price: '4900.000000', saleDate: null },
+      { purchaseDate: '2026-02-02', sequence: 1, securityCompany: 'NH_INVESTMENT', amount: '4.000000', price: '4900.000000', saleDate: '2026-04-01' },
+      { purchaseDate: '2026-01-02', sequence: 2, securityCompany: 'MIRAE_ASSET', amount: '3.000000', price: '4900.000000', saleDate: null },
+      { purchaseDate: '2026-01-02', sequence: 1, securityCompany: 'TOSS', amount: '5.000000', price: '4900.000000', saleDate: null },
+    ]);
+
+    const result = await service.getPurchases({ id: 6 }, { securityId: REIT.id });
+
+    expect(result.amount).toBe('15');
+    expect(result.companyAmounts).toEqual([
+      { securityCompany: 'MIRAE_ASSET', amount: '3' },
+      { securityCompany: 'TOSS', amount: '12' },
+    ]);
+    expect(result.items).toHaveLength(4);
+  });
+
   it('securityCompany를 주면 그 증권사 매수분만 조회한다', async () => {
     securityRepository.findOneBy.mockResolvedValue(REIT);
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
@@ -146,6 +168,8 @@ describe('BalanceService.getPurchases', () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
     await expect(service.getPurchases({ id: 6 }, { securityId: REIT.id })).resolves.toEqual({
       security: REIT,
+      amount: '0',
+      companyAmounts: [],
       items: [],
     });
 

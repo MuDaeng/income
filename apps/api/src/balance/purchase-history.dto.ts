@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { SecurityCompany } from '@app/common';
 import { DailyPriceSecurityDto } from '../security/daily-price.dto.js';
+import { CompanyAmountDto } from './company-amount.dto.js';
 
 /** 수량·가격은 decimal 문자열 (KRW 정수; USD 수량은 소수 6자리, 가격은 소수 2자리 버림) */
 export class PurchaseHistoryItemDto {
@@ -41,6 +42,15 @@ export class PurchaseHistoryItemDto {
 export class PurchaseHistoryResponse {
   @ApiProperty({ type: DailyPriceSecurityDto })
   security: DailyPriceSecurityDto;
+
+  @ApiProperty({ description: '총 보유 수량 (매도하지 않은 매수분 합, securityCompany 필터를 주면 그 증권사만)' })
+  amount: string;
+
+  @ApiProperty({
+    type: [CompanyAmountDto],
+    description: '증권사별 보유 수량 (수량 있는 증권사만, enum 순서)',
+  })
+  companyAmounts: CompanyAmountDto[];
 
   @ApiProperty({ type: [PurchaseHistoryItemDto], description: '매수 내역 (매수일 최신순)' })
   items: PurchaseHistoryItemDto[];

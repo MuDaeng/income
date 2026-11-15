@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Currency } from '@app/common';
+import { CompanyAmountDto } from './company-amount.dto.js';
 
 /**
  * 통합잔고 응답 DTO. 금액·수량·수익률은 모두 decimal 문자열.
@@ -15,8 +16,14 @@ export class BalanceItemDto {
   @ApiProperty({ enum: Currency, description: '종목 통화' })
   currency: Currency;
 
-  @ApiProperty({ description: '총 보유 수량' })
+  @ApiProperty({ description: '총 보유 수량 (증권사별 수량의 합)' })
   amount: string;
+
+  @ApiProperty({
+    type: [CompanyAmountDto],
+    description: '증권사별 보유 수량 (수량 있는 증권사만, enum 순서. securityCompany 필터를 주면 그 증권사만)',
+  })
+  companyAmounts: CompanyAmountDto[];
 
   @ApiProperty({ description: '최신 종가 (종목 통화)' })
   currentPrice: string;

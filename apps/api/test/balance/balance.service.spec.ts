@@ -61,10 +61,10 @@ describe('BalanceService.getIntegratedBalance', () => {
     ]);
     // DB는 DECIMAL을 소수 6자리 문자열로 돌려준다
     purchaseDateBalanceRepository.find.mockResolvedValue([
-      { securityId: '005930', amount: '10.000000', price: '70000.000000' },
-      { securityId: '005930', amount: '10.000000', price: '80000.000000' },
-      { securityId: 'AAPL', amount: '2.000000', price: '100.500000' },
-      { securityId: 'AAPL', amount: '1.000000', price: '97.000000' },
+      { securityId: '005930', securityCompany: SecurityCompany.TOSS, amount: '10.000000', price: '70000.000000' },
+      { securityId: '005930', securityCompany: SecurityCompany.MIRAE_ASSET, amount: '10.000000', price: '80000.000000' },
+      { securityId: 'AAPL', securityCompany: SecurityCompany.KIWOOM, amount: '2.000000', price: '100.500000' },
+      { securityId: 'AAPL', securityCompany: SecurityCompany.KIWOOM, amount: '1.000000', price: '97.000000' },
     ]);
     dailySecurityRepository.findOne.mockImplementation(
       ({ where }: { where: { id: string } }) =>
@@ -87,6 +87,11 @@ describe('BalanceService.getIntegratedBalance', () => {
         name: '삼성전자',
         currency: Currency.KRW,
         amount: '20',
+        // 증권사별 수량은 enum 순서
+        companyAmounts: [
+          { securityCompany: SecurityCompany.MIRAE_ASSET, amount: '10' },
+          { securityCompany: SecurityCompany.TOSS, amount: '10' },
+        ],
         currentPrice: '90000',
         returnRate: '20.00',
         krwAveragePrice: '75000',
@@ -101,6 +106,9 @@ describe('BalanceService.getIntegratedBalance', () => {
         name: 'Apple',
         currency: Currency.USD,
         amount: '3.000000',
+        companyAmounts: [
+          { securityCompany: SecurityCompany.KIWOOM, amount: '3.000000' },
+        ],
         currentPrice: '110.000000',
         returnRate: '10.73', // 32 / 298
         krwAveragePrice: '139116', // 99.333… × 1400.5
