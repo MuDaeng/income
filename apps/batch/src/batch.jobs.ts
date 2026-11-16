@@ -3,11 +3,11 @@ import { Cron } from '@nestjs/schedule';
 import {
   BatchStatus,
   DOMESTIC_MARKETS,
-  ExchangeRateService,
+  ExchangeRateFetcher,
   OVERSEAS_MARKETS,
-  SecurityImportService,
+  SecurityFetcher,
   TokenProvider,
-  UsDailyPriceImportService,
+  UsDailyPriceFetcher,
 } from '@app/common';
 import { BatchHistoryService } from './batch-history.service.js';
 
@@ -45,9 +45,9 @@ export class BatchJobs {
   private readonly logger = new Logger(BatchJobs.name);
 
   constructor(
-    private readonly exchangeRateService: ExchangeRateService,
-    private readonly securityImportService: SecurityImportService,
-    private readonly usDailyPriceImportService: UsDailyPriceImportService,
+    private readonly exchangeRateFetcher: ExchangeRateFetcher,
+    private readonly securityFetcher: SecurityFetcher,
+    private readonly usDailyPriceFetcher: UsDailyPriceFetcher,
     private readonly tokenProvider: TokenProvider,
     private readonly batchHistoryService: BatchHistoryService,
   ) {}
@@ -61,7 +61,7 @@ export class BatchJobs {
     const to = new Date().toISOString().slice(0, 10);
     const from = daysBefore(to, EXCHANGE_RATE_LOOKBACK_DAYS);
     return this.run('exchange-rates', () =>
-      this.exchangeRateService.importFromMassive({ from, to }),
+      this.exchangeRateFetcher.importFromMassive({ from, to }),
     );
   }
 
@@ -72,7 +72,7 @@ export class BatchJobs {
   })
   importDomesticSecurities(): Promise<boolean> {
     return this.run('domestic-securities', () =>
-      this.securityImportService.importFromToss(DOMESTIC_MARKETS),
+      this.securityFetcher.importFromToss(DOMESTIC_MARKETS),
     );
   }
 
@@ -83,7 +83,7 @@ export class BatchJobs {
   })
   importOverseasSecurities(): Promise<boolean> {
     return this.run('overseas-securities', () =>
-      this.securityImportService.importFromToss(OVERSEAS_MARKETS),
+      this.securityFetcher.importFromToss(OVERSEAS_MARKETS),
     );
   }
 
@@ -101,7 +101,7 @@ export class BatchJobs {
     const to = daysBefore(todayIn(US_MARKET_TIME_ZONE), 1);
     const from = daysBefore(to, US_DAILY_PRICE_LOOKBACK_DAYS);
     return this.run('us-daily-prices', () =>
-      this.usDailyPriceImportService.importFromMassive({ from, to }),
+      this.usDailyPriceFetcher.importFromMassive({ from, to }),
     );
   }
 

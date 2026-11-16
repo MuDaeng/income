@@ -45,10 +45,10 @@ type DailySecurityRow = Pick<
   | 'lowestPrice'
 >;
 
-/** 미국 주식 일별 시세 가져오기 (api 수동 가져오기·batch 일배치 공용) */
+/** 미국 주식 일별 시세 가져오기 (batch us-daily-prices 잡) */
 @Injectable()
-export class UsDailyPriceImportService {
-  private readonly logger = new Logger(UsDailyPriceImportService.name);
+export class UsDailyPriceFetcher {
+  private readonly logger = new Logger(UsDailyPriceFetcher.name);
 
   constructor(
     @InjectRepository(DailySecurity)

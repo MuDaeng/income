@@ -8,8 +8,8 @@ import type {
 import {
   DOMESTIC_MARKETS,
   OVERSEAS_MARKETS,
-  SecurityImportService,
-} from '../../src/security/security-import.service.js';
+  SecurityFetcher,
+} from '../../src/security/security.fetcher.js';
 
 const stock = (
   isinCode: string,
@@ -23,16 +23,16 @@ const stock = (
   isinCode,
 });
 
-describe('SecurityImportService.importFromToss', () => {
+describe('SecurityFetcher.importFromToss', () => {
   const upsert = vi.fn();
   const listStocks =
     vi.fn<(market: TossMarket) => Promise<TossListedStock[]>>();
-  let service: SecurityImportService;
+  let service: SecurityFetcher;
 
   beforeEach(() => {
     vi.resetAllMocks();
     vi.useFakeTimers();
-    service = new SecurityImportService(
+    service = new SecurityFetcher(
       { upsert } as unknown as Repository<Security>,
       { listStocks } as unknown as TossClient,
     );

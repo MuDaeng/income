@@ -2,20 +2,20 @@ import { Currency, DailyExchangeRate } from '@app/common';
 import type { Repository } from 'typeorm';
 import type { MassiveClient } from '../../src/client/massive/massive.client.js';
 import type { MassiveAggregateBar } from '../../src/client/massive/massive.types.js';
-import { ExchangeRateService } from '../../src/security/exchange-rate.service.js';
+import { ExchangeRateFetcher } from '../../src/security/exchange-rate.fetcher.js';
 
 const DAY_MS = 86_400_000;
 const utc = (isoDate: string) => Date.parse(`${isoDate}T00:00:00Z`);
 
-describe('ExchangeRateService.importFromMassive', () => {
+describe('ExchangeRateFetcher.importFromMassive', () => {
   const upsert = vi.fn();
   const getDailyForexBars =
     vi.fn<(ticker: string, from: string, to: string) => Promise<MassiveAggregateBar[]>>();
-  let service: ExchangeRateService;
+  let service: ExchangeRateFetcher;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    service = new ExchangeRateService(
+    service = new ExchangeRateFetcher(
       { upsert } as unknown as Repository<DailyExchangeRate>,
       { getDailyForexBars } as unknown as MassiveClient,
     );

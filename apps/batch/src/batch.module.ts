@@ -4,10 +4,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   BatchHistory,
   DatabaseModule,
-  ExchangeRateImportModule,
   SecurityImportModule,
   TokenModule,
-  UsDailyPriceImportModule,
 } from '@app/common';
 import { BatchHistoryService } from './batch-history.service.js';
 import { BatchJobs } from './batch.jobs.js';
@@ -17,9 +15,7 @@ import { BatchJobs } from './batch.jobs.js';
   imports: [
     DatabaseModule,
     ScheduleModule.forRoot(),
-    ExchangeRateImportModule,
     SecurityImportModule,
-    UsDailyPriceImportModule,
     TokenModule,
     TypeOrmModule.forFeature([BatchHistory]),
   ],

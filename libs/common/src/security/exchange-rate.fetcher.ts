@@ -29,7 +29,7 @@ export interface ImportExchangeRatesResult {
 }
 
 @Injectable()
-export class ExchangeRateService {
+export class ExchangeRateFetcher {
   constructor(
     @InjectRepository(DailyExchangeRate)
     private readonly dailyExchangeRateRepository: Repository<DailyExchangeRate>,

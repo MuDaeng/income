@@ -57,7 +57,7 @@ export interface ImportSecuritiesResult {
 
 /** Toss 상장 종목 목록을 security에 넣는다. api(수동 가져오기)와 batch(일배치)가 같이 쓴다 */
 @Injectable()
-export class SecurityImportService {
+export class SecurityFetcher {
   constructor(
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,

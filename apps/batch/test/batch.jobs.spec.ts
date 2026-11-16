@@ -3,10 +3,10 @@ import {
   BatchStatus,
   DOMESTIC_MARKETS,
   OVERSEAS_MARKETS,
-  type ExchangeRateService,
-  type SecurityImportService,
+  type ExchangeRateFetcher,
+  type SecurityFetcher,
   type TokenProvider,
-  type UsDailyPriceImportService,
+  type UsDailyPriceFetcher,
 } from '@app/common';
 import { BATCH_TIME_ZONE, BatchJobs } from '../src/batch.jobs.js';
 import type { BatchHistoryService } from '../src/batch-history.service.js';
@@ -42,11 +42,11 @@ describe('BatchJobs', () => {
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
     jobs = new BatchJobs(
-      { importFromMassive } as unknown as ExchangeRateService,
-      { importFromToss } as unknown as SecurityImportService,
+      { importFromMassive } as unknown as ExchangeRateFetcher,
+      { importFromToss } as unknown as SecurityFetcher,
       {
         importFromMassive: importUsFromMassive,
-      } as unknown as UsDailyPriceImportService,
+      } as unknown as UsDailyPriceFetcher,
       { deleteExpiredRefreshTokens } as unknown as TokenProvider,
       { start, finish } as unknown as BatchHistoryService,
     );

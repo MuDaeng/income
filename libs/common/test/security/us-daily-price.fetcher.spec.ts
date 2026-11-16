@@ -5,7 +5,7 @@ import {
   MassiveDataNotReadyException,
 } from '../../src/client/massive/massive.client.js';
 import type { MassiveGroupedBar } from '../../src/client/massive/massive.types.js';
-import { UsDailyPriceImportService } from '../../src/security/us-daily-price-import.service.js';
+import { UsDailyPriceFetcher } from '../../src/security/us-daily-price.fetcher.js';
 
 const bar = (T: string, c = 190.1234567): MassiveGroupedBar => ({
   T,
@@ -16,11 +16,11 @@ const bar = (T: string, c = 190.1234567): MassiveGroupedBar => ({
   t: 0,
 });
 
-describe('UsDailyPriceImportService.importFromMassive', () => {
+describe('UsDailyPriceFetcher.importFromMassive', () => {
   const upsert = vi.fn();
   const find = vi.fn();
   const getGroupedDailyStocks = vi.fn<(date: string) => Promise<MassiveGroupedBar[]>>();
-  let service: UsDailyPriceImportService;
+  let service: UsDailyPriceFetcher;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -30,7 +30,7 @@ describe('UsDailyPriceImportService.importFromMassive', () => {
       { id: 'US0846707026', symbol: 'BRK.B' },
     ]);
     getGroupedDailyStocks.mockResolvedValue([]);
-    service = new UsDailyPriceImportService(
+    service = new UsDailyPriceFetcher(
       { upsert } as unknown as Repository<DailySecurity>,
       { find } as unknown as Repository<Security>,
       { getGroupedDailyStocks } as unknown as MassiveClient,
