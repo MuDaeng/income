@@ -66,7 +66,7 @@ describe('BalanceService.deletePurchase', () => {
   it('User 행을 잠근 뒤 로그인 사용자의 (종목, 매수일, sequence) 행만 삭제한다', async () => {
     purchaseDateBalanceRepository.existsBy.mockResolvedValue(true);
 
-    await service.deletePurchase({ id: 1 }, input);
+    await service.deletePurchase({ id: 1, rules: [] }, input);
 
     expect(userRepository.findOne).toHaveBeenCalledWith({
       where: { id: 1 },
@@ -81,7 +81,7 @@ describe('BalanceService.deletePurchase', () => {
   it('같은 종목의 매수분이 남아 있으면 UserBalance는 그대로 둔다', async () => {
     purchaseDateBalanceRepository.existsBy.mockResolvedValue(true);
 
-    await service.deletePurchase({ id: 1 }, input);
+    await service.deletePurchase({ id: 1, rules: [] }, input);
 
     expect(purchaseDateBalanceRepository.existsBy).toHaveBeenCalledWith({
       userId: 1,
@@ -93,7 +93,7 @@ describe('BalanceService.deletePurchase', () => {
   it('마지막 매수분을 지우면 UserBalance도 삭제한다', async () => {
     purchaseDateBalanceRepository.existsBy.mockResolvedValue(false);
 
-    await service.deletePurchase({ id: 1 }, input);
+    await service.deletePurchase({ id: 1, rules: [] }, input);
 
     expect(userBalanceRepository.delete).toHaveBeenCalledWith({
       userId: 1,
@@ -104,7 +104,7 @@ describe('BalanceService.deletePurchase', () => {
   it('삭제된 행이 없으면 404, UserBalance는 건드리지 않는다', async () => {
     purchaseDateBalanceRepository.delete.mockResolvedValue({ affected: 0 });
 
-    await expect(service.deletePurchase({ id: 1 }, input)).rejects.toThrow(
+    await expect(service.deletePurchase({ id: 1, rules: [] }, input)).rejects.toThrow(
       NotFoundException,
     );
     expect(purchaseDateBalanceRepository.existsBy).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe('BalanceService.deletePurchase', () => {
   it('사용자가 없으면 401, 아무것도 삭제하지 않는다', async () => {
     userRepository.findOne.mockResolvedValue(null);
 
-    await expect(service.deletePurchase({ id: 1 }, input)).rejects.toThrow(
+    await expect(service.deletePurchase({ id: 1, rules: [] }, input)).rejects.toThrow(
       UnauthorizedException,
     );
     expect(purchaseDateBalanceRepository.delete).not.toHaveBeenCalled();

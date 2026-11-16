@@ -3,13 +3,13 @@ import {
   BatchStatus,
   DOMESTIC_MARKETS,
   OVERSEAS_MARKETS,
+  type BatchHistoryWriter,
   type ExchangeRateFetcher,
   type SecurityFetcher,
   type TokenProvider,
   type UsDailyPriceFetcher,
 } from '@app/common';
-import { BATCH_TIME_ZONE, BatchJobs } from '../src/batch.jobs.js';
-import type { BatchHistoryService } from '../src/batch-history.service.js';
+import { BATCH_TIME_ZONE, BatchJobs } from '../../src/scheduler/batch.jobs.js';
 
 /** @Cron이 남기는 메타데이터 (@nestjs/schedule 내부 키) */
 const cronOf = (method: keyof BatchJobs) => {
@@ -48,7 +48,7 @@ describe('BatchJobs', () => {
         importFromMassive: importUsFromMassive,
       } as unknown as UsDailyPriceFetcher,
       { deleteExpiredRefreshTokens } as unknown as TokenProvider,
-      { start, finish } as unknown as BatchHistoryService,
+      { start, finish } as unknown as BatchHistoryWriter,
     );
     start.mockResolvedValue(HISTORY);
   });

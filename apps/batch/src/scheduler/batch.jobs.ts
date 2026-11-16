@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import {
+  BatchHistoryWriter,
   BatchStatus,
   DOMESTIC_MARKETS,
   ExchangeRateFetcher,
@@ -9,7 +10,6 @@ import {
   TokenProvider,
   UsDailyPriceFetcher,
 } from '@app/common';
-import { BatchHistoryService } from './batch-history.service.js';
 
 /** 모든 잡의 실행 시각 기준 */
 export const BATCH_TIME_ZONE = 'Asia/Seoul';
@@ -49,7 +49,7 @@ export class BatchJobs {
     private readonly securityFetcher: SecurityFetcher,
     private readonly usDailyPriceFetcher: UsDailyPriceFetcher,
     private readonly tokenProvider: TokenProvider,
-    private readonly batchHistoryService: BatchHistoryService,
+    private readonly batchHistoryWriter: BatchHistoryWriter,
   ) {}
 
   @Cron('0 16 * * *', {
@@ -137,11 +137,11 @@ export class BatchJobs {
   private async run(name: BatchJobName, job: () => Promise<unknown>) {
     const startedAt = Date.now();
     this.logger.log(`[${name}] 시작`);
-    const history = await this.batchHistoryService.start(name);
+    const history = await this.batchHistoryWriter.start(name);
     try {
       const result = JSON.stringify(await job()) ?? null;
       this.logger.log(`[${name}] 완료 ${Date.now() - startedAt}ms ${result}`);
-      await this.batchHistoryService.finish(history, BatchStatus.SUCCESS, result);
+      await this.batchHistoryWriter.finish(history, BatchStatus.SUCCESS, result);
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -149,7 +149,7 @@ export class BatchJobs {
         `[${name}] 실패 ${Date.now() - startedAt}ms: ${message}`,
         error instanceof Error ? error.stack : undefined,
       );
-      await this.batchHistoryService.finish(history, BatchStatus.FAILED, message);
+      await this.batchHistoryWriter.finish(history, BatchStatus.FAILED, message);
       return false;
     }
   }

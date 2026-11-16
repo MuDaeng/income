@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { BatchHistory, BatchStatus } from '@app/common';
+import { BatchHistory } from './batch-history.entity.js';
+import { BatchStatus } from './batch-status.enum.js';
 
 /** result 컬럼에 남길 최대 길이 */
 export const BATCH_RESULT_MAX_LENGTH = 10_000;
@@ -11,8 +12,8 @@ export const BATCH_RESULT_MAX_LENGTH = 10_000;
  * (start가 실패하면 null을 돌려주고, finish는 null이면 아무것도 하지 않는다).
  */
 @Injectable()
-export class BatchHistoryService {
-  private readonly logger = new Logger(BatchHistoryService.name);
+export class BatchHistoryWriter {
+  private readonly logger = new Logger(BatchHistoryWriter.name);
 
   constructor(
     @InjectRepository(BatchHistory)

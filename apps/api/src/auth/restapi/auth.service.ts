@@ -7,9 +7,11 @@ import {
   authConfig,
   Oauth,
   OAuthType,
+  Rule,
   Token,
   TokenProvider,
   User,
+  UserRule,
 } from '@app/common';
 import type { AuthUser } from './jwt.strategy.js';
 import { RefreshTokenContext } from './refresh-token.context.js';
@@ -23,6 +25,8 @@ export class AuthService {
     private readonly oauthRepository: Repository<Oauth>,
     @InjectRepository(Token)
     private readonly tokenRepository: Repository<Token>,
+    @InjectRepository(UserRule)
+    private readonly userRuleRepository: Repository<UserRule>,
     private readonly tokenProvider: TokenProvider,
     private readonly refreshTokenContext: RefreshTokenContext,
     @Inject(authConfig.KEY)
@@ -42,6 +46,10 @@ export class AuthService {
     const user = await this.userRepository.save(this.userRepository.create());
     await this.oauthRepository.save(
       this.oauthRepository.create({ user, type, name }),
+    );
+    // 새 사용자는 일반 사용자 권한으로 등록 (관리자는 DB에서 admin 행을 추가)
+    await this.userRuleRepository.save(
+      this.userRuleRepository.create({ id: user.id, rule: Rule.USER }),
     );
     return user;
   }

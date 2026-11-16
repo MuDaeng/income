@@ -3,13 +3,13 @@ import type { Repository } from 'typeorm';
 import { BatchHistory, BatchStatus } from '@app/common';
 import {
   BATCH_RESULT_MAX_LENGTH,
-  BatchHistoryService,
-} from '../src/batch-history.service.js';
+  BatchHistoryWriter,
+} from '../../src/batch/batch-history.writer.js';
 
-describe('BatchHistoryService', () => {
+describe('BatchHistoryWriter', () => {
   const save = vi.fn();
   const create = vi.fn((value: Partial<BatchHistory>) => ({ ...value }));
-  let service: BatchHistoryService;
+  let service: BatchHistoryWriter;
   let errorLog: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -18,7 +18,7 @@ describe('BatchHistoryService', () => {
     errorLog = vi
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
-    service = new BatchHistoryService({
+    service = new BatchHistoryWriter({
       save,
       create,
     } as unknown as Repository<BatchHistory>);

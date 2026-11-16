@@ -115,12 +115,12 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     });
 
     const result = await service.getPeriodReturn(
-      { id: 1 },
+      { id: 1, rules: [] },
       { from: '2026-01-01', to: '2026-11-30' },
     );
 
     expect(dividendHistoryCalculator.calculate).toHaveBeenCalledWith(
-      { id: 1 },
+      { id: 1, rules: [] },
       { from: '2026-01-01', to: '2026-11-30' },
     );
     expect(result.exchangeRate).toBe('1350');
@@ -199,7 +199,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
 
     const result = await service.getPeriodReturn(
-      { id: 1 },
+      { id: 1, rules: [] },
       { from: '2026-01-01', to: '2026-11-30' },
     );
 
@@ -218,7 +218,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
 
     await expect(
-      service.getPeriodReturn({ id: 1 }, { from: '2026-01-01', to: '2026-11-30' }),
+      service.getPeriodReturn({ id: 1, rules: [] }, { from: '2026-01-01', to: '2026-11-30' }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -227,7 +227,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
 
     const result = await service.getPeriodReturn(
-      { id: 1 },
+      { id: 1, rules: [] },
       { from: '2026-01-01', to: '2026-11-30' },
     );
 
@@ -249,16 +249,16 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
     const range = { from: '2026-01-01', to: '2026-11-30' };
 
-    await service.getPeriodReturn({ id: 1 }, { ...range, securityCompany: SecurityCompany.KIWOOM });
-    await service.getPeriodReturn({ id: 1 }, range);
+    await service.getPeriodReturn({ id: 1, rules: [] }, { ...range, securityCompany: SecurityCompany.KIWOOM });
+    await service.getPeriodReturn({ id: 1, rules: [] }, range);
 
     expect(purchaseDateBalanceRepository.find.mock.calls).toEqual([
       [{ where: { userId: 1, securityCompany: SecurityCompany.KIWOOM } }],
       [{ where: { userId: 1 } }],
     ]);
     expect(dividendHistoryCalculator.calculate.mock.calls).toEqual([
-      [{ id: 1 }, { ...range, securityCompany: SecurityCompany.KIWOOM }],
-      [{ id: 1 }, range],
+      [{ id: 1, rules: [] }, { ...range, securityCompany: SecurityCompany.KIWOOM }],
+      [{ id: 1, rules: [] }, range],
     ]);
   });
 });

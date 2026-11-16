@@ -88,7 +88,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
   });
 
   it('잔고를 등록하고 그 종목의 배당·시세를 갱신한다', async () => {
-    const saved = await service.registerBalance({ id: 1 }, INPUT);
+    const saved = await service.registerBalance({ id: 1, rules: [] }, INPUT);
 
     expect(securityRefresher.refresh).toHaveBeenCalledWith(SAMSUNG);
     expect(saved).toMatchObject({
@@ -102,14 +102,14 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
   it('매수일 시세가 없어 등록이 실패하면 배당을 조회하지 않는다', async () => {
     dailySecurityRepository.findOneBy.mockResolvedValue(null);
 
-    await expect(service.registerBalance({ id: 1 }, INPUT)).rejects.toThrow(
+    await expect(service.registerBalance({ id: 1, rules: [] }, INPUT)).rejects.toThrow(
       '해당 매수일의 시세가 없습니다.',
     );
     expect(securityRefresher.refresh).not.toHaveBeenCalled();
   });
 
   it('등록을 저장한 뒤에 배당을 갱신한다', async () => {
-    await service.registerBalance({ id: 1 }, INPUT);
+    await service.registerBalance({ id: 1, rules: [] }, INPUT);
 
     expect(purchaseDateBalanceRepository.save.mock.invocationCallOrder[0]).toBeLessThan(
       securityRefresher.refresh.mock.invocationCallOrder[0],
@@ -119,7 +119,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
   it('없는 종목이면 배당을 조회하지 않는다', async () => {
     securityRepository.findOneBy.mockResolvedValue(null);
 
-    await expect(service.registerBalance({ id: 1 }, INPUT)).rejects.toThrow(
+    await expect(service.registerBalance({ id: 1, rules: [] }, INPUT)).rejects.toThrow(
       '존재하지 않는 종목입니다.',
     );
     expect(securityRefresher.refresh).not.toHaveBeenCalled();
@@ -139,7 +139,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
 
     it('USD 종목은 입력한 환율을 소수 6자리로 버려서 저장한다', async () => {
       const saved = await service.registerBalance(
-        { id: 1 },
+        { id: 1, rules: [] },
         { ...USD_INPUT, exchangeRate: '1401.12345678' },
       );
 
@@ -153,7 +153,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
         closingRate: '1398.5',
       });
 
-      const saved = await service.registerBalance({ id: 1 }, USD_INPUT);
+      const saved = await service.registerBalance({ id: 1, rules: [] }, USD_INPUT);
 
       expect(dailyExchangeRateRepository.findOne).toHaveBeenCalledWith({
         where: { currency: Currency.USD, date: LessThanOrEqual('2026-11-05') },
@@ -165,7 +165,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
     it('입력도 매수일 환율도 없으면 null로 저장한다', async () => {
       dailyExchangeRateRepository.findOne.mockResolvedValue(null);
 
-      const saved = await service.registerBalance({ id: 1 }, USD_INPUT);
+      const saved = await service.registerBalance({ id: 1, rules: [] }, USD_INPUT);
 
       expect(saved).toMatchObject({ exchangeRate: null });
     });
@@ -178,7 +178,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
       });
 
       const saved = await service.registerBalance(
-        { id: 1 },
+        { id: 1, rules: [] },
         { ...INPUT, exchangeRate: '1400' },
       );
 

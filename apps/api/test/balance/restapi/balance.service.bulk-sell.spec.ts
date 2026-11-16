@@ -97,7 +97,7 @@ describe('BalanceService.bulkSellBalance', () => {
       row('2026-11-01', 1, '5'),
     ]);
 
-    await service.bulkSellBalance({ id: 1 }, input('1'));
+    await service.bulkSellBalance({ id: 1, rules: [] }, input('1'));
 
     expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
       where: {
@@ -120,7 +120,7 @@ describe('BalanceService.bulkSellBalance', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(first);
 
-    const result = await service.bulkSellBalance({ id: 1 }, input('2'));
+    const result = await service.bulkSellBalance({ id: 1, rules: [] }, input('2'));
 
     expect(first.amount).toBe('3');
     expect(second.amount).toBe('4');
@@ -150,7 +150,7 @@ describe('BalanceService.bulkSellBalance', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(second);
 
-    const result = await service.bulkSellBalance({ id: 1 }, input('7'));
+    const result = await service.bulkSellBalance({ id: 1, rules: [] }, input('7'));
 
     expect(result).toHaveLength(2);
     // 첫 행 전량: saleDate만 저장
@@ -179,7 +179,7 @@ describe('BalanceService.bulkSellBalance', () => {
     const second = row('2026-11-03', 1, '4');
     purchaseDateBalanceRepository.find.mockResolvedValue([first, second]);
 
-    const result = await service.bulkSellBalance({ id: 1 }, input('9'));
+    const result = await service.bulkSellBalance({ id: 1, rules: [] }, input('9'));
 
     expect(result.map((r) => [r.amount, r.saleDate])).toEqual([
       ['5', '2026-11-08'],
@@ -197,7 +197,7 @@ describe('BalanceService.bulkSellBalance', () => {
       saleDate: '2026-11-08',
     });
 
-    const result = await service.bulkSellBalance({ id: 1 }, input('5'));
+    const result = await service.bulkSellBalance({ id: 1, rules: [] }, input('5'));
 
     expect(purchaseDateBalanceRepository.delete).toHaveBeenCalledWith({
       userId: 1,
@@ -215,7 +215,7 @@ describe('BalanceService.bulkSellBalance', () => {
     ]);
 
     await expect(
-      service.bulkSellBalance({ id: 1 }, input('10')),
+      service.bulkSellBalance({ id: 1, rules: [] }, input('10')),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(purchaseDateBalanceRepository.save).not.toHaveBeenCalled();
     expect(purchaseDateBalanceRepository.delete).not.toHaveBeenCalled();
@@ -225,7 +225,7 @@ describe('BalanceService.bulkSellBalance', () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
     await expect(
-      service.bulkSellBalance({ id: 1 }, input('1')),
+      service.bulkSellBalance({ id: 1, rules: [] }, input('1')),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -233,7 +233,7 @@ describe('BalanceService.bulkSellBalance', () => {
     securityRepository.findOneBy.mockResolvedValue(null);
 
     await expect(
-      service.bulkSellBalance({ id: 1 }, input('1')),
+      service.bulkSellBalance({ id: 1, rules: [] }, input('1')),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(purchaseDateBalanceRepository.find).not.toHaveBeenCalled();
   });
@@ -252,7 +252,7 @@ describe('BalanceService.bulkSellBalance', () => {
       .mockResolvedValueOnce(second);
 
     const result = await service.bulkSellBalance(
-      { id: 1 },
+      { id: 1, rules: [] },
       input('0.5000009'),
     );
 

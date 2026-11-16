@@ -66,7 +66,7 @@ describe('BalanceService.getPurchases', () => {
         ),
     );
 
-    const result = await service.getPurchases({ id: 6 }, { securityId: AAPL.id });
+    const result = await service.getPurchases({ id: 6, rules: [] }, { securityId: AAPL.id });
 
     expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
       where: { userId: 6, securityId: AAPL.id },
@@ -102,7 +102,7 @@ describe('BalanceService.getPurchases', () => {
       closingRate: '1441.570000',
     });
 
-    const result = await service.getPurchases({ id: 6 }, { securityId: AAPL.id });
+    const result = await service.getPurchases({ id: 6, rules: [] }, { securityId: AAPL.id });
 
     expect(dailyExchangeRateRepository.findOne).toHaveBeenCalledTimes(1);
     expect(result.items.map(({ exchangeRate, exchangeRateDate }) => ({ exchangeRate, exchangeRateDate }))).toEqual([
@@ -117,7 +117,7 @@ describe('BalanceService.getPurchases', () => {
       { purchaseDate: '2026-01-02', sequence: 1, securityCompany: 'MIRAE_ASSET', amount: '5000.000000', price: '4900.000000', saleDate: null },
     ]);
 
-    const result = await service.getPurchases({ id: 6 }, { securityId: REIT.id });
+    const result = await service.getPurchases({ id: 6, rules: [] }, { securityId: REIT.id });
 
     expect(dailyExchangeRateRepository.findOne).not.toHaveBeenCalled();
     expect(result.items).toEqual([
@@ -134,7 +134,7 @@ describe('BalanceService.getPurchases', () => {
       { purchaseDate: '2026-01-02', sequence: 1, securityCompany: 'TOSS', amount: '5.000000', price: '4900.000000', saleDate: null },
     ]);
 
-    const result = await service.getPurchases({ id: 6 }, { securityId: REIT.id });
+    const result = await service.getPurchases({ id: 6, rules: [] }, { securityId: REIT.id });
 
     expect(result.amount).toBe('15');
     expect(result.companyAmounts).toEqual([
@@ -149,7 +149,7 @@ describe('BalanceService.getPurchases', () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
     await service.getPurchases(
-      { id: 6 },
+      { id: 6, rules: [] },
       { securityId: REIT.id, securityCompany: SecurityCompany.TOSS },
     );
 
@@ -163,7 +163,7 @@ describe('BalanceService.getPurchases', () => {
     securityRepository.findOneBy.mockResolvedValue(REIT);
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    await service.getPurchases({ id: 6 }, { securityId: REIT.id });
+    await service.getPurchases({ id: 6, rules: [] }, { securityId: REIT.id });
 
     expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
       where: { userId: 6, securityId: REIT.id },
@@ -174,7 +174,7 @@ describe('BalanceService.getPurchases', () => {
   it('매수 내역이 없으면 빈 목록, 종목이 없으면 404', async () => {
     securityRepository.findOneBy.mockResolvedValueOnce(REIT);
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
-    await expect(service.getPurchases({ id: 6 }, { securityId: REIT.id })).resolves.toEqual({
+    await expect(service.getPurchases({ id: 6, rules: [] }, { securityId: REIT.id })).resolves.toEqual({
       security: REIT,
       amount: '0',
       companyAmounts: [],
@@ -183,7 +183,7 @@ describe('BalanceService.getPurchases', () => {
 
     securityRepository.findOneBy.mockResolvedValueOnce(null);
     await expect(
-      service.getPurchases({ id: 6 }, { securityId: 'NOPE' }),
+      service.getPurchases({ id: 6, rules: [] }, { securityId: 'NOPE' }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

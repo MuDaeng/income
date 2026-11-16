@@ -1,7 +1,14 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CommonModule, Oauth, Token, TokenModule, User } from '@app/common';
+import {
+  CommonModule,
+  Oauth,
+  Token,
+  TokenModule,
+  User,
+  UserRule,
+} from '@app/common';
 import { AuthController } from './restapi/auth.controller.js';
 import { AuthService } from './restapi/auth.service.js';
 import { GoogleStrategy } from './restapi/google.strategy.js';
@@ -18,7 +25,7 @@ import { RefreshTokenGuard } from './restapi/refresh-token.guard.js';
     PassportModule,
     // JWT 발급·검증(TokenProvider)은 @app/common의 TokenModule
     TokenModule,
-    TypeOrmModule.forFeature([Oauth, User, Token]),
+    TypeOrmModule.forFeature([Oauth, User, Token, UserRule]),
   ],
   controllers: [AuthController],
   providers: [

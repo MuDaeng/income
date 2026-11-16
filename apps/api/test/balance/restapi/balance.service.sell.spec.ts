@@ -100,7 +100,7 @@ describe('BalanceService.sellBalance', () => {
   it('미매도 대상은 sequence와 saleDate IS NULL로, 같은 매도일 행은 매수가·구매 환율·증권사까지 같은 것으로 찾는다', async () => {
     givenRows(unsold('10.000000'), null);
 
-    await service.sellBalance({ id: 1 }, input('10'));
+    await service.sellBalance({ id: 1, rules: [] }, input('10'));
 
     expect(purchaseDateBalanceRepository.findOne).toHaveBeenNthCalledWith(1, {
       where: { ...KEY, sequence: 1, saleDate: IsNull() },
@@ -128,7 +128,7 @@ describe('BalanceService.sellBalance', () => {
       { ...KEY, sequence: 1 },
     );
 
-    const result = await service.sellBalance({ id: 1 }, input('3'));
+    const result = await service.sellBalance({ id: 1, rules: [] }, input('3'));
 
     expect(purchaseDateBalanceRepository.findOne).toHaveBeenNthCalledWith(2, {
       where: {
@@ -150,7 +150,7 @@ describe('BalanceService.sellBalance', () => {
   it('전량, 같은 매도일 행 없음 → 미매도 행에 saleDate만 저장', async () => {
     givenRows(unsold('10.000000'), null);
 
-    const result = await service.sellBalance({ id: 1 }, input('10'));
+    const result = await service.sellBalance({ id: 1, rules: [] }, input('10'));
 
     expect(result).toMatchObject({
       sequence: 1,
@@ -170,7 +170,7 @@ describe('BalanceService.sellBalance', () => {
       saleDate: '2026-11-08',
     });
 
-    const result = await service.sellBalance({ id: 1 }, input('7'));
+    const result = await service.sellBalance({ id: 1, rules: [] }, input('7'));
 
     expect(result).toMatchObject({ sequence: 2, amount: '10' });
     expect(purchaseDateBalanceRepository.delete).toHaveBeenCalledWith({
@@ -182,7 +182,7 @@ describe('BalanceService.sellBalance', () => {
   it('일부, 같은 매도일 행 없음 → 미매도 행 감소 + 새 행(sequence max + 1, 매수가 유지)', async () => {
     givenRows(unsold('10.000000'), null, { ...KEY, sequence: 4 });
 
-    const result = await service.sellBalance({ id: 1 }, input('3'));
+    const result = await service.sellBalance({ id: 1, rules: [] }, input('3'));
 
     expect(purchaseDateBalanceRepository.save).toHaveBeenNthCalledWith(
       1,
@@ -208,7 +208,7 @@ describe('BalanceService.sellBalance', () => {
       saleDate: '2026-11-08',
     });
 
-    const result = await service.sellBalance({ id: 1 }, input('4'));
+    const result = await service.sellBalance({ id: 1, rules: [] }, input('4'));
 
     expect(purchaseDateBalanceRepository.save).toHaveBeenNthCalledWith(
       1,
@@ -225,7 +225,7 @@ describe('BalanceService.sellBalance', () => {
     });
     givenRows(unsold('1.500000'), null, { ...KEY, sequence: 1 });
 
-    const result = await service.sellBalance({ id: 1 }, input('0.12345678'));
+    const result = await service.sellBalance({ id: 1, rules: [] }, input('0.12345678'));
 
     expect(purchaseDateBalanceRepository.save).toHaveBeenNthCalledWith(
       1,
@@ -237,7 +237,7 @@ describe('BalanceService.sellBalance', () => {
   it('보유 수량보다 많으면 400, 아무것도 저장하지 않음', async () => {
     givenRows(unsold('10.000000'), null);
 
-    await expect(service.sellBalance({ id: 1 }, input('11'))).rejects.toThrow(
+    await expect(service.sellBalance({ id: 1, rules: [] }, input('11'))).rejects.toThrow(
       BadRequestException,
     );
     expect(purchaseDateBalanceRepository.save).not.toHaveBeenCalled();
@@ -246,7 +246,7 @@ describe('BalanceService.sellBalance', () => {
   it('미매도 대상이 없으면 404', async () => {
     givenRows(null, null);
 
-    await expect(service.sellBalance({ id: 1 }, input('1'))).rejects.toThrow(
+    await expect(service.sellBalance({ id: 1, rules: [] }, input('1'))).rejects.toThrow(
       NotFoundException,
     );
   });

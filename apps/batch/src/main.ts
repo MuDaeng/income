@@ -7,7 +7,7 @@ import {
   BATCH_TIME_ZONE,
   BatchJobs,
   type BatchJobName,
-} from './batch.jobs.js';
+} from './scheduler/batch.jobs.js';
 import { BatchModule } from './batch.module.js';
 
 /**

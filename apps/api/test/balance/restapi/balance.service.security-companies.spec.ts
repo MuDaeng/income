@@ -52,7 +52,7 @@ describe('BalanceService.getSecurityCompanies', () => {
       { securityCompany: SecurityCompany.TOSS },
     ]);
 
-    const result = await service.getSecurityCompanies({ id: 3 });
+    const result = await service.getSecurityCompanies({ id: 3, rules: [] });
 
     expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
       where: { userId: 3 },
@@ -70,7 +70,7 @@ describe('BalanceService.getSecurityCompanies', () => {
   it('매수 기록이 없으면 빈 배열', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    await expect(service.getSecurityCompanies({ id: 3 })).resolves.toEqual({
+    await expect(service.getSecurityCompanies({ id: 3, rules: [] })).resolves.toEqual({
       securityCompanies: [],
     });
   });

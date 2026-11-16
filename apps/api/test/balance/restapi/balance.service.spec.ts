@@ -87,7 +87,7 @@ describe('BalanceService.getIntegratedBalance', () => {
       closingRate: '1400.500000',
     });
 
-    const result = await service.getIntegratedBalance({ id: 1 });
+    const result = await service.getIntegratedBalance({ id: 1, rules: [] });
 
     expect(result.items).toEqual([
       {
@@ -177,7 +177,7 @@ describe('BalanceService.getIntegratedBalance', () => {
         ),
     );
 
-    const result = await service.getIntegratedBalance({ id: 1 });
+    const result = await service.getIntegratedBalance({ id: 1, rules: [] });
 
     expect(result.items[0]).toMatchObject({
       krwPurchaseAmount: '395000', // 260000 + 135000
@@ -212,7 +212,7 @@ describe('BalanceService.getIntegratedBalance', () => {
         ),
     );
 
-    await expect(service.getIntegratedBalance({ id: 1 })).rejects.toThrow(
+    await expect(service.getIntegratedBalance({ id: 1, rules: [] })).rejects.toThrow(
       '2020-01-02 이전의 USD 환율 정보가 없습니다.',
     );
   });
@@ -231,7 +231,7 @@ describe('BalanceService.getIntegratedBalance', () => {
       closingPrice: '77000.000000',
     });
 
-    const result = await service.getIntegratedBalance({ id: 1 });
+    const result = await service.getIntegratedBalance({ id: 1, rules: [] });
 
     expect(result.items.map((item) => item.securityId)).toEqual(['005930']);
     expect(result.total).toEqual({
@@ -259,7 +259,7 @@ describe('BalanceService.getIntegratedBalance', () => {
     });
 
     const result = await service.getIntegratedBalance(
-      { id: 1 },
+      { id: 1, rules: [] },
       { securityCompany: SecurityCompany.KIWOOM },
     );
 
@@ -278,7 +278,7 @@ describe('BalanceService.getIntegratedBalance', () => {
     userBalanceRepository.find.mockResolvedValue([]);
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    await service.getIntegratedBalance({ id: 1 }, {});
+    await service.getIntegratedBalance({ id: 1, rules: [] }, {});
 
     expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
       where: { userId: 1, saleDate: IsNull() },
@@ -289,7 +289,7 @@ describe('BalanceService.getIntegratedBalance', () => {
     userBalanceRepository.find.mockResolvedValue([]);
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    const result = await service.getIntegratedBalance({ id: 1 });
+    const result = await service.getIntegratedBalance({ id: 1, rules: [] });
 
     expect(result.items).toEqual([]);
     expect(result.total).toEqual({
@@ -311,7 +311,7 @@ describe('BalanceService.getIntegratedBalance', () => {
     ]);
     dailyExchangeRateRepository.findOne.mockResolvedValue(null);
 
-    await expect(service.getIntegratedBalance({ id: 1 })).rejects.toThrow(
+    await expect(service.getIntegratedBalance({ id: 1, rules: [] })).rejects.toThrow(
       NotFoundException,
     );
   });

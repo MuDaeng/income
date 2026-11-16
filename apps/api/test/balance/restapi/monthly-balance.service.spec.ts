@@ -121,13 +121,13 @@ describe('MonthlyBalanceService.getMonthlyBalance', () => {
 
   it('월말(이번 달은 오늘) 기준 종목별·합계 원금, 평가금액, 평가금액+누적배당금', async () => {
     const result = await service.getMonthlyBalance(
-      { id: 1 },
+      { id: 1, rules: [] },
       { from: '2026-09', to: '2026-11' },
     );
 
     // 처음부터 마지막 기준일(오늘)까지의 배당을 한 번에 조회
     expect(dividendHistoryCalculator.calculate).toHaveBeenCalledWith(
-      { id: 1 },
+      { id: 1, rules: [] },
       { to: '2026-11-14' },
     );
     expect(result.from).toBe('2026-09');
@@ -193,7 +193,7 @@ describe('MonthlyBalanceService.getMonthlyBalance', () => {
     dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
 
     await service.getMonthlyBalance(
-      { id: 1 },
+      { id: 1, rules: [] },
       { from: '2026-10', to: '2026-11', securityCompany: 'KIWOOM' as never },
     );
 
@@ -201,7 +201,7 @@ describe('MonthlyBalanceService.getMonthlyBalance', () => {
       where: { userId: 1, securityCompany: 'KIWOOM' },
     });
     expect(dividendHistoryCalculator.calculate).toHaveBeenCalledWith(
-      { id: 1 },
+      { id: 1, rules: [] },
       { to: '2026-11-14', securityCompany: 'KIWOOM' },
     );
   });
@@ -210,13 +210,13 @@ describe('MonthlyBalanceService.getMonthlyBalance', () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
     dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
 
-    await service.getMonthlyBalance({ id: 1 }, { from: '2026-11', to: '2026-11' });
+    await service.getMonthlyBalance({ id: 1, rules: [] }, { from: '2026-11', to: '2026-11' });
 
     expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
       where: { userId: 1 },
     });
     expect(dividendHistoryCalculator.calculate).toHaveBeenCalledWith(
-      { id: 1 },
+      { id: 1, rules: [] },
       { to: '2026-11-14' },
     );
   });
@@ -227,7 +227,7 @@ describe('MonthlyBalanceService.getMonthlyBalance', () => {
     );
 
     await expect(
-      service.getMonthlyBalance({ id: 1 }, { from: '2026-09', to: '2026-09' }),
+      service.getMonthlyBalance({ id: 1, rules: [] }, { from: '2026-09', to: '2026-09' }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -236,7 +236,7 @@ describe('MonthlyBalanceService.getMonthlyBalance', () => {
     dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
 
     const result = await service.getMonthlyBalance(
-      { id: 1 },
+      { id: 1, rules: [] },
       { from: '2026-10', to: '2026-11' },
     );
 

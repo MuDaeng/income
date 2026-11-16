@@ -1,6 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { LessThan } from 'typeorm';
-import type { Token, User } from '@app/common';
+import { OAuthType, Rule, type Token, type User } from '@app/common';
 import { AuthService } from '../../../src/auth/restapi/auth.service.js';
 
 vi.mock('typeorm-transactional', () => ({
@@ -32,6 +32,7 @@ describe('AuthService 세션(기기)별 토큰', () => {
       {} as never,
       {} as never,
       tokenRepository as never,
+      {} as never,
       tokenProvider as never,
       context as never,
       { frontendUrl: 'https://front', jwtRefreshExpiresIn: REFRESH_EXPIRES_IN } as never,
@@ -120,5 +121,57 @@ describe('AuthService 세션(기기)별 토큰', () => {
     const { service } = setup(stored);
 
     await expect(service.reissueTokens()).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+describe('AuthService.findOrCreateOauthUser', () => {
+  const setup = (existing: { user: User } | null) => {
+    const userRepository = {
+      create: vi.fn(() => ({})),
+      save: vi.fn(() => Promise.resolve({ id: 11 } as User)),
+    };
+    const oauthRepository = {
+      findOne: vi.fn().mockResolvedValue(existing),
+      create: vi.fn((v: unknown) => v),
+      save: vi.fn((v: unknown) => Promise.resolve(v)),
+    };
+    const userRuleRepository = {
+      create: vi.fn((v: unknown) => v),
+      save: vi.fn((v: unknown) => Promise.resolve(v)),
+    };
+    const service = new AuthService(
+      userRepository as never,
+      oauthRepository as never,
+      {} as never,
+      userRuleRepository as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    return { service, userRepository, userRuleRepository };
+  };
+
+  it('새 사용자는 User·Oauth와 함께 user 권한(UserRule)을 저장한다', async () => {
+    const { service, userRuleRepository } = setup(null);
+
+    await expect(
+      service.findOrCreateOauthUser(OAuthType.GOOGLE, 'a@b.c'),
+    ).resolves.toEqual({ id: 11 });
+    expect(userRuleRepository.save).toHaveBeenCalledWith({
+      id: 11,
+      rule: Rule.USER,
+    });
+  });
+
+  it('이미 가입한 사용자는 아무것도 저장하지 않는다', async () => {
+    const { service, userRepository, userRuleRepository } = setup({
+      user: { id: 3 } as User,
+    });
+
+    await expect(
+      service.findOrCreateOauthUser(OAuthType.GOOGLE, 'a@b.c'),
+    ).resolves.toEqual({ id: 3 });
+    expect(userRepository.save).not.toHaveBeenCalled();
+    expect(userRuleRepository.save).not.toHaveBeenCalled();
   });
 });

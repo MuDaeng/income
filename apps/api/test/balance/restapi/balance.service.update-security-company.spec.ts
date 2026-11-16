@@ -70,7 +70,7 @@ describe('BalanceService.updateSecurityCompany', () => {
 
   it('User 행을 잠근 뒤 로그인 사용자의 매수분 증권사만 바꿔 저장한다', async () => {
     const result = await service.updateSecurityCompany(
-      { id: 1 },
+      { id: 1, rules: [] },
       { ...KEY, securityCompany: SecurityCompany.KIWOOM },
     );
 
@@ -92,7 +92,7 @@ describe('BalanceService.updateSecurityCompany', () => {
     });
 
     const result = await service.updateSecurityCompany(
-      { id: 1 },
+      { id: 1, rules: [] },
       { ...KEY, securityCompany: SecurityCompany.TOSS },
     );
 
@@ -107,7 +107,7 @@ describe('BalanceService.updateSecurityCompany', () => {
 
     await expect(
       service.updateSecurityCompany(
-        { id: 1 },
+        { id: 1, rules: [] },
         { ...KEY, securityCompany: SecurityCompany.KIWOOM },
       ),
     ).rejects.toBeInstanceOf(NotFoundException);

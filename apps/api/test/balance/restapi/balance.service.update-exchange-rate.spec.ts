@@ -74,7 +74,7 @@ describe('BalanceService.updateExchangeRate', () => {
 
   it('User 행을 잠근 뒤 로그인 사용자의 매수분 환율을 소수 6자리로 버려서 저장한다', async () => {
     const result = await service.updateExchangeRate(
-      { id: 1 },
+      { id: 1, rules: [] },
       { ...KEY, exchangeRate: '1401.12345678' },
     );
 
@@ -97,7 +97,7 @@ describe('BalanceService.updateExchangeRate', () => {
     });
 
     const result = await service.updateExchangeRate(
-      { id: 1 },
+      { id: 1, rules: [] },
       { ...KEY, exchangeRate: null },
     );
 
@@ -108,7 +108,7 @@ describe('BalanceService.updateExchangeRate', () => {
     purchaseDateBalanceRepository.findOneBy.mockResolvedValue(null);
 
     await expect(
-      service.updateExchangeRate({ id: 1 }, { ...KEY, exchangeRate: '1400' }),
+      service.updateExchangeRate({ id: 1, rules: [] }, { ...KEY, exchangeRate: '1400' }),
     ).rejects.toThrow(NotFoundException);
     expect(purchaseDateBalanceRepository.save).not.toHaveBeenCalled();
   });
@@ -120,7 +120,7 @@ describe('BalanceService.updateExchangeRate', () => {
     });
 
     await expect(
-      service.updateExchangeRate({ id: 1 }, { ...KEY, exchangeRate: '1400' }),
+      service.updateExchangeRate({ id: 1, rules: [] }, { ...KEY, exchangeRate: '1400' }),
     ).rejects.toThrow(BadRequestException);
     expect(purchaseDateBalanceRepository.save).not.toHaveBeenCalled();
   });

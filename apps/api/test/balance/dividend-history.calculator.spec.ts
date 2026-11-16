@@ -60,7 +60,7 @@ describe('DividendHistoryCalculator.calculate', () => {
   it('보유했던 종목이 없으면 빈 내역을 돌려준다', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    const result = await service.calculate({ id: 1 }, {});
+    const result = await service.calculate({ id: 1, rules: [] }, {});
 
     expect(result).toEqual({
       from: null,
@@ -75,8 +75,8 @@ describe('DividendHistoryCalculator.calculate', () => {
   it('securityCompany를 주면 그 증권사 매수분만으로 보유 수량을 계산하고, 없으면 전체', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    await service.calculate({ id: 1 }, { securityCompany: SecurityCompany.TOSS });
-    await service.calculate({ id: 1 }, {});
+    await service.calculate({ id: 1, rules: [] }, { securityCompany: SecurityCompany.TOSS });
+    await service.calculate({ id: 1, rules: [] }, {});
 
     expect(purchaseDateBalanceRepository.find.mock.calls).toEqual([
       [{ where: { userId: 1, securityCompany: 'TOSS' } }],
@@ -108,7 +108,7 @@ describe('DividendHistoryCalculator.calculate', () => {
     });
 
     const result = await service.calculate(
-      { id: 1 },
+      { id: 1, rules: [] },
       { from: '2026-04-01', to: '2026-06-30' },
     );
 
@@ -194,7 +194,7 @@ describe('DividendHistoryCalculator.calculate', () => {
     ]);
     dailyExchangeRateRepository.findOne.mockResolvedValue(null);
 
-    const result = await service.calculate({ id: 1 }, { from: '2026-01-01' });
+    const result = await service.calculate({ id: 1, rules: [] }, { from: '2026-01-01' });
 
     expect(dividendRepository.find.mock.calls[0][0].where.paymentDate).toEqual(
       MoreThanOrEqual('2026-01-01'),
@@ -219,7 +219,7 @@ describe('DividendHistoryCalculator.calculate', () => {
     ]);
     dividendRepository.find.mockResolvedValue([]);
 
-    await service.calculate({ id: 1 }, {});
+    await service.calculate({ id: 1, rules: [] }, {});
 
     expect(dividendRepository.find.mock.calls[0][0].where).not.toHaveProperty('paymentDate');
   });
