@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
 import { Repository } from 'typeorm';
-import { Currency, DailyExchangeRate } from '@app/common';
+import { Currency } from './currency.enum.js';
+import { DailyExchangeRate } from './daily-exchange-rate.entity.js';
 import { MassiveClient } from '../clients/massive/massive.client.js';
 
 /** 달러당 원화 (DailyExchangeRate의 currency=USD 행) */

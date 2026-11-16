@@ -4,11 +4,12 @@ import { Repository } from 'typeorm';
 import {
   Currency,
   DailySecurity,
+  DataGoKrClient,
+  type PriceItem,
   type Security,
   SecurityType,
   truncateByCurrency,
 } from '@app/common';
-import { DataGoKrClient, type PriceItem } from '@app/core';
 import { addDays, toYmd } from './iso-date.js';
 
 /** 종목 하나 2020년부터 전부여도 2천 행이 안 돼 한 페이지면 충분 (data.go.kr 최대) */

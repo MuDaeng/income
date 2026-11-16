@@ -7,15 +7,13 @@ import {
   Dividend,
   DividendType,
   Security,
-  truncateByCurrency,
-} from '@app/common';
-import {
   KisClient,
   MassiveClient,
   toMassiveTicker,
+  truncateByCurrency,
   type KisDividendItem,
   type MassiveDividend,
-} from '@app/core';
+} from '@app/common';
 import { toYmd } from './iso-date.js';
 
 type DividendRow = Pick<

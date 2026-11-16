@@ -28,12 +28,6 @@
       ],
       "@app/common/*": [
         "./libs/common/src/*"
-      ],
-      "@app/core": [
-        "./libs/core/src/index.ts"
-      ],
-      "@app/core/*": [
-        "./libs/core/src/*"
       ]
     }
   },

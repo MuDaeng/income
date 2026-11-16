@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { massiveConfig } from '@app/common';
+import { massiveConfig } from '../../config/massive.config.js';
 import { MassiveClient } from './massive.client.js';
 
 @Module({

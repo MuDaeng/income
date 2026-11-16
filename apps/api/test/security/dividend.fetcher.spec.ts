@@ -2,15 +2,13 @@ import {
   Currency,
   type Dividend,
   DividendType,
+  type KisClient,
+  type KisDividendItem,
+  type MassiveClient,
+  type MassiveDividend,
   type Security,
 } from '@app/common';
 import type { Repository } from 'typeorm';
-import type {
-  KisClient,
-  KisDividendItem,
-  MassiveClient,
-  MassiveDividend,
-} from '@app/core';
 import { DividendFetcher } from '../../src/security/dividend.fetcher.js';
 
 const SAMSUNG = {

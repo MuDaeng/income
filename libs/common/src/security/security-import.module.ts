@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Security } from '@app/common';
+import { Security } from './security.entity.js';
 import { TossModule } from '../clients/toss/toss.module.js';
 import { SecurityImportService } from './security-import.service.js';
 

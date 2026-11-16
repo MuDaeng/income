@@ -1,6 +1,6 @@
 import { BadGatewayException, Inject, Injectable } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { dataGoKrConfig } from '@app/common';
+import { dataGoKrConfig } from '../../config/data-go-kr.config.js';
 import type {
   DataGoKrResponse,
   EtfPriceItem,

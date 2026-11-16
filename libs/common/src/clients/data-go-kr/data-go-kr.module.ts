@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { dataGoKrConfig } from '@app/common';
+import { dataGoKrConfig } from '../../config/data-go-kr.config.js';
 import { DataGoKrClient } from './data-go-kr.client.js';
 
 @Module({

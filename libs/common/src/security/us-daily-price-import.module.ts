@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { DailySecurity, Security } from '@app/common';
+import { DailySecurity } from './daily-security.entity.js';
+import { Security } from './security.entity.js';
 import { MassiveModule } from '../clients/massive/massive.module.js';
 import { UsDailyPriceImportService } from './us-daily-price-import.service.js';
 

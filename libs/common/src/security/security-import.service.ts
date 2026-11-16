@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Currency, Security, SecurityType } from '@app/common';
+import { Currency } from './currency.enum.js';
+import { Security } from './security.entity.js';
+import { SecurityType } from './security-type.enum.js';
 import { TossClient } from '../clients/toss/toss.client.js';
 import type {
   TossMarket,

@@ -1,12 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  Currency,
-  DailySecurity,
-  Security,
-  truncateByCurrency,
-} from '@app/common';
+import { Currency } from './currency.enum.js';
+import { truncateByCurrency } from './currency-decimal.js';
+import { DailySecurity } from './daily-security.entity.js';
+import { Security } from './security.entity.js';
 import { toMassiveTicker } from '../clients/massive/massive-ticker.js';
 import {
   MassiveClient,

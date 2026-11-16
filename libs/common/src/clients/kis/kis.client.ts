@@ -2,7 +2,9 @@ import { BadGatewayException, Inject, Injectable, Logger } from '@nestjs/common'
 import { type ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ClientToken, ClientType, kisConfig } from '@app/common';
+import { ClientToken } from '../../client/client-token.entity.js';
+import { ClientType } from '../../client/client-type.enum.js';
+import { kisConfig } from '../../config/kis.config.js';
 import type {
   KisDividendItem,
   KisDividendResponse,

@@ -1,12 +1,13 @@
 import { Logger } from '@nestjs/common';
-import type {
-  ExchangeRateService,
-  SecurityImportService,
-  TokenCleanupService,
-  UsDailyPriceImportService,
-} from '@app/core';
-import { DOMESTIC_MARKETS, OVERSEAS_MARKETS } from '@app/core';
-import { BatchStatus } from '@app/common';
+import {
+  BatchStatus,
+  DOMESTIC_MARKETS,
+  OVERSEAS_MARKETS,
+  type ExchangeRateService,
+  type SecurityImportService,
+  type TokenCleanupService,
+  type UsDailyPriceImportService,
+} from '@app/common';
 import { BATCH_TIME_ZONE, BatchJobs } from '../src/batch.jobs.js';
 import type { BatchHistoryService } from '../src/batch-history.service.js';
 

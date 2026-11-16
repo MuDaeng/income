@@ -2,7 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
-import { authConfig, Token } from '@app/common';
+import { authConfig } from '../config/auth.config.js';
+import { Token } from './token.entity.js';
 
 @Injectable()
 export class TokenCleanupService {

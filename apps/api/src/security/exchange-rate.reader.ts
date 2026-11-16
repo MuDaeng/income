@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LessThanOrEqual, Repository } from 'typeorm';
 import { Currency, DailyExchangeRate } from '@app/common';
 
-/** 저장된 USD 환율(KRW per USD) 조회. 환율 가져오기(Massive)는 batch의 @app/core ExchangeRateService */
+/** 저장된 USD 환율(KRW per USD) 조회. 환율 가져오기(Massive)는 batch의 @app/common ExchangeRateService */
 @Injectable()
 export class ExchangeRateReader {
   constructor(

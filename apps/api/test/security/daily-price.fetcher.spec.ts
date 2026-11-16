@@ -3,8 +3,8 @@ import {
   type DailySecurity,
   type Security,
   SecurityType,
+  type DataGoKrClient,
 } from '@app/common';
-import type { DataGoKrClient } from '@app/core';
 import type { Repository } from 'typeorm';
 import { DailyPriceFetcher } from '../../src/security/daily-price.fetcher.js';
 

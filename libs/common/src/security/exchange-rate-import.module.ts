@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { DailyExchangeRate } from '@app/common';
+import { DailyExchangeRate } from './daily-exchange-rate.entity.js';
 import { MassiveModule } from '../clients/massive/massive.module.js';
 import { ExchangeRateService } from './exchange-rate.service.js';
 

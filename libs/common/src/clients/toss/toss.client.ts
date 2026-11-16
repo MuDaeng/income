@@ -1,6 +1,6 @@
 import { BadGatewayException, Inject, Injectable } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { tossConfig } from '@app/common';
+import { tossConfig } from '../../config/toss.config.js';
 import type { TossListedStock, TossMarket } from './toss.types.js';
 
 const TIMEOUT_MS = 30_000;

@@ -1,6 +1,6 @@
 import { BadGatewayException, Inject, Injectable, Logger } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { massiveConfig } from '@app/common';
+import { massiveConfig } from '../../config/massive.config.js';
 import type {
   MassiveAggregateBar,
   MassiveAggregatesResponse,

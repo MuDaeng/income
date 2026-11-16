@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { BatchHistory, DatabaseModule } from '@app/common';
 import {
+  BatchHistory,
+  DatabaseModule,
   ExchangeRateImportModule,
   SecurityImportModule,
   TokenCleanupModule,
   UsDailyPriceImportModule,
-} from '@app/core';
+} from '@app/common';
 import { BatchHistoryService } from './batch-history.service.js';
 import { BatchJobs } from './batch.jobs.js';
 
