@@ -1,8 +1,8 @@
 import { BadGatewayException } from '@nestjs/common';
 import { ClientType, type ClientToken } from '@app/common';
 import type { Repository } from 'typeorm';
-import { KisClient } from '../../../src/clients/kis/kis.client.js';
-import type { KisDividendItem } from '../../../src/clients/kis/kis.types.js';
+import { KisClient } from '../../../src/client/kis/kis.client.js';
+import type { KisDividendItem } from '../../../src/client/kis/kis.types.js';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {

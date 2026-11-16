@@ -5,7 +5,7 @@ import {
   OVERSEAS_MARKETS,
   type ExchangeRateService,
   type SecurityImportService,
-  type TokenCleanupService,
+  type TokenProvider,
   type UsDailyPriceImportService,
 } from '@app/common';
 import { BATCH_TIME_ZONE, BatchJobs } from '../src/batch.jobs.js';
@@ -47,7 +47,7 @@ describe('BatchJobs', () => {
       {
         importFromMassive: importUsFromMassive,
       } as unknown as UsDailyPriceImportService,
-      { deleteExpiredRefreshTokens } as unknown as TokenCleanupService,
+      { deleteExpiredRefreshTokens } as unknown as TokenProvider,
       { start, finish } as unknown as BatchHistoryService,
     );
     start.mockResolvedValue(HISTORY);

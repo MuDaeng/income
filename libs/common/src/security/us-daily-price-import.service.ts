@@ -5,12 +5,12 @@ import { Currency } from './currency.enum.js';
 import { truncateByCurrency } from './currency-decimal.js';
 import { DailySecurity } from './daily-security.entity.js';
 import { Security } from './security.entity.js';
-import { toMassiveTicker } from '../clients/massive/massive-ticker.js';
+import { toMassiveTicker } from '../client/massive/massive-ticker.js';
 import {
   MassiveClient,
   MassiveDataNotReadyException,
-} from '../clients/massive/massive.client.js';
-import type { MassiveGroupedBar } from '../clients/massive/massive.types.js';
+} from '../client/massive/massive.client.js';
+import type { MassiveGroupedBar } from '../client/massive/massive.types.js';
 
 /** 기간을 생략했을 때 가져올 햇수 */
 const DEFAULT_YEARS = 2;

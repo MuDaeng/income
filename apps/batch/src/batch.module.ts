@@ -6,7 +6,7 @@ import {
   DatabaseModule,
   ExchangeRateImportModule,
   SecurityImportModule,
-  TokenCleanupModule,
+  TokenModule,
   UsDailyPriceImportModule,
 } from '@app/common';
 import { BatchHistoryService } from './batch-history.service.js';
@@ -20,7 +20,7 @@ import { BatchJobs } from './batch.jobs.js';
     ExchangeRateImportModule,
     SecurityImportModule,
     UsDailyPriceImportModule,
-    TokenCleanupModule,
+    TokenModule,
     TypeOrmModule.forFeature([BatchHistory]),
   ],
   providers: [BatchJobs, BatchHistoryService],

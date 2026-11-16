@@ -1,10 +1,10 @@
 import { Currency, Security, SecurityType } from '@app/common';
 import type { Repository } from 'typeorm';
-import type { TossClient } from '../../src/clients/toss/toss.client.js';
+import type { TossClient } from '../../src/client/toss/toss.client.js';
 import type {
   TossListedStock,
   TossMarket,
-} from '../../src/clients/toss/toss.types.js';
+} from '../../src/client/toss/toss.types.js';
 import {
   DOMESTIC_MARKETS,
   OVERSEAS_MARKETS,

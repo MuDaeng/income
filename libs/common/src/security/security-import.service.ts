@@ -4,11 +4,11 @@ import { Repository } from 'typeorm';
 import { Currency } from './currency.enum.js';
 import { Security } from './security.entity.js';
 import { SecurityType } from './security-type.enum.js';
-import { TossClient } from '../clients/toss/toss.client.js';
+import { TossClient } from '../client/toss/toss.client.js';
 import type {
   TossMarket,
   TossSecurityType,
-} from '../clients/toss/toss.types.js';
+} from '../client/toss/toss.types.js';
 
 /** 시장별 종목 통화 (Toss 목록 응답에는 통화가 없음) */
 const MARKET_CURRENCY: Record<TossMarket, Currency> = {

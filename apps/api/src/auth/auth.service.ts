@@ -3,10 +3,16 @@ import { type ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { authConfig, Oauth, OAuthType, Token, User } from '@app/common';
+import {
+  authConfig,
+  Oauth,
+  OAuthType,
+  Token,
+  TokenProvider,
+  User,
+} from '@app/common';
 import type { AuthUser } from './jwt.strategy.js';
 import { RefreshTokenContext } from './refresh-token.context.js';
-import { TokenProvider } from './token.provider.js';
 
 @Injectable()
 export class AuthService {

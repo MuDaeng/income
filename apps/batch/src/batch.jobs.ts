@@ -6,7 +6,7 @@ import {
   ExchangeRateService,
   OVERSEAS_MARKETS,
   SecurityImportService,
-  TokenCleanupService,
+  TokenProvider,
   UsDailyPriceImportService,
 } from '@app/common';
 import { BatchHistoryService } from './batch-history.service.js';
@@ -48,7 +48,7 @@ export class BatchJobs {
     private readonly exchangeRateService: ExchangeRateService,
     private readonly securityImportService: SecurityImportService,
     private readonly usDailyPriceImportService: UsDailyPriceImportService,
-    private readonly tokenCleanupService: TokenCleanupService,
+    private readonly tokenProvider: TokenProvider,
     private readonly batchHistoryService: BatchHistoryService,
   ) {}
 
@@ -113,7 +113,7 @@ export class BatchJobs {
   })
   deleteExpiredTokens(): Promise<boolean> {
     return this.run('expired-tokens', () =>
-      this.tokenCleanupService.deleteExpiredRefreshTokens(),
+      this.tokenProvider.deleteExpiredRefreshTokens(),
     );
   }
 

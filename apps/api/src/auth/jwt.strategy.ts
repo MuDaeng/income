@@ -2,8 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { authConfig } from '@app/common';
-import type { TokenPayload } from './token.provider.js';
+import { authConfig, type TokenPayload } from '@app/common';
 
 export interface AuthUser {
   id: number;

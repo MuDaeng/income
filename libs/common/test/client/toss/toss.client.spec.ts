@@ -1,5 +1,5 @@
 import { BadGatewayException } from '@nestjs/common';
-import { TossClient } from '../../../src/clients/toss/toss.client.js';
+import { TossClient } from '../../../src/client/toss/toss.client.js';
 
 const config = {
   clientId: 'client-id',

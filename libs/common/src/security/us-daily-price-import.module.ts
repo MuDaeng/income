@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DailySecurity } from './daily-security.entity.js';
 import { Security } from './security.entity.js';
-import { MassiveModule } from '../clients/massive/massive.module.js';
+import { MassiveModule } from '../client/massive/massive.module.js';
 import { UsDailyPriceImportService } from './us-daily-price-import.service.js';
 
 /** Massive 미국 주식 일별 시세 가져오기 (api 수동 가져오기·batch 일배치 공용) */

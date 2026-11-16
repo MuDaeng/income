@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Security } from './security.entity.js';
-import { TossModule } from '../clients/toss/toss.module.js';
+import { TossModule } from '../client/toss/toss.module.js';
 import { SecurityImportService } from './security-import.service.js';
 
 /** Toss 종목 가져오기 (api 수동 가져오기·batch 일배치 공용) */

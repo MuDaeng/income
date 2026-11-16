@@ -2,7 +2,7 @@ import { BadGatewayException } from '@nestjs/common';
 import {
   MassiveClient,
   MassiveDataNotReadyException,
-} from '../../../src/clients/massive/massive.client.js';
+} from '../../../src/client/massive/massive.client.js';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {

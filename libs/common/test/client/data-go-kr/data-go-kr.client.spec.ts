@@ -1,5 +1,5 @@
 import { BadGatewayException } from '@nestjs/common';
-import { DataGoKrClient } from '../../../src/clients/data-go-kr/data-go-kr.client.js';
+import { DataGoKrClient } from '../../../src/client/data-go-kr/data-go-kr.client.js';
 
 const text = (body: string, status = 200) => new Response(body, { status });
 const ok = (items: unknown, totalCount = 1) =>

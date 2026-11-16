@@ -3,8 +3,8 @@ import type { Repository } from 'typeorm';
 import {
   type MassiveClient,
   MassiveDataNotReadyException,
-} from '../../src/clients/massive/massive.client.js';
-import type { MassiveGroupedBar } from '../../src/clients/massive/massive.types.js';
+} from '../../src/client/massive/massive.client.js';
+import type { MassiveGroupedBar } from '../../src/client/massive/massive.types.js';
 import { UsDailyPriceImportService } from '../../src/security/us-daily-price-import.service.js';
 
 const bar = (T: string, c = 190.1234567): MassiveGroupedBar => ({
