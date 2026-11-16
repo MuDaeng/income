@@ -5,7 +5,7 @@ import {
   SecurityCompany,
   truncateByCurrency,
 } from '@app/common';
-import type { CompanyAmountDto } from './dto/company-amount.dto.js';
+import type { CompanyAmountDto } from './restapi/dto/company-amount.dto.js';
 
 /**
  * 매수분들의 증권사별 수량 합. 넘긴 행을 그대로 더하므로 미매도 행만 넘긴다.

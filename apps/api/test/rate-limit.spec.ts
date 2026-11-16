@@ -4,11 +4,11 @@ import { Test } from '@nestjs/testing';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
-import { AuthController } from '../src/auth/auth.controller.js';
-import { AuthService } from '../src/auth/auth.service.js';
-import { RefreshTokenGuard } from '../src/auth/refresh-token.guard.js';
-import { DailySecurityController } from '../src/security/daily-security.controller.js';
-import { DailySecurityService } from '../src/security/daily-security.service.js';
+import { AuthController } from '../src/auth/restapi/auth.controller.js';
+import { AuthService } from '../src/auth/restapi/auth.service.js';
+import { RefreshTokenGuard } from '../src/auth/restapi/refresh-token.guard.js';
+import { DailySecurityController } from '../src/security/restapi/daily-security.controller.js';
+import { DailySecurityService } from '../src/security/restapi/daily-security.service.js';
 import { THROTTLER_OPTIONS } from '../src/rate-limit.js';
 
 /** ApiModule과 같은 ThrottlerModule + 전역 ThrottlerGuard로 컨트롤러만 띄워 한도를 확인 */

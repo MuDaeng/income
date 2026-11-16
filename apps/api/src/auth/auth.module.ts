@@ -2,15 +2,15 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommonModule, Oauth, Token, TokenModule, User } from '@app/common';
-import { AuthController } from './auth.controller.js';
-import { AuthService } from './auth.service.js';
-import { GoogleStrategy } from './google.strategy.js';
-import { JwtStrategy } from './jwt.strategy.js';
+import { AuthController } from './restapi/auth.controller.js';
+import { AuthService } from './restapi/auth.service.js';
+import { GoogleStrategy } from './restapi/google.strategy.js';
+import { JwtStrategy } from './restapi/jwt.strategy.js';
 import {
   RefreshTokenContext,
   RefreshTokenContextMiddleware,
-} from './refresh-token.context.js';
-import { RefreshTokenGuard } from './refresh-token.guard.js';
+} from './restapi/refresh-token.context.js';
+import { RefreshTokenGuard } from './restapi/refresh-token.guard.js';
 
 @Module({
   imports: [

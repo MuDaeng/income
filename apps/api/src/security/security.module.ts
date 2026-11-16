@@ -12,15 +12,15 @@ import {
 } from '@app/common';
 import { DailyPriceFetcher } from './daily-price.fetcher.js';
 import { DailyPriceReader } from './daily-price.reader.js';
-import { DailySecurityController } from './daily-security.controller.js';
-import { DailySecurityService } from './daily-security.service.js';
+import { DailySecurityController } from './restapi/daily-security.controller.js';
+import { DailySecurityService } from './restapi/daily-security.service.js';
 import { DividendFetcher } from './dividend.fetcher.js';
-import { DividendService } from './dividend.service.js';
-import { DividendController } from './dividend.controller.js';
+import { DividendService } from './restapi/dividend.service.js';
+import { DividendController } from './restapi/dividend.controller.js';
 import { ExchangeRateReader } from './exchange-rate.reader.js';
 import { SecurityRefresher } from './security.refresher.js';
-import { SecurityController } from './security.controller.js';
-import { SecurityService } from './security.service.js';
+import { SecurityController } from './restapi/security.controller.js';
+import { SecurityService } from './restapi/security.service.js';
 
 /**
  * libs/common `security/` 엔티티(종목·일별 시세·환율·배당·조회 기록)를 다루는 업무 모듈.

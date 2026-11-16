@@ -18,15 +18,15 @@ import {
   Security,
   truncateByCurrency,
 } from '@app/common';
-import type { AuthUser } from '../auth/jwt.strategy.js';
+import type { AuthUser } from '../auth/restapi/jwt.strategy.js';
 import { ExchangeRateReader } from '../security/exchange-rate.reader.js';
 import { SecurityRefresher } from '../security/security.refresher.js';
 import type {
   DividendHistoryResponse,
   DividendItemDto,
   DividendSummaryDto,
-} from './dto/dividend-history.dto.js';
-import type { DividendHistoryRequest } from './dto/dividend-history.schema.js';
+} from './restapi/dto/dividend-history.dto.js';
+import type { DividendHistoryRequest } from './restapi/dto/dividend-history.schema.js';
 import { PurchaseReader } from './purchase.reader.js';
 
 /**
