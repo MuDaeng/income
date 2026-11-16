@@ -11,7 +11,7 @@ import { MonthlyDividendService } from './monthly-dividend.service.js';
 
 @ApiTags('dividend')
 @Controller('dividends')
-export class MonthlyDividendController {
+export class DividendController {
   constructor(private readonly monthlyDividendService: MonthlyDividendService) {}
 
   @Get()
