@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
@@ -16,7 +15,6 @@ import {
   Security,
   SecurityCompany,
   truncateByCurrency,
-  User,
   UserBalance,
 } from '@app/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
@@ -40,6 +38,7 @@ import type {
 } from './purchase-history.dto.js';
 import type { PurchaseHistoryRequest } from './purchase-history.schema.js';
 import { PurchaseRateReader } from './purchase-rate.reader.js';
+import { PurchaseWriter } from './purchase.writer.js';
 import type { SellBalanceRequest } from './sell-balance.schema.js';
 import type { UpdateExchangeRateRequest } from './update-exchange-rate.schema.js';
 import type { UpdateSecurityCompanyRequest } from './update-security-company.schema.js';
@@ -52,14 +51,13 @@ export class BalanceService {
     private readonly purchaseDateBalanceRepository: Repository<PurchaseDateBalance>,
     @InjectRepository(UserBalance)
     private readonly userBalanceRepository: Repository<UserBalance>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,
     private readonly securityRefresher: SecurityRefresher,
     private readonly dailyPriceReader: DailyPriceReader,
     private readonly exchangeRateReader: ExchangeRateReader,
     private readonly purchaseRateReader: PurchaseRateReader,
+    private readonly purchaseWriter: PurchaseWriter,
   ) {}
 
   /**
@@ -83,9 +81,7 @@ export class BalanceService {
    * 5. UserBalance(없을 때만 생성) + PurchaseDateBalance(sequence = 같은 사용자·종목·매수일 안의 max + 1) 등록.
    *    매도일(saleDate)은 입력에 있으면 저장하고, 없으면 null(보유 중).
    *
-   * 동시 등록 시 같은 sequence나 중복 UserBalance가 생기지 않도록 먼저 User 행을 잠근다(SELECT ... FOR UPDATE).
-   * PK로 찾는 단일 행 잠금이라 gap lock이 없어서, 같은 사용자의 등록은 순서대로 실행되고 deadlock이 나지 않는다.
-   * (매수일별 잔고 행 자체를 잠그면 InnoDB gap lock 때문에 동시 저장끼리 deadlock이 난다)
+   * 동시 등록 시 같은 sequence나 중복 UserBalance가 생기지 않도록 먼저 User 행을 잠근다(PurchaseWriter.lockOwner).
    */
   @Transactional()
   private async saveBalance(
@@ -96,13 +92,7 @@ export class BalanceService {
     const { securityId, purchaseDate } = input;
 
     // 1. 사용자
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!user) {
-      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
-    }
+    await this.purchaseWriter.lockOwner(userId);
 
     // 2. 종목
     const security = await this.securityRepository.findOneBy({
@@ -142,34 +132,16 @@ export class BalanceService {
     }
 
     // 5. 등록
-    const userBalance = await this.userBalanceRepository.findOneBy({
+    const saved = await this.purchaseWriter.append({
       userId,
       securityId,
+      purchaseDate,
+      securityCompany: input.securityCompany,
+      amount,
+      price,
+      saleDate: input.saleDate ?? null,
+      exchangeRate,
     });
-    if (!userBalance) {
-      await this.userBalanceRepository.save(
-        this.userBalanceRepository.create({ userId, securityId }),
-      );
-    }
-
-    const last = await this.purchaseDateBalanceRepository.findOne({
-      where: { userId, securityId, purchaseDate },
-      order: { sequence: 'DESC' },
-    });
-
-    const saved = await this.purchaseDateBalanceRepository.save(
-      this.purchaseDateBalanceRepository.create({
-        userId,
-        securityId,
-        purchaseDate,
-        sequence: (last?.sequence ?? 0) + 1,
-        securityCompany: input.securityCompany,
-        amount,
-        price,
-        saleDate: input.saleDate ?? null,
-        exchangeRate,
-      }),
-    );
     return { saved, security };
   }
 
@@ -192,13 +164,7 @@ export class BalanceService {
     const userId = authUser.id;
     const { securityId, purchaseDate, sequence, saleDate } = input;
 
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!user) {
-      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
-    }
+    await this.purchaseWriter.lockOwner(userId);
 
     const source = await this.purchaseDateBalanceRepository.findOne({
       where: { userId, securityId, purchaseDate, sequence, saleDate: IsNull() },
@@ -218,14 +184,14 @@ export class BalanceService {
     if (amount.gt(source.amount)) {
       throw new BadRequestException('매도 수량이 보유 수량보다 많습니다.');
     }
-    return this.sellFromRow(source, amount, saleDate, currency);
+    return this.purchaseWriter.sell(source, amount, saleDate, currency);
   }
 
   /**
    * 증권사별 일괄매도. 그 증권사의 미매도 매수분 중 매도일 이전(포함)에 산 것을
    * 매수일이 오래된 순(같은 날은 sequence 순)으로 매도 수량만큼 매도 처리한다.
    * - 대상 보유 수량 합계 < 매도 수량: 400 (아무것도 매도하지 않음)
-   * - 행마다의 전량/일부 매도·같은 매도 행 병합 규칙은 sellBalance와 같다(sellFromRow).
+   * - 행마다의 전량/일부 매도·같은 매도 행 병합 규칙은 sellBalance와 같다(PurchaseWriter.sell).
    * 매도 처리된 행(saleDate가 찍힌 행, 합쳐진 행, 새 매도 행)을 처리 순서대로 돌려준다.
    * registerBalance·sellBalance와 같은 이유로 먼저 User 행을 잠가 같은 사용자의 변경을 순서대로 실행한다.
    */
@@ -237,13 +203,7 @@ export class BalanceService {
     const userId = authUser.id;
     const { securityId, securityCompany, saleDate } = input;
 
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!user) {
-      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
-    }
+    await this.purchaseWriter.lockOwner(userId);
 
     const security = await this.securityRepository.findOneBy({
       id: securityId,
@@ -279,84 +239,12 @@ export class BalanceService {
         break;
       }
       const portion = Decimal.min(remaining, source.amount);
-      results.push(await this.sellFromRow(source, portion, saleDate, currency));
+      results.push(
+        await this.purchaseWriter.sell(source, portion, saleDate, currency),
+      );
       remaining = remaining.minus(portion);
     }
     return results;
-  }
-
-  /**
-   * 미매도 매수분 하나(source)에서 amount(≤ 보유 수량)만큼 saleDate로 매도 처리한다.
-   * - 전량: 같은 매도일·매수가·환율·증권사의 매도 행이 있으면 거기에 더하고 미매도 행은 삭제, 없으면 미매도 행에 saleDate만 저장
-   * - 일부: 미매도 행에서 빼고, 같은 매도 행이 있으면 거기에 더하고,
-   *   없으면 새 행(매수가·환율·증권사는 미매도 행 값, sequence는 같은 매수일 안의 max + 1)을 저장
-   */
-  private async sellFromRow(
-    source: PurchaseDateBalance,
-    amount: Decimal,
-    saleDate: string,
-    currency: Currency,
-  ): Promise<PurchaseDateBalance> {
-    const { userId, securityId, purchaseDate, sequence } = source;
-    const held = new Decimal(source.amount);
-
-    // 매수가·구매 환율·증권사까지 같은 매도 행만 합친다
-    const sold = await this.purchaseDateBalanceRepository.findOne({
-      where: {
-        userId,
-        securityId,
-        purchaseDate,
-        saleDate,
-        price: source.price,
-        exchangeRate: source.exchangeRate ?? IsNull(),
-        securityCompany: source.securityCompany,
-      },
-    });
-
-    // 3. 전량 매도
-    if (amount.eq(held)) {
-      if (!sold) {
-        source.saleDate = saleDate;
-        return this.purchaseDateBalanceRepository.save(source);
-      }
-      sold.amount = truncateByCurrency(amount.plus(sold.amount), currency);
-      await this.purchaseDateBalanceRepository.delete({
-        userId,
-        securityId,
-        purchaseDate,
-        sequence,
-      });
-      return this.purchaseDateBalanceRepository.save(sold);
-    }
-
-    // 4. 일부 매도
-    source.amount = truncateByCurrency(held.minus(amount), currency);
-    await this.purchaseDateBalanceRepository.save(source);
-
-    // 4-1. 같은 매도일 행에 더함
-    if (sold) {
-      sold.amount = truncateByCurrency(amount.plus(sold.amount), currency);
-      return this.purchaseDateBalanceRepository.save(sold);
-    }
-
-    // 4-2. 새 매도 행
-    const last = await this.purchaseDateBalanceRepository.findOne({
-      where: { userId, securityId, purchaseDate },
-      order: { sequence: 'DESC' },
-    });
-    return this.purchaseDateBalanceRepository.save(
-      this.purchaseDateBalanceRepository.create({
-        userId,
-        securityId,
-        purchaseDate,
-        sequence: (last?.sequence ?? 0) + 1,
-        securityCompany: source.securityCompany,
-        amount: truncateByCurrency(amount, currency),
-        price: source.price,
-        saleDate,
-        exchangeRate: source.exchangeRate,
-      }),
-    );
   }
 
   /**
@@ -373,30 +261,16 @@ export class BalanceService {
     const userId = authUser.id;
     const { securityId, purchaseDate, sequence } = input;
 
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!user) {
-      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
-    }
+    await this.purchaseWriter.lockOwner(userId);
 
-    const { affected } = await this.purchaseDateBalanceRepository.delete({
+    const removed = await this.purchaseWriter.remove({
       userId,
       securityId,
       purchaseDate,
       sequence,
     });
-    if (!affected) {
+    if (!removed) {
       throw new NotFoundException('삭제할 매수 내역이 없습니다.');
-    }
-
-    const remaining = await this.purchaseDateBalanceRepository.existsBy({
-      userId,
-      securityId,
-    });
-    if (!remaining) {
-      await this.userBalanceRepository.delete({ userId, securityId });
     }
   }
 
@@ -432,13 +306,7 @@ export class BalanceService {
     const userId = authUser.id;
     const { securityId, purchaseDate, sequence } = input;
 
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!user) {
-      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
-    }
+    await this.purchaseWriter.lockOwner(userId);
 
     const purchase = await this.purchaseDateBalanceRepository.findOneBy({
       userId,
@@ -451,7 +319,7 @@ export class BalanceService {
     }
 
     purchase.securityCompany = input.securityCompany;
-    return this.purchaseDateBalanceRepository.save(purchase);
+    return this.purchaseWriter.update(purchase);
   }
 
   /**
@@ -468,13 +336,7 @@ export class BalanceService {
     const userId = authUser.id;
     const { securityId, purchaseDate, sequence } = input;
 
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      lock: { mode: 'pessimistic_write' },
-    });
-    if (!user) {
-      throw new UnauthorizedException('존재하지 않는 사용자입니다.');
-    }
+    await this.purchaseWriter.lockOwner(userId);
 
     const purchase = await this.purchaseDateBalanceRepository.findOneBy({
       userId,
@@ -498,7 +360,7 @@ export class BalanceService {
 
     purchase.exchangeRate =
       input.exchangeRate === null ? null : toRate(input.exchangeRate);
-    return this.purchaseDateBalanceRepository.save(purchase);
+    return this.purchaseWriter.update(purchase);
   }
 
   /**

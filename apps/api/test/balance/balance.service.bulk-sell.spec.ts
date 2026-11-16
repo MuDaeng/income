@@ -15,6 +15,7 @@ import {
 import { SecurityRefresher } from '../../src/security/security.refresher.js';
 import { BalanceService } from '../../src/balance/balance.service.js';
 import { PurchaseRateReader } from '../../src/balance/purchase-rate.reader.js';
+import { PurchaseWriter } from '../../src/balance/purchase.writer.js';
 import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
 import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
 
@@ -75,6 +76,7 @@ describe('BalanceService.bulkSellBalance', () => {
         DailyPriceReader,
         ExchangeRateReader,
         PurchaseRateReader,
+        PurchaseWriter,
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,

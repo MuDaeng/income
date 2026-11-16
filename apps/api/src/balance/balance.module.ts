@@ -16,6 +16,7 @@ import { MonthlyBalanceService } from './monthly-balance.service.js';
 import { PeriodReturnService } from './period-return.service.js';
 import { PurchaseRateReader } from './purchase-rate.reader.js';
 import { PurchaseReader } from './purchase.reader.js';
+import { PurchaseWriter } from './purchase.writer.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PurchaseReader } from './purchase.reader.js';
     MonthlyBalanceService,
     PurchaseReader,
     PurchaseRateReader,
+    PurchaseWriter,
     DividendHistoryCalculator,
   ],
 })
