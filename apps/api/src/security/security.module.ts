@@ -9,6 +9,7 @@ import {
 import { DailyPriceFetcher } from './daily-price.fetcher.js';
 import { DailySecurityController } from './daily-security.controller.js';
 import { DailySecurityService } from './daily-security.service.js';
+import { DividendSaveService } from './dividend-save.service.js';
 import { DividendService } from './dividend.service.js';
 import { DividendController } from './dividend.controller.js';
 import { SecurityRefreshService } from './security-refresh.service.js';
@@ -40,6 +41,7 @@ import { SecurityService } from './security.service.js';
   providers: [
     SecurityService,
     DailySecurityService,
+    DividendSaveService,
     DividendService,
     DailyPriceFetcher,
     SecurityRefreshService,

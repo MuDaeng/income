@@ -7,7 +7,7 @@ import {
 } from '@app/common';
 import type { Repository } from 'typeorm';
 import type { DailyPriceFetcher } from '../../src/security/daily-price.fetcher.js';
-import type { DividendService } from '../../src/security/dividend.service.js';
+import type { DividendSaveService } from '../../src/security/dividend-save.service.js';
 import { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
 
 const SAMSUNG = {
@@ -40,7 +40,7 @@ const saved = (
 describe('SecurityRefreshService.refresh', () => {
   const findBy = vi.fn();
   const searchUpsert = vi.fn();
-  const fetchDividends = vi.fn<DividendService['fetchAndSave']>();
+  const fetchDividends = vi.fn<DividendSaveService['fetchAndSave']>();
   const fetchPrices = vi.fn<DailyPriceFetcher['fetchAndSave']>();
   let errorLog: ReturnType<typeof vi.spyOn>;
   let service: SecurityRefreshService;
@@ -59,7 +59,7 @@ describe('SecurityRefreshService.refresh', () => {
     fetchPrices.mockResolvedValue(480);
     service = new SecurityRefreshService(
       { findBy, upsert: searchUpsert } as unknown as Repository<SecuritySearch>,
-      { fetchAndSave: fetchDividends } as unknown as DividendService,
+      { fetchAndSave: fetchDividends } as unknown as DividendSaveService,
       { fetchAndSave: fetchPrices } as unknown as DailyPriceFetcher,
     );
   });
