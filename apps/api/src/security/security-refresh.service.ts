@@ -8,7 +8,7 @@ import {
   SecuritySearch,
 } from '@app/common';
 import { DailyPriceFetcher } from './daily-price.fetcher.js';
-import { DividendService } from './dividend.service.js';
+import { DividendSaveService } from './dividend-save.service.js';
 import { addDays, addYears, todayInSeoul } from './iso-date.js';
 
 /** 국내(KRW) 시세·배당을 받는 시작일. data.go.kr 일별 시세가 2020-01-02부터라 배당도 맞춘다 */
@@ -42,7 +42,7 @@ export class SecurityRefreshService {
   constructor(
     @InjectRepository(SecuritySearch)
     private readonly securitySearchRepository: Repository<SecuritySearch>,
-    private readonly dividendService: DividendService,
+    private readonly dividendSaveService: DividendSaveService,
     private readonly dailyPriceFetcher: DailyPriceFetcher,
   ) {}
 
@@ -71,7 +71,7 @@ export class SecurityRefreshService {
         addYears(last, -DIVIDEND_LOOKBACK_YEARS),
       );
       await this.refreshType(security, SearchType.INCOME, today, range, async () => {
-        const { fetched, saved } = await this.dividendService.fetchAndSave(
+        const { fetched, saved } = await this.dividendSaveService.fetchAndSave(
           security,
           range.from,
           addYears(today, DIVIDEND_FUTURE_YEARS),
