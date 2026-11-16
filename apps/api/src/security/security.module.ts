@@ -11,7 +11,6 @@ import { DailySecurityController } from './daily-security.controller.js';
 import { DailySecurityService } from './daily-security.service.js';
 import { DividendService } from './dividend.service.js';
 import { DividendController } from './dividend.controller.js';
-import { MonthlyDividendService } from './monthly-dividend.service.js';
 import { SecurityRefreshService } from './security-refresh.service.js';
 import { SecurityController } from './security.controller.js';
 import { SecurityService } from './security.service.js';
@@ -41,7 +40,6 @@ import { SecurityService } from './security.service.js';
   providers: [
     SecurityService,
     DailySecurityService,
-    MonthlyDividendService,
     DividendService,
     DailyPriceFetcher,
     SecurityRefreshService,

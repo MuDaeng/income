@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
 import { Repository } from 'typeorm';
@@ -17,6 +17,9 @@ import {
   type MassiveDividend,
 } from '@app/core';
 import { toYmd } from './iso-date.js';
+import type { MonthlyDividendResponse } from './monthly-dividend.dto.js';
+import type { MonthlyDividendRequest } from './monthly-dividend.schema.js';
+import { SecurityRefreshService } from './security-refresh.service.js';
 
 type DividendRow = Pick<
   Dividend,
@@ -35,7 +38,54 @@ export class DividendService {
     private readonly dividendRepository: Repository<Dividend>,
     private readonly kisClient: KisClient,
     private readonly massiveClient: MassiveClient,
+    @InjectRepository(Security)
+    private readonly securityRepository: Repository<Security>,
+    // SecurityRefreshService가 이 서비스를 쓰므로 순환 의존 (forwardRef)
+    @Inject(forwardRef(() => SecurityRefreshService))
+    private readonly securityRefreshService: SecurityRefreshService,
   ) {}
+
+  /**
+   * 종목 월별 배당금 조회(로그인 불필요). 현금배당(MONEY)의 1주당 금액을 지급월(paymentDate)별로 합산해
+   * 월 오름차순으로 돌려준다. 종목이 없으면 404.
+   * 읽기 전에 그 종목을 온라인으로 갱신한다(종목별 하루 한 번, 실패해도 저장분으로 응답).
+   */
+  async getMonthlyDividends(
+    input: MonthlyDividendRequest,
+  ): Promise<MonthlyDividendResponse> {
+    const found = await this.securityRepository.findOneBy({
+      id: input.securityId,
+    });
+    if (!found) {
+      throw new NotFoundException('종목을 찾을 수 없습니다.');
+    }
+    await this.securityRefreshService.refresh(found);
+    const { id, symbol, name, currency } = found;
+
+    const rows = await this.dividendRepository.find({
+      where: { id, type: DividendType.MONEY },
+      order: { paymentDate: 'ASC' },
+    });
+
+    const byMonth = new Map<string, { sum: Decimal; count: number }>();
+    for (const row of rows) {
+      const month = row.paymentDate.slice(0, 7);
+      const entry = byMonth.get(month) ?? { sum: new Decimal(0), count: 0 };
+      // 행마다 통화별로 버린 뒤 더한다(다른 배당 합계와 같은 규칙)
+      entry.sum = entry.sum.plus(truncateByCurrency(row.amount, currency));
+      entry.count += 1;
+      byMonth.set(month, entry);
+    }
+
+    return {
+      security: { id, symbol, name, currency },
+      months: [...byMonth.entries()].map(([month, { sum, count }]) => ({
+        month,
+        amount: truncateByCurrency(sum, currency),
+        count,
+      })),
+    };
+  }
 
   /** [from, to] 배당을 저장하고 { 받은 건수, 저장한 행 수 }를 돌려준다. KRW·USD 외 통화는 0 */
   async fetchAndSave(

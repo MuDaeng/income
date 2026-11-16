@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -42,6 +42,7 @@ export class SecurityRefreshService {
   constructor(
     @InjectRepository(SecuritySearch)
     private readonly securitySearchRepository: Repository<SecuritySearch>,
+    @Inject(forwardRef(() => DividendService))
     private readonly dividendService: DividendService,
     private readonly dailyPriceFetcher: DailyPriceFetcher,
   ) {}

@@ -7,12 +7,12 @@ import {
   type MonthlyDividendRequest,
   monthlyDividendSchema,
 } from './monthly-dividend.schema.js';
-import { MonthlyDividendService } from './monthly-dividend.service.js';
+import { DividendService } from './dividend.service.js';
 
 @ApiTags('dividend')
 @Controller('dividends')
 export class DividendController {
-  constructor(private readonly monthlyDividendService: MonthlyDividendService) {}
+  constructor(private readonly dividendService: DividendService) {}
 
   @Get()
   // 로그인 없이 호출되고 종목마다 외부 API 갱신을 일으키므로 기본보다 낮은 한도
@@ -24,6 +24,6 @@ export class DividendController {
   getMonthlyDividends(
     @Query({ schema: monthlyDividendSchema }) query: MonthlyDividendRequest,
   ): Promise<MonthlyDividendResponse> {
-    return this.monthlyDividendService.getMonthlyDividends(query);
+    return this.dividendService.getMonthlyDividends(query);
   }
 }
