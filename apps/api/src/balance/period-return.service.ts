@@ -1,17 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
-import { In, LessThanOrEqual, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   Currency,
-  DailyExchangeRate,
-  DailySecurity,
-  PurchaseDateBalance,
+  type DailyExchangeRate,
+  type PurchaseDateBalance,
   Security,
   truncateByCurrency,
 } from '@app/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
-import { DividendHistoryService } from './dividend-history.service.js';
+import { DailyPriceReader } from '../security/daily-price.reader.js';
+import { ExchangeRateReader } from '../security/exchange-rate.reader.js';
+import { DividendHistoryCalculator } from './dividend-history.calculator.js';
 import type {
   DividendSumItemDto,
   EvaluationItemDto,
@@ -19,20 +20,20 @@ import type {
   TotalReturnItemDto,
 } from './period-return.dto.js';
 import type { PeriodReturnRequest } from './period-return.schema.js';
+import { PurchaseRateReader } from './purchase-rate.reader.js';
+import { PurchaseReader } from './purchase.reader.js';
 import { returnRate } from './return-rate.js';
 
 @Injectable()
 export class PeriodReturnService {
   constructor(
-    @InjectRepository(PurchaseDateBalance)
-    private readonly purchaseDateBalanceRepository: Repository<PurchaseDateBalance>,
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,
-    @InjectRepository(DailySecurity)
-    private readonly dailySecurityRepository: Repository<DailySecurity>,
-    @InjectRepository(DailyExchangeRate)
-    private readonly dailyExchangeRateRepository: Repository<DailyExchangeRate>,
-    private readonly dividendHistoryService: DividendHistoryService,
+    private readonly purchaseReader: PurchaseReader,
+    private readonly purchaseRateReader: PurchaseRateReader,
+    private readonly dailyPriceReader: DailyPriceReader,
+    private readonly exchangeRateReader: ExchangeRateReader,
+    private readonly dividendHistoryCalculator: DividendHistoryCalculator,
   ) {}
 
   /**
@@ -40,7 +41,7 @@ export class PeriodReturnService {
    * 1. 종료일 보유분(매수일 <= to, 미매도 또는 매도일 > to)으로 종목별 수량·원금
    *    - USD 원화 원금은 매수분마다 저장된 구매 환율, 없으면 매수일(이전 최근) USD 환율로 환산
    * 2. 평가금액 = 종료일(이전 최근) 종가 × 수량, USD는 종료일(이전 최근) 환율로 원화 환산
-   * 3. 기간 배당금 = DividendHistoryService 결과(지급일이 [from, to])를 종목별로 합산
+   * 3. 기간 배당금 = DividendHistoryCalculator 결과(지급일이 [from, to])를 종목별로 합산
    * 4. 종목 = 종료일 보유 종목 ∪ 기간 중 배당 받은 종목. 총합 = 평가금액 + 배당금, 원금 대비 수익금·수익률
    * 합계는 응답에 보이는 종목별 값(버림 후)을 더한다.
    * securityCompany를 주면 그 증권사 매수분만으로 원금·평가·배당을 계산, 없으면 전체 증권사.
@@ -50,12 +51,12 @@ export class PeriodReturnService {
     input: PeriodReturnRequest,
   ): Promise<PeriodReturnResponse> {
     const { from, to, securityCompany } = input;
-    const companyFilter = securityCompany ? { securityCompany } : {};
 
     // 1. 종료일 보유분 (증권사를 주면 그 증권사 매수분만)
-    const purchases = await this.purchaseDateBalanceRepository.find({
-      where: { userId: authUser.id, ...companyFilter },
-    });
+    const purchases = await this.purchaseReader.findByUser(
+      authUser.id,
+      securityCompany,
+    );
     const heldBySecurity = new Map<string, PurchaseDateBalance[]>();
     for (const purchase of purchases) {
       if (
@@ -70,9 +71,9 @@ export class PeriodReturnService {
     }
 
     // 3. 기간 배당금 (증권사를 주면 그 증권사 보유 수량 기준)
-    const history = await this.dividendHistoryService.getDividendHistory(
+    const history = await this.dividendHistoryCalculator.calculate(
       authUser,
-      { from, to, ...companyFilter },
+      { from, to, securityCompany },
     );
     const dividends = new Map<string, { usd: Decimal; krw: Decimal }>();
     for (const item of history.months.flatMap((month) => month.items)) {
@@ -102,7 +103,9 @@ export class PeriodReturnService {
       (s) => s.currency === Currency.USD && heldBySecurity.has(s.id),
     );
     const rateCache = new Map<string, DailyExchangeRate | null>();
-    const endRate = hasUsd ? await this.findUsdRate(to, rateCache) : null;
+    const endRate = hasUsd
+      ? await this.exchangeRateReader.findUsdOnOrBefore(to, rateCache)
+      : null;
     if (hasUsd && !endRate) {
       throw new NotFoundException('종료일 이전의 USD 환율 정보가 없습니다.');
     }
@@ -207,17 +210,7 @@ export class PeriodReturnService {
       quantity = quantity.plus(purchase.amount);
       cost = cost.plus(purchaseCost);
       if (isUsd) {
-        // 저장된 구매 환율 우선, 없으면 매수일(이전 최근) USD 환율
-        let rate = purchase.exchangeRate;
-        if (rate == null) {
-          const daily = await this.findUsdRate(purchase.purchaseDate, rateCache);
-          if (!daily) {
-            throw new NotFoundException(
-              `${purchase.purchaseDate} 이전의 USD 환율 정보가 없습니다.`,
-            );
-          }
-          rate = daily.closingRate;
-        }
+        const rate = await this.purchaseRateReader.getRate(purchase, rateCache);
         krwCost = krwCost.plus(purchaseCost.times(rate));
       }
     }
@@ -245,10 +238,10 @@ export class PeriodReturnService {
       };
     }
 
-    const daily = await this.dailySecurityRepository.findOne({
-      where: { id: security.id, date: LessThanOrEqual(to) },
-      order: { date: 'DESC' },
-    });
+    const daily = await this.dailyPriceReader.findLatestOnOrBefore(
+      security.id,
+      to,
+    );
     if (!daily) {
       throw new NotFoundException(`${security.name}의 ${to} 이전 시세가 없습니다.`);
     }
@@ -269,21 +262,6 @@ export class PeriodReturnService {
       profit: toKrw(new Decimal(krwEvaluationAmount).minus(krwPurchaseAmount)),
       returnRate: returnRate(krwPurchaseAmount, krwEvaluationAmount),
     };
-  }
-
-  /** date(포함) 이전 가장 최근 USD 환율. 날짜별로 한 번만 조회 */
-  private async findUsdRate(
-    date: string,
-    cache: Map<string, DailyExchangeRate | null>,
-  ): Promise<DailyExchangeRate | null> {
-    if (!cache.has(date)) {
-      const rate = await this.dailyExchangeRateRepository.findOne({
-        where: { currency: Currency.USD, date: LessThanOrEqual(date) },
-        order: { date: 'DESC' },
-      });
-      cache.set(date, rate);
-    }
-    return cache.get(date) ?? null;
   }
 }
 

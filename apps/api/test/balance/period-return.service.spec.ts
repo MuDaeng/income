@@ -9,7 +9,11 @@ import {
   Security,
   SecurityCompany,
 } from '@app/common';
-import { DividendHistoryService } from '../../src/balance/dividend-history.service.js';
+import { DividendHistoryCalculator } from '../../src/balance/dividend-history.calculator.js';
+import { PurchaseRateReader } from '../../src/balance/purchase-rate.reader.js';
+import { PurchaseReader } from '../../src/balance/purchase.reader.js';
+import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
+import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
 import { PeriodReturnService } from '../../src/balance/period-return.service.js';
 
 const KRW = { id: 'KR7476800008', name: '리츠', currency: Currency.KRW };
@@ -35,7 +39,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
   const securityRepository = { findBy: vi.fn() };
   const dailySecurityRepository = { findOne: vi.fn() };
   const dailyExchangeRateRepository = { findOne: vi.fn() };
-  const dividendHistoryService = { getDividendHistory: vi.fn() };
+  const dividendHistoryCalculator = { calculate: vi.fn() };
   let service: PeriodReturnService;
 
   beforeEach(async () => {
@@ -43,11 +47,15 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         PeriodReturnService,
+        PurchaseReader,
+        PurchaseRateReader,
+        DailyPriceReader,
+        ExchangeRateReader,
         { provide: getRepositoryToken(PurchaseDateBalance), useValue: purchaseDateBalanceRepository },
         { provide: getRepositoryToken(Security), useValue: securityRepository },
         { provide: getRepositoryToken(DailySecurity), useValue: dailySecurityRepository },
         { provide: getRepositoryToken(DailyExchangeRate), useValue: dailyExchangeRateRepository },
-        { provide: DividendHistoryService, useValue: dividendHistoryService },
+        { provide: DividendHistoryCalculator, useValue: dividendHistoryCalculator },
       ],
     }).compile();
     service = moduleRef.get(PeriodReturnService);
@@ -87,7 +95,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       // 종료일 이전 전량 매도 → 평가 0, 배당만
       purchase(SOLD.id, '2026-01-02', '10.000000', '50000.000000', '2026-06-01'),
     ]);
-    dividendHistoryService.getDividendHistory.mockResolvedValue({
+    dividendHistoryCalculator.calculate.mockResolvedValue({
       months: [
         {
           items: [
@@ -111,7 +119,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       { from: '2026-01-01', to: '2026-11-30' },
     );
 
-    expect(dividendHistoryService.getDividendHistory).toHaveBeenCalledWith(
+    expect(dividendHistoryCalculator.calculate).toHaveBeenCalledWith(
       { id: 1 },
       { from: '2026-01-01', to: '2026-11-30' },
     );
@@ -188,7 +196,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       // 저장 환율 없음 → 2026-02-02 환율 1450
       { ...purchase(USD.id, '2026-02-03', '5.000000', '104.000000'), exchangeRate: null },
     ]);
-    dividendHistoryService.getDividendHistory.mockResolvedValue({ months: [] });
+    dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
 
     const result = await service.getPeriodReturn(
       { id: 1 },
@@ -207,7 +215,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([
       purchase(USD.id, '2025-12-31', '1.000000', '100.000000'),
     ]);
-    dividendHistoryService.getDividendHistory.mockResolvedValue({ months: [] });
+    dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
 
     await expect(
       service.getPeriodReturn({ id: 1 }, { from: '2026-01-01', to: '2026-11-30' }),
@@ -216,7 +224,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
 
   it('보유·배당 종목이 없으면 0으로 채운 빈 결과', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
-    dividendHistoryService.getDividendHistory.mockResolvedValue({ months: [] });
+    dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
 
     const result = await service.getPeriodReturn(
       { id: 1 },
@@ -238,7 +246,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
 
   it('securityCompany를 주면 그 증권사 매수분과 그 보유분의 배당만으로 계산, 없으면 전체', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
-    dividendHistoryService.getDividendHistory.mockResolvedValue({ months: [] });
+    dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
     const range = { from: '2026-01-01', to: '2026-11-30' };
 
     await service.getPeriodReturn({ id: 1 }, { ...range, securityCompany: SecurityCompany.KIWOOM });
@@ -248,7 +256,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       [{ where: { userId: 1, securityCompany: SecurityCompany.KIWOOM } }],
       [{ where: { userId: 1 } }],
     ]);
-    expect(dividendHistoryService.getDividendHistory.mock.calls).toEqual([
+    expect(dividendHistoryCalculator.calculate.mock.calls).toEqual([
       [{ id: 1 }, { ...range, securityCompany: SecurityCompany.KIWOOM }],
       [{ id: 1 }, range],
     ]);

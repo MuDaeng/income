@@ -10,8 +10,7 @@ import { IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import {
   Currency,
-  DailyExchangeRate,
-  DailySecurity,
+  type DailyExchangeRate,
   decimalPlacesOf,
   PurchaseDateBalance,
   Security,
@@ -21,7 +20,9 @@ import {
   UserBalance,
 } from '@app/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
-import { SecurityRefreshService } from '../security/security-refresh.service.js';
+import { DailyPriceReader } from '../security/daily-price.reader.js';
+import { ExchangeRateReader } from '../security/exchange-rate.reader.js';
+import { SecurityRefresher } from '../security/security.refresher.js';
 import type {
   BalanceItemDto,
   IntegratedBalanceResponse,
@@ -38,6 +39,7 @@ import type {
   PurchaseHistoryResponse,
 } from './purchase-history.dto.js';
 import type { PurchaseHistoryRequest } from './purchase-history.schema.js';
+import { PurchaseRateReader } from './purchase-rate.reader.js';
 import type { SellBalanceRequest } from './sell-balance.schema.js';
 import type { UpdateExchangeRateRequest } from './update-exchange-rate.schema.js';
 import type { UpdateSecurityCompanyRequest } from './update-security-company.schema.js';
@@ -54,25 +56,24 @@ export class BalanceService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,
-    @InjectRepository(DailySecurity)
-    private readonly dailySecurityRepository: Repository<DailySecurity>,
-    @InjectRepository(DailyExchangeRate)
-    private readonly dailyExchangeRateRepository: Repository<DailyExchangeRate>,
-    private readonly securityRefreshService: SecurityRefreshService,
+    private readonly securityRefresher: SecurityRefresher,
+    private readonly dailyPriceReader: DailyPriceReader,
+    private readonly exchangeRateReader: ExchangeRateReader,
+    private readonly purchaseRateReader: PurchaseRateReader,
   ) {}
 
   /**
    * 매수 잔고 등록. 등록(saveBalance 트랜잭션)이 커밋된 뒤에 그 종목의 배당·시세를 갱신한다(하루 한 번).
    * 갱신을 트랜잭션 밖에서 하는 이유: 등록이 검증에서 실패하면 외부 API를 호출하지 않고,
    * 등록 실패로 배당·조회 기록까지 롤백되는 일도 없게 하려고.
-   * 갱신이 실패해도(SecurityRefreshService가 로그만 남김) 등록 결과는 그대로 돌려준다.
+   * 갱신이 실패해도(SecurityRefresher가 로그만 남김) 등록 결과는 그대로 돌려준다.
    */
   async registerBalance(
     authUser: AuthUser,
     input: RegisterBalanceRequest,
   ): Promise<PurchaseDateBalance> {
     const { saved, security } = await this.saveBalance(authUser, input);
-    await this.securityRefreshService.refresh(security);
+    await this.securityRefresher.refresh(security);
     return saved;
   }
 
@@ -112,10 +113,7 @@ export class BalanceService {
     }
 
     // 3. 매수일 시세
-    const daily = await this.dailySecurityRepository.findOneBy({
-      id: securityId,
-      date: purchaseDate,
-    });
+    const daily = await this.dailyPriceReader.findOn(securityId, purchaseDate);
     if (!daily) {
       throw new BadRequestException('해당 매수일의 시세가 없습니다.');
     }
@@ -138,7 +136,8 @@ export class BalanceService {
     if (security.currency !== Currency.KRW) {
       const rate =
         input.exchangeRate ??
-        (await this.findUsdRateOnOrBefore(purchaseDate))?.closingRate;
+        (await this.exchangeRateReader.findUsdOnOrBefore(purchaseDate))
+          ?.closingRate;
       exchangeRate = rate ? toRate(rate) : null;
     }
 
@@ -539,7 +538,7 @@ export class BalanceService {
         if (purchase.exchangeRate != null) {
           exchangeRate = new Decimal(purchase.exchangeRate).toString();
         } else {
-          const rate = await this.findUsdRateOnOrBefore(
+          const rate = await this.exchangeRateReader.findUsdOnOrBefore(
             purchase.purchaseDate,
             rates,
           );
@@ -639,7 +638,7 @@ export class BalanceService {
       if (!usdIds.has(purchase.securityId)) {
         continue;
       }
-      const rate = await this.purchaseRateOf(purchase, rateCache);
+      const rate = await this.purchaseRateReader.getRate(purchase, rateCache);
       const total = totals.get(purchase.securityId)!;
       total.krwCost = total.krwCost.plus(
         new Decimal(purchase.amount).times(purchase.price).times(rate),
@@ -651,10 +650,7 @@ export class BalanceService {
       (balance) => balance.security.currency === Currency.USD,
     );
     const exchangeRate = hasUsd
-      ? await this.dailyExchangeRateRepository.findOne({
-          where: { currency: Currency.USD },
-          order: { date: 'DESC' },
-        })
+      ? await this.exchangeRateReader.findLatestUsd()
       : null;
     if (hasUsd && !exchangeRate) {
       throw new NotFoundException('USD 환율 정보가 없습니다.');
@@ -663,10 +659,7 @@ export class BalanceService {
     const items: BalanceItemDto[] = [];
     for (const { securityId, security } of heldBalances) {
       // 3. 최신 종가
-      const latest = await this.dailySecurityRepository.findOne({
-        where: { id: securityId },
-        order: { date: 'DESC' },
-      });
+      const latest = await this.dailyPriceReader.findLatest(securityId);
       if (!latest) {
         throw new NotFoundException(`${security.name}의 시세가 없습니다.`);
       }
@@ -781,39 +774,6 @@ export class BalanceService {
       krwEvaluationAmount: toKrw(evaluation),
       usdEvaluationAmount: null,
     };
-  }
-
-  /** 매수분의 구매 환율: 저장된 환율, 없으면 매수일(이전 최근) USD 환율. 둘 다 없으면 404 */
-  private async purchaseRateOf(
-    purchase: PurchaseDateBalance,
-    cache: Map<string, DailyExchangeRate | null>,
-  ): Promise<string> {
-    if (purchase.exchangeRate != null) {
-      return purchase.exchangeRate;
-    }
-    const rate = await this.findUsdRateOnOrBefore(purchase.purchaseDate, cache);
-    if (!rate) {
-      throw new NotFoundException(
-        `${purchase.purchaseDate} 이전의 USD 환율 정보가 없습니다.`,
-      );
-    }
-    return rate.closingRate;
-  }
-
-  /** date(포함) 이전 가장 최근 USD 환율. cache가 있으면 날짜별로 한 번만 조회 */
-  private async findUsdRateOnOrBefore(
-    date: string,
-    cache?: Map<string, DailyExchangeRate | null>,
-  ): Promise<DailyExchangeRate | null> {
-    if (cache?.has(date)) {
-      return cache.get(date) ?? null;
-    }
-    const rate = await this.dailyExchangeRateRepository.findOne({
-      where: { currency: Currency.USD, date: LessThanOrEqual(date) },
-      order: { date: 'DESC' },
-    });
-    cache?.set(date, rate);
-    return rate;
   }
 
   private sum(values: (string | null)[]): Decimal {

@@ -5,9 +5,9 @@ import { Repository } from 'typeorm';
 import { Dividend, DividendType, Security, truncateByCurrency } from '@app/common';
 import type { MonthlyDividendResponse } from './monthly-dividend.dto.js';
 import type { MonthlyDividendRequest } from './monthly-dividend.schema.js';
-import { SecurityRefreshService } from './security-refresh.service.js';
+import { SecurityRefresher } from './security.refresher.js';
 
-/** 저장된 배당을 읽어 조회 API 응답을 만든다. 원천에서 받아 저장하는 일은 DividendSaveService가 한다 */
+/** 저장된 배당을 읽어 조회 API 응답을 만든다. 원천에서 받아 저장하는 일은 DividendFetcher가 한다 */
 @Injectable()
 export class DividendService {
   constructor(
@@ -15,7 +15,7 @@ export class DividendService {
     private readonly dividendRepository: Repository<Dividend>,
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,
-    private readonly securityRefreshService: SecurityRefreshService,
+    private readonly securityRefresher: SecurityRefresher,
   ) {}
 
   /**
@@ -32,7 +32,7 @@ export class DividendService {
     if (!found) {
       throw new NotFoundException('종목을 찾을 수 없습니다.');
     }
-    await this.securityRefreshService.refresh(found);
+    await this.securityRefresher.refresh(found);
     const { id, symbol, name, currency } = found;
 
     const rows = await this.dividendRepository.find({

@@ -2,8 +2,9 @@ import { NotFoundException } from '@nestjs/common';
 import { Between, LessThanOrEqual } from 'typeorm';
 import type { Repository } from 'typeorm';
 import { Currency, DailySecurity, Security } from '@app/common';
+import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
 import { DailySecurityService } from '../../src/security/daily-security.service.js';
-import type { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
+import type { SecurityRefresher } from '../../src/security/security.refresher.js';
 
 const AAPL = {
   id: 'US0378331005',
@@ -22,9 +23,11 @@ describe('DailySecurityService.getDailyPrices', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     service = new DailySecurityService(
-      { find: dailyFind } as unknown as Repository<DailySecurity>,
       { findOneBy } as unknown as Repository<Security>,
-      { refresh } as unknown as SecurityRefreshService,
+      { refresh } as unknown as SecurityRefresher,
+      new DailyPriceReader(
+        { find: dailyFind } as unknown as Repository<DailySecurity>,
+      ),
     );
   });
 

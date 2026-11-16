@@ -8,11 +8,13 @@ import {
   SecuritySearch,
 } from '@app/common';
 import { DailyPriceFetcher } from './daily-price.fetcher.js';
-import { DividendSaveService } from './dividend-save.service.js';
+import { DividendFetcher } from './dividend.fetcher.js';
 import { addDays, addYears, todayInSeoul } from './iso-date.js';
 
-/** 국내(KRW) 시세·배당을 받는 시작일. data.go.kr 일별 시세가 2020-01-02부터라 배당도 맞춘다 */
-export const KRW_HISTORY_START = '2020-01-01';
+/** 국내(KRW) 일별 시세를 받는 시작일 (data.go.kr 일별 시세가 2020-01-02부터) */
+export const KRW_PRICE_START = '2020-01-01';
+/** 국내(KRW) 배당을 받는 시작일 (KIS 예탁원 배당일정은 2000년부터) */
+export const KRW_DIVIDEND_START = '2000-01-01';
 /** USD 배당은 이만큼 거슬러 받는다 (Massive Basic은 2년치까지) */
 const USD_DIVIDEND_PAST_YEARS = 2;
 /** 공시된 앞으로의 배당까지 받으려고 오늘 이후로도 조회 */
@@ -28,7 +30,7 @@ const DIVIDEND_LOOKBACK_YEARS = 1;
 /**
  * 조회 API에서 종목 데이터를 온라인으로 갱신한다. 종목·종류별로 하루에 한 번만 원천을 호출한다.
  * 조회일과 받아 둔 구간의 시작일은 security_search에 (종목, 종류)마다 따로 남긴다.
- * - INCOME(배당): KRW는 2020-01-01, USD는 오늘-2년부터 오늘+1년까지
+ * - INCOME(배당): KRW는 2000-01-01, USD는 오늘-2년부터 오늘+1년까지
  * - PRICE(일별 시세): KRW 종목만, 2020-01-01 ~ 오늘.
  *   USD 시세는 batch의 us-daily-prices 잡이 매일 전 종목을 받으므로 여기서는 받지 않는다.
  * - 받아 둔 구간(fromDate)이 이미 시작일을 덮으면 마지막 조회일 − 7일(시세)/1년(배당)부터만 받는다.
@@ -36,13 +38,13 @@ const DIVIDEND_LOOKBACK_YEARS = 1;
  *   호출한 API는 저장분으로 응답하고, 다음 조회 때 그 종류만 다시 시도한다.
  */
 @Injectable()
-export class SecurityRefreshService {
-  private readonly logger = new Logger(SecurityRefreshService.name);
+export class SecurityRefresher {
+  private readonly logger = new Logger(SecurityRefresher.name);
 
   constructor(
     @InjectRepository(SecuritySearch)
     private readonly securitySearchRepository: Repository<SecuritySearch>,
-    private readonly dividendSaveService: DividendSaveService,
+    private readonly dividendFetcher: DividendFetcher,
     private readonly dailyPriceFetcher: DailyPriceFetcher,
   ) {}
 
@@ -65,13 +67,13 @@ export class SecurityRefreshService {
     if (income?.lastSearchDate !== today) {
       const start =
         security.currency === Currency.KRW
-          ? KRW_HISTORY_START
+          ? KRW_DIVIDEND_START
           : addYears(today, -USD_DIVIDEND_PAST_YEARS);
       const range = rangeOf(income, start, (last) =>
         addYears(last, -DIVIDEND_LOOKBACK_YEARS),
       );
       await this.refreshType(security, SearchType.INCOME, today, range, async () => {
-        const { fetched, saved } = await this.dividendSaveService.fetchAndSave(
+        const { fetched, saved } = await this.dividendFetcher.fetchAndSave(
           security,
           range.from,
           addYears(today, DIVIDEND_FUTURE_YEARS),
@@ -81,7 +83,7 @@ export class SecurityRefreshService {
     }
     const price = searchOf(SearchType.PRICE);
     if (security.currency === Currency.KRW && price?.lastSearchDate !== today) {
-      const range = rangeOf(price, KRW_HISTORY_START, (last) =>
+      const range = rangeOf(price, KRW_PRICE_START, (last) =>
         addDays(last, -PRICE_LOOKBACK_DAYS),
       );
       await this.refreshType(security, SearchType.PRICE, today, range, async () => {

@@ -9,8 +9,11 @@ import {
   User,
   UserBalance,
 } from '@app/common';
-import { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
+import { SecurityRefresher } from '../../src/security/security.refresher.js';
 import { BalanceService } from '../../src/balance/balance.service.js';
+import { PurchaseRateReader } from '../../src/balance/purchase-rate.reader.js';
+import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
+import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
 
 describe('BalanceService.getSecurityCompanies', () => {
   const purchaseDateBalanceRepository = { find: vi.fn() };
@@ -21,13 +24,16 @@ describe('BalanceService.getSecurityCompanies', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BalanceService,
+        DailyPriceReader,
+        ExchangeRateReader,
+        PurchaseRateReader,
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,
         },
         { provide: getRepositoryToken(User), useValue: {} },
         { provide: getRepositoryToken(Security), useValue: {} },
-        { provide: SecurityRefreshService, useValue: {} },
+        { provide: SecurityRefresher, useValue: {} },
         { provide: getRepositoryToken(UserBalance), useValue: {} },
         { provide: getRepositoryToken(DailySecurity), useValue: {} },
         { provide: getRepositoryToken(DailyExchangeRate), useValue: {} },

@@ -1,6 +1,7 @@
 import { Like } from 'typeorm';
 import type { Repository } from 'typeorm';
 import { Currency, DailySecurity, Security } from '@app/common';
+import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
 import { searchSecuritiesSchema } from '../../src/security/search-securities.schema.js';
 import { SEARCH_LIMIT, SecurityService } from '../../src/security/security.service.js';
 
@@ -20,7 +21,9 @@ describe('SecurityService.searchSecurities', () => {
     vi.resetAllMocks();
     service = new SecurityService(
       { find } as unknown as Repository<Security>,
-      { findOne } as unknown as Repository<DailySecurity>,
+      new DailyPriceReader(
+        { findOne } as unknown as Repository<DailySecurity>,
+      ),
     );
   });
 

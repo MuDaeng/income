@@ -11,7 +11,7 @@ import type {
   MassiveClient,
   MassiveDividend,
 } from '@app/core';
-import { DividendSaveService } from '../../src/security/dividend-save.service.js';
+import { DividendFetcher } from '../../src/security/dividend.fetcher.js';
 
 const SAMSUNG = {
   id: 'KR7005930003',
@@ -29,17 +29,17 @@ const item = (overrides: Partial<KisDividendItem>): KisDividendItem => ({
   ...overrides,
 });
 
-describe('DividendSaveService', () => {
+describe('DividendFetcher', () => {
   const dividendUpsert = vi.fn();
   const getDividends = vi.fn<KisClient['getDividends']>();
   const getMassiveDividends = vi.fn<MassiveClient['getDividends']>();
-  let service: DividendSaveService;
+  let service: DividendFetcher;
 
   beforeEach(() => {
     vi.resetAllMocks();
     getDividends.mockResolvedValue([]);
     getMassiveDividends.mockResolvedValue([]);
-    service = new DividendSaveService(
+    service = new DividendFetcher(
       { upsert: dividendUpsert } as unknown as Repository<Dividend>,
       { getDividends } as unknown as KisClient,
       { getDividends: getMassiveDividends } as unknown as MassiveClient,

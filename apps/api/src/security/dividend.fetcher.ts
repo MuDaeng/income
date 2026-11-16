@@ -24,12 +24,12 @@ type DividendRow = Pick<
 >;
 
 /**
- * 종목 하나의 배당을 원천에서 받아 dividend에 upsert한다. 언제 부를지(하루 한 번)는 SecurityRefreshService가 정한다.
+ * 종목 하나의 배당을 원천에서 받아 dividend에 upsert한다. 언제 부를지(하루 한 번)는 SecurityRefresher가 정한다.
  * - KRW: KIS 예탁원 배당일정 (6자리 symbol, 기간은 기준일)
  * - USD: Massive Dividends (symbol을 Massive 티커로, 기간은 배당락일)
  */
 @Injectable()
-export class DividendSaveService {
+export class DividendFetcher {
   constructor(
     @InjectRepository(Dividend)
     private readonly dividendRepository: Repository<Dividend>,

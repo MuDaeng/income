@@ -7,8 +7,8 @@ import {
 } from '@app/common';
 import type { Repository } from 'typeorm';
 import type { DailyPriceFetcher } from '../../src/security/daily-price.fetcher.js';
-import type { DividendSaveService } from '../../src/security/dividend-save.service.js';
-import { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
+import type { DividendFetcher } from '../../src/security/dividend.fetcher.js';
+import { SecurityRefresher } from '../../src/security/security.refresher.js';
 
 const SAMSUNG = {
   id: 'KR7005930003',
@@ -23,27 +23,30 @@ const APPLE = {
 
 /** 한국 시간 오늘 */
 const TODAY = '2026-11-09';
+/** KRW 시작일: 배당 2000-01-01, 시세 2020-01-01 */
+const krwStart = (type: SearchType) =>
+  type === SearchType.INCOME ? '2000-01-01' : '2020-01-01';
 const search = (
   type: SearchType,
   lastSearchDate: string,
-  fromDate: string | null = '2020-01-01',
+  fromDate: string | null = krwStart(type),
 ) => ({ id: SAMSUNG.id, type, lastSearchDate, fromDate });
 const saved = (
   security: Security,
   type: SearchType,
-  fromDate = '2020-01-01',
+  fromDate = krwStart(type),
 ) => [
   { id: security.id, type, lastSearchDate: TODAY, fromDate },
   ['id', 'type'],
 ];
 
-describe('SecurityRefreshService.refresh', () => {
+describe('SecurityRefresher.refresh', () => {
   const findBy = vi.fn();
   const searchUpsert = vi.fn();
-  const fetchDividends = vi.fn<DividendSaveService['fetchAndSave']>();
+  const fetchDividends = vi.fn<DividendFetcher['fetchAndSave']>();
   const fetchPrices = vi.fn<DailyPriceFetcher['fetchAndSave']>();
   let errorLog: ReturnType<typeof vi.spyOn>;
-  let service: SecurityRefreshService;
+  let service: SecurityRefresher;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -57,9 +60,9 @@ describe('SecurityRefreshService.refresh', () => {
     findBy.mockResolvedValue([]);
     fetchDividends.mockResolvedValue({ fetched: 2, saved: 2 });
     fetchPrices.mockResolvedValue(480);
-    service = new SecurityRefreshService(
+    service = new SecurityRefresher(
       { findBy, upsert: searchUpsert } as unknown as Repository<SecuritySearch>,
-      { fetchAndSave: fetchDividends } as unknown as DividendSaveService,
+      { fetchAndSave: fetchDividends } as unknown as DividendFetcher,
       { fetchAndSave: fetchPrices } as unknown as DailyPriceFetcher,
     );
   });
@@ -83,12 +86,12 @@ describe('SecurityRefreshService.refresh', () => {
     expect(searchUpsert).not.toHaveBeenCalled();
   });
 
-  it('조회 기록이 없으면 KRW는 배당(2020-01-01~1년 뒤)과 시세(2020-01-01~오늘)를 받고 종류마다 조회일·시작일을 남긴다', async () => {
+  it('조회 기록이 없으면 KRW는 배당(2000-01-01~1년 뒤)과 시세(2020-01-01~오늘)를 받고 종류마다 조회일·시작일을 남긴다', async () => {
     await service.refresh(SAMSUNG);
 
     expect(fetchDividends).toHaveBeenCalledWith(
       SAMSUNG,
-      '2020-01-01',
+      '2000-01-01',
       '2027-11-09',
     );
     expect(fetchPrices).toHaveBeenCalledWith(SAMSUNG, '2020-01-01', TODAY);
@@ -200,7 +203,7 @@ describe('SecurityRefreshService.refresh', () => {
 
     expect(fetchDividends).toHaveBeenCalledWith(
       SAMSUNG,
-      '2020-01-01',
+      '2000-01-01',
       '2027-11-09',
     );
     expect(fetchPrices).toHaveBeenCalledWith(SAMSUNG, '2020-01-01', TODAY);
@@ -208,6 +211,22 @@ describe('SecurityRefreshService.refresh', () => {
       saved(SAMSUNG, SearchType.INCOME),
       saved(SAMSUNG, SearchType.PRICE),
     ]);
+  });
+
+  it('2020년부터 받아 둔 국내 배당은 2000년부터 한 번 다시 받는다', async () => {
+    findBy.mockResolvedValue([
+      search(SearchType.INCOME, '2026-11-08', '2020-01-01'),
+      search(SearchType.PRICE, TODAY),
+    ]);
+
+    await service.refresh(SAMSUNG);
+
+    expect(fetchDividends).toHaveBeenCalledWith(
+      SAMSUNG,
+      '2000-01-01',
+      '2027-11-09',
+    );
+    expect(searchUpsert.mock.calls).toEqual([saved(SAMSUNG, SearchType.INCOME)]);
   });
 
   it('USD 배당은 오늘−2년을 덮고 있으면 마지막 조회일−1년부터만 받는다', async () => {

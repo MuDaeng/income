@@ -9,8 +9,11 @@ import {
   User,
   UserBalance,
 } from '@app/common';
-import { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
+import { SecurityRefresher } from '../../src/security/security.refresher.js';
 import { BalanceService } from '../../src/balance/balance.service.js';
+import { PurchaseRateReader } from '../../src/balance/purchase-rate.reader.js';
+import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
+import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
 
 // 단위 테스트에서는 트랜잭션 컨텍스트 없이 메서드만 실행
 vi.mock('typeorm-transactional', () => ({
@@ -37,6 +40,9 @@ describe('BalanceService.deletePurchase', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BalanceService,
+        DailyPriceReader,
+        ExchangeRateReader,
+        PurchaseRateReader,
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,
@@ -46,7 +52,7 @@ describe('BalanceService.deletePurchase', () => {
           useValue: userBalanceRepository,
         },
         { provide: getRepositoryToken(User), useValue: userRepository },
-        { provide: SecurityRefreshService, useValue: {} },
+        { provide: SecurityRefresher, useValue: {} },
         { provide: getRepositoryToken(Security), useValue: {} },
         { provide: getRepositoryToken(DailySecurity), useValue: {} },
         { provide: getRepositoryToken(DailyExchangeRate), useValue: {} },

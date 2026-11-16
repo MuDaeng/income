@@ -1,24 +1,27 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
-import { In, LessThanOrEqual, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   Currency,
-  DailyExchangeRate,
-  DailySecurity,
-  PurchaseDateBalance,
+  type DailyExchangeRate,
+  type DailySecurity,
+  type PurchaseDateBalance,
   Security,
   truncateByCurrency,
 } from '@app/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
+import { DailyPriceReader } from '../security/daily-price.reader.js';
+import { ExchangeRateReader } from '../security/exchange-rate.reader.js';
 import { todayInSeoul } from '../security/iso-date.js';
-import { DividendHistoryService } from './dividend-history.service.js';
+import { DividendHistoryCalculator } from './dividend-history.calculator.js';
 import type {
   MonthlyBalanceItemDto,
   MonthlyBalanceMonthDto,
   MonthlyBalanceResponse,
 } from './monthly-balance.dto.js';
 import type { MonthlyBalanceRequest } from './monthly-balance.schema.js';
+import { PurchaseReader } from './purchase.reader.js';
 
 /** 날짜 오름차순 행 목록에서 date(포함) 이전 가장 최근 행을 찾기 위한 최소 형태 */
 interface Dated {
@@ -28,15 +31,12 @@ interface Dated {
 @Injectable()
 export class MonthlyBalanceService {
   constructor(
-    @InjectRepository(PurchaseDateBalance)
-    private readonly purchaseDateBalanceRepository: Repository<PurchaseDateBalance>,
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,
-    @InjectRepository(DailySecurity)
-    private readonly dailySecurityRepository: Repository<DailySecurity>,
-    @InjectRepository(DailyExchangeRate)
-    private readonly dailyExchangeRateRepository: Repository<DailyExchangeRate>,
-    private readonly dividendHistoryService: DividendHistoryService,
+    private readonly purchaseReader: PurchaseReader,
+    private readonly dailyPriceReader: DailyPriceReader,
+    private readonly exchangeRateReader: ExchangeRateReader,
+    private readonly dividendHistoryCalculator: DividendHistoryCalculator,
   ) {}
 
   /**
@@ -44,7 +44,7 @@ export class MonthlyBalanceService {
    * securityCompany를 주면 그 증권사 매수분만으로 원금·평가·배당을 계산, 없으면 전체 증권사.
    * - 보유분: 매수일 <= 기준일, 미매도 또는 매도일 > 기준일. 원금은 USD면 저장된 구매 환율, 없으면 매수일(이전 최근) 환율로 환산
    * - 평가금액: 기준일(이전 최근) 종가 × 수량, USD는 기준일(이전 최근) 환율로 환산
-   * - 누적배당금: 처음부터 기준일까지 지급된 배당금(DividendHistoryService, 원화 환산 없는 건 제외)
+   * - 누적배당금: 처음부터 기준일까지 지급된 배당금(DividendHistoryCalculator, 원화 환산 없는 건 제외)
    * - 종목: 기준일 보유 종목 ∪ 기준일까지 배당을 받은 종목. 합계는 종목별 값(버림 후)을 더한다
    * 시세·환율은 마지막 기준일까지 한 번에 읽어 메모리에서 찾는다.
    */
@@ -61,20 +61,15 @@ export class MonthlyBalanceService {
     const lastDate = months[months.length - 1].date;
 
     const purchases = (
-      await this.purchaseDateBalanceRepository.find({
-        where: {
-          userId: authUser.id,
-          ...(securityCompany ? { securityCompany } : {}),
-        },
-      })
+      await this.purchaseReader.findByUser(authUser.id, securityCompany)
     ).filter((p) => p.purchaseDate <= lastDate);
 
     // 처음부터 마지막 기준일까지 지급된 배당금 (이 호출이 보유 종목을 온라인 갱신함).
     // 증권사를 주면 그 증권사 매수분의 보유 수량으로만 배당을 계산
-    const history = await this.dividendHistoryService.getDividendHistory(
-      authUser,
-      { to: lastDate, ...(securityCompany ? { securityCompany } : {}) },
-    );
+    const history = await this.dividendHistoryCalculator.calculate(authUser, {
+      to: lastDate,
+      securityCompany,
+    });
     const dividends = history.months
       .flatMap((month) => month.items)
       .filter((item) => item.krwAmount !== null);
@@ -93,13 +88,10 @@ export class MonthlyBalanceService {
 
     const pricesById = new Map<string, DailySecurity[]>();
     if (securities.length) {
-      const prices = await this.dailySecurityRepository.find({
-        where: {
-          id: In(securities.map((s) => s.id)),
-          date: LessThanOrEqual(lastDate),
-        },
-        order: { date: 'ASC' },
-      });
+      const prices = await this.dailyPriceReader.findUpTo(
+        securities.map((s) => s.id),
+        lastDate,
+      );
       for (const price of prices) {
         const list = pricesById.get(price.id) ?? [];
         list.push(price);
@@ -107,10 +99,7 @@ export class MonthlyBalanceService {
       }
     }
     const rates = securities.some((s) => s.currency === Currency.USD)
-      ? await this.dailyExchangeRateRepository.find({
-          where: { currency: Currency.USD, date: LessThanOrEqual(lastDate) },
-          order: { date: 'ASC' },
-        })
+      ? await this.exchangeRateReader.findUsdUpTo(lastDate)
       : [];
 
     // USD 매수분의 원화 원금은 기준일과 무관하므로 한 번만 계산

@@ -11,8 +11,11 @@ import {
   User,
   UserBalance,
 } from '@app/common';
-import { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
+import { SecurityRefresher } from '../../src/security/security.refresher.js';
 import { BalanceService } from '../../src/balance/balance.service.js';
+import { PurchaseRateReader } from '../../src/balance/purchase-rate.reader.js';
+import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
+import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
 
 // 단위 테스트에서는 트랜잭션 컨텍스트 없이 메서드만 실행
 vi.mock('typeorm-transactional', () => ({
@@ -43,7 +46,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
   const securityRepository = { findOneBy: vi.fn() };
   const dailySecurityRepository = { findOneBy: vi.fn() };
   const dailyExchangeRateRepository = { findOne: vi.fn() };
-  const securityRefreshService = { refresh: vi.fn() };
+  const securityRefresher = { refresh: vi.fn() };
   let service: BalanceService;
 
   beforeEach(async () => {
@@ -64,6 +67,9 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BalanceService,
+        DailyPriceReader,
+        ExchangeRateReader,
+        PurchaseRateReader,
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,
@@ -73,7 +79,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
         { provide: getRepositoryToken(Security), useValue: securityRepository },
         { provide: getRepositoryToken(DailySecurity), useValue: dailySecurityRepository },
         { provide: getRepositoryToken(DailyExchangeRate), useValue: dailyExchangeRateRepository },
-        { provide: SecurityRefreshService, useValue: securityRefreshService },
+        { provide: SecurityRefresher, useValue: securityRefresher },
       ],
     }).compile();
     service = moduleRef.get(BalanceService);
@@ -82,7 +88,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
   it('잔고를 등록하고 그 종목의 배당·시세를 갱신한다', async () => {
     const saved = await service.registerBalance({ id: 1 }, INPUT);
 
-    expect(securityRefreshService.refresh).toHaveBeenCalledWith(SAMSUNG);
+    expect(securityRefresher.refresh).toHaveBeenCalledWith(SAMSUNG);
     expect(saved).toMatchObject({
       securityId: SAMSUNG.id,
       securityCompany: SecurityCompany.KIWOOM,
@@ -97,14 +103,14 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
     await expect(service.registerBalance({ id: 1 }, INPUT)).rejects.toThrow(
       '해당 매수일의 시세가 없습니다.',
     );
-    expect(securityRefreshService.refresh).not.toHaveBeenCalled();
+    expect(securityRefresher.refresh).not.toHaveBeenCalled();
   });
 
   it('등록을 저장한 뒤에 배당을 갱신한다', async () => {
     await service.registerBalance({ id: 1 }, INPUT);
 
     expect(purchaseDateBalanceRepository.save.mock.invocationCallOrder[0]).toBeLessThan(
-      securityRefreshService.refresh.mock.invocationCallOrder[0],
+      securityRefresher.refresh.mock.invocationCallOrder[0],
     );
   });
 
@@ -114,7 +120,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
     await expect(service.registerBalance({ id: 1 }, INPUT)).rejects.toThrow(
       '존재하지 않는 종목입니다.',
     );
-    expect(securityRefreshService.refresh).not.toHaveBeenCalled();
+    expect(securityRefresher.refresh).not.toHaveBeenCalled();
   });
 
   describe('구매 환율', () => {

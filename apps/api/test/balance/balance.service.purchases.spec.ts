@@ -12,8 +12,11 @@ import {
   User,
   UserBalance,
 } from '@app/common';
-import { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
+import { SecurityRefresher } from '../../src/security/security.refresher.js';
 import { BalanceService } from '../../src/balance/balance.service.js';
+import { PurchaseRateReader } from '../../src/balance/purchase-rate.reader.js';
+import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
+import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
 import { purchaseHistorySchema } from '../../src/balance/purchase-history.schema.js';
 
 const AAPL = { id: 'US0378331005', symbol: 'AAPL', name: '애플', currency: Currency.USD };
@@ -30,13 +33,16 @@ describe('BalanceService.getPurchases', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         BalanceService,
+        DailyPriceReader,
+        ExchangeRateReader,
+        PurchaseRateReader,
         { provide: getRepositoryToken(PurchaseDateBalance), useValue: purchaseDateBalanceRepository },
         { provide: getRepositoryToken(Security), useValue: securityRepository },
         { provide: getRepositoryToken(DailyExchangeRate), useValue: dailyExchangeRateRepository },
         { provide: getRepositoryToken(UserBalance), useValue: {} },
         { provide: getRepositoryToken(User), useValue: {} },
         { provide: getRepositoryToken(DailySecurity), useValue: {} },
-        { provide: SecurityRefreshService, useValue: {} },
+        { provide: SecurityRefresher, useValue: {} },
       ],
     }).compile();
     service = moduleRef.get(BalanceService);

@@ -10,8 +10,10 @@ import {
   Security,
   SecurityCompany,
 } from '@app/common';
-import { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
-import { DividendHistoryService } from '../../src/balance/dividend-history.service.js';
+import { SecurityRefresher } from '../../src/security/security.refresher.js';
+import { DividendHistoryCalculator } from '../../src/balance/dividend-history.calculator.js';
+import { PurchaseReader } from '../../src/balance/purchase.reader.js';
+import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
 
 const KRW_SECURITY = { id: 'KR7005930003', name: '삼성전자', currency: Currency.KRW };
 const USD_SECURITY = { id: 'US0378331005', name: 'Apple', currency: Currency.USD };
@@ -23,19 +25,21 @@ const purchase = (
   saleDate: string | null = null,
 ) => ({ securityId, purchaseDate, amount, saleDate, price: '1.000000', sequence: 1 });
 
-describe('DividendHistoryService.getDividendHistory', () => {
+describe('DividendHistoryCalculator.calculate', () => {
   const purchaseDateBalanceRepository = { find: vi.fn() };
   const securityRepository = { findBy: vi.fn() };
   const dividendRepository = { find: vi.fn() };
   const dailyExchangeRateRepository = { findOne: vi.fn() };
-  const securityRefreshService = { refresh: vi.fn() };
-  let service: DividendHistoryService;
+  const securityRefresher = { refresh: vi.fn() };
+  let service: DividendHistoryCalculator;
 
   beforeEach(async () => {
     vi.resetAllMocks();
     const moduleRef = await Test.createTestingModule({
       providers: [
-        DividendHistoryService,
+        DividendHistoryCalculator,
+        PurchaseReader,
+        ExchangeRateReader,
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,
@@ -46,17 +50,17 @@ describe('DividendHistoryService.getDividendHistory', () => {
           provide: getRepositoryToken(DailyExchangeRate),
           useValue: dailyExchangeRateRepository,
         },
-        { provide: SecurityRefreshService, useValue: securityRefreshService },
+        { provide: SecurityRefresher, useValue: securityRefresher },
       ],
     }).compile();
-    service = moduleRef.get(DividendHistoryService);
+    service = moduleRef.get(DividendHistoryCalculator);
     securityRepository.findBy.mockResolvedValue([KRW_SECURITY, USD_SECURITY]);
   });
 
   it('보유했던 종목이 없으면 빈 내역을 돌려준다', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    const result = await service.getDividendHistory({ id: 1 }, {});
+    const result = await service.calculate({ id: 1 }, {});
 
     expect(result).toEqual({
       from: null,
@@ -65,14 +69,14 @@ describe('DividendHistoryService.getDividendHistory', () => {
       months: [],
     });
     expect(dividendRepository.find).not.toHaveBeenCalled();
-    expect(securityRefreshService.refresh).not.toHaveBeenCalled();
+    expect(securityRefresher.refresh).not.toHaveBeenCalled();
   });
 
   it('securityCompany를 주면 그 증권사 매수분만으로 보유 수량을 계산하고, 없으면 전체', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    await service.getDividendHistory({ id: 1 }, { securityCompany: SecurityCompany.TOSS });
-    await service.getDividendHistory({ id: 1 }, {});
+    await service.calculate({ id: 1 }, { securityCompany: SecurityCompany.TOSS });
+    await service.calculate({ id: 1 }, {});
 
     expect(purchaseDateBalanceRepository.find.mock.calls).toEqual([
       [{ where: { userId: 1, securityCompany: 'TOSS' } }],
@@ -103,17 +107,17 @@ describe('DividendHistoryService.getDividendHistory', () => {
       closingRate: '1400.500000',
     });
 
-    const result = await service.getDividendHistory(
+    const result = await service.calculate(
       { id: 1 },
       { from: '2026-04-01', to: '2026-06-30' },
     );
 
     // 배당을 읽기 전에 보유했던 종목마다 온라인 갱신
-    expect(securityRefreshService.refresh.mock.calls).toEqual([
+    expect(securityRefresher.refresh.mock.calls).toEqual([
       [KRW_SECURITY],
       [USD_SECURITY],
     ]);
-    expect(securityRefreshService.refresh.mock.invocationCallOrder[1]).toBeLessThan(
+    expect(securityRefresher.refresh.mock.invocationCallOrder[1]).toBeLessThan(
       dividendRepository.find.mock.invocationCallOrder[0],
     );
     expect(dividendRepository.find).toHaveBeenCalledWith({
@@ -190,7 +194,7 @@ describe('DividendHistoryService.getDividendHistory', () => {
     ]);
     dailyExchangeRateRepository.findOne.mockResolvedValue(null);
 
-    const result = await service.getDividendHistory({ id: 1 }, { from: '2026-01-01' });
+    const result = await service.calculate({ id: 1 }, { from: '2026-01-01' });
 
     expect(dividendRepository.find.mock.calls[0][0].where.paymentDate).toEqual(
       MoreThanOrEqual('2026-01-01'),
@@ -215,7 +219,7 @@ describe('DividendHistoryService.getDividendHistory', () => {
     ]);
     dividendRepository.find.mockResolvedValue([]);
 
-    await service.getDividendHistory({ id: 1 }, {});
+    await service.calculate({ id: 1 }, {});
 
     expect(dividendRepository.find.mock.calls[0][0].where).not.toHaveProperty('paymentDate');
   });

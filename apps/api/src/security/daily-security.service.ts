@@ -1,46 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  Between,
-  type FindOperator,
-  LessThanOrEqual,
-  MoreThanOrEqual,
-  Repository,
-} from 'typeorm';
-import {
-  DailySecurity,
-  Security,
-  truncateByCurrency,
-} from '@app/common';
+import { Repository } from 'typeorm';
+import { Security, truncateByCurrency } from '@app/common';
 import type { DailyPriceResponse } from './daily-price.dto.js';
+import { DailyPriceReader } from './daily-price.reader.js';
 import type { DailyPriceRequest } from './daily-price.schema.js';
-import { SecurityRefreshService } from './security-refresh.service.js';
-
-/** 날짜 기간 조건. 둘 다 없으면 null(조건 없음) */
-const dateFilter = (
-  from: string | null,
-  to: string | null,
-): FindOperator<string> | null => {
-  if (from && to) {
-    return Between(from, to);
-  }
-  if (from) {
-    return MoreThanOrEqual(from);
-  }
-  if (to) {
-    return LessThanOrEqual(to);
-  }
-  return null;
-};
+import { SecurityRefresher } from './security.refresher.js';
 
 @Injectable()
 export class DailySecurityService {
   constructor(
-    @InjectRepository(DailySecurity)
-    private readonly dailySecurityRepository: Repository<DailySecurity>,
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,
-    private readonly securityRefreshService: SecurityRefreshService,
+    private readonly securityRefresher: SecurityRefresher,
+    private readonly dailyPriceReader: DailyPriceReader,
   ) {}
 
   /**
@@ -58,15 +31,11 @@ export class DailySecurityService {
     if (!found) {
       throw new NotFoundException('종목을 찾을 수 없습니다.');
     }
-    await this.securityRefreshService.refresh(found);
+    await this.securityRefresher.refresh(found);
     const { id, symbol, name, currency } = found;
     const security = { id, symbol, name, currency };
 
-    const date = dateFilter(from, to);
-    const rows = await this.dailySecurityRepository.find({
-      where: { id: security.id, ...(date ? { date } : {}) },
-      order: { date: 'ASC' },
-    });
+    const rows = await this.dailyPriceReader.findBetween(security.id, from, to);
     const price = (value: string) =>
       truncateByCurrency(value, security.currency);
     return {

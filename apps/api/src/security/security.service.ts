@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
-import { DailySecurity, Security, truncateByCurrency } from '@app/common';
+import { Security, truncateByCurrency } from '@app/common';
+import { DailyPriceReader } from './daily-price.reader.js';
 import type { SearchSecuritiesRequest } from './search-securities.schema.js';
 import type { SecuritySearchItemDto } from './security-search.dto.js';
 
@@ -14,8 +15,7 @@ export class SecurityService {
   constructor(
     @InjectRepository(Security)
     private readonly securityRepository: Repository<Security>,
-    @InjectRepository(DailySecurity)
-    private readonly dailySecurityRepository: Repository<DailySecurity>,
+    private readonly dailyPriceReader: DailyPriceReader,
   ) {}
 
   /**
@@ -49,10 +49,7 @@ export class SecurityService {
 
     const items: SecuritySearchItemDto[] = [];
     for (const { id, symbol, name, currency } of securities) {
-      const latest = await this.dailySecurityRepository.findOne({
-        where: { id },
-        order: { date: 'DESC' },
-      });
+      const latest = await this.dailyPriceReader.findLatest(id);
       items.push({
         id,
         symbol,

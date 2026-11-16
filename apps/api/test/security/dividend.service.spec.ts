@@ -7,7 +7,7 @@ import {
 import { NotFoundException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import { DividendService } from '../../src/security/dividend.service.js';
-import type { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
+import type { SecurityRefresher } from '../../src/security/security.refresher.js';
 
 describe('DividendService', () => {
   const dividendFind = vi.fn();
@@ -20,7 +20,7 @@ describe('DividendService', () => {
     service = new DividendService(
       { find: dividendFind } as unknown as Repository<Dividend>,
       { findOneBy } as unknown as Repository<Security>,
-      { refresh } as unknown as SecurityRefreshService,
+      { refresh } as unknown as SecurityRefresher,
     );
   });
 
