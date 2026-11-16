@@ -15,8 +15,8 @@ import {
 import { SecurityRefreshService } from '../../src/security/security-refresh.service.js';
 import { BalanceService } from '../../src/balance/balance.service.js';
 
-const KRW_SECURITY = { id: '005930', name: '삼성전자', currency: Currency.KRW };
-const USD_SECURITY = { id: 'AAPL', name: 'Apple', currency: Currency.USD };
+const KRW_SECURITY = { id: '005930', symbol: '005930', name: '삼성전자', currency: Currency.KRW };
+const USD_SECURITY = { id: 'AAPL', symbol: 'AAPL', name: 'Apple', currency: Currency.USD };
 
 describe('BalanceService.getIntegratedBalance', () => {
   const userBalanceRepository = { find: vi.fn() };
@@ -84,6 +84,7 @@ describe('BalanceService.getIntegratedBalance', () => {
     expect(result.items).toEqual([
       {
         securityId: '005930',
+        symbol: '005930',
         name: '삼성전자',
         currency: Currency.KRW,
         amount: '20',
@@ -103,6 +104,7 @@ describe('BalanceService.getIntegratedBalance', () => {
       },
       {
         securityId: 'AAPL',
+        symbol: 'AAPL',
         name: 'Apple',
         currency: Currency.USD,
         amount: '3.000000',

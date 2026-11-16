@@ -10,6 +10,9 @@ export class BalanceItemDto {
   @ApiProperty({ description: '종목 코드' })
   securityId: string;
 
+  @ApiProperty({ description: '종목 심볼 (티커/종목코드)' })
+  symbol: string;
+
   @ApiProperty({ description: '종목명' })
   name: string;
 

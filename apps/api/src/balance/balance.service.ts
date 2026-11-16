@@ -748,6 +748,7 @@ export class BalanceService {
 
     const base = {
       securityId: security.id,
+      symbol: security.symbol,
       name: security.name,
       currency,
       amount: truncateByCurrency(amount, currency),
