@@ -1,4 +1,4 @@
-import { dividendHistorySchema } from '../../src/balance/dividend-history.schema.js';
+import { dividendHistorySchema } from '../../../src/balance/dto/dividend-history.schema.js';
 
 describe('dividendHistorySchema', () => {
   it('생략하거나 시작일 <= 종료일이면 통과한다', () => {

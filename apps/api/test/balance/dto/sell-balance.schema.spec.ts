@@ -1,4 +1,4 @@
-import { sellBalanceSchema } from '../../src/balance/sell-balance.schema.js';
+import { sellBalanceSchema } from '../../../src/balance/dto/sell-balance.schema.js';
 
 const base = {
   securityId: '005930',

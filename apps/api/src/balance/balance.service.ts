@@ -24,24 +24,24 @@ import { SecurityRefresher } from '../security/security.refresher.js';
 import type {
   BalanceItemDto,
   IntegratedBalanceResponse,
-} from './integrated-balance.dto.js';
-import type { BulkSellBalanceRequest } from './bulk-sell-balance.schema.js';
+} from './dto/integrated-balance.dto.js';
+import type { BulkSellBalanceRequest } from './dto/bulk-sell-balance.schema.js';
 import { companyAmountsOf } from './company-amount.js';
-import type { CompanyAmountDto } from './company-amount.dto.js';
-import type { DeletePurchaseRequest } from './delete-purchase.schema.js';
-import type { IntegratedBalanceRequest } from './integrated-balance.schema.js';
-import type { RegisterBalanceRequest } from './register-balance.schema.js';
-import type { SecurityCompanyListResponse } from './security-company-list.dto.js';
+import type { CompanyAmountDto } from './dto/company-amount.dto.js';
+import type { DeletePurchaseRequest } from './dto/delete-purchase.schema.js';
+import type { IntegratedBalanceRequest } from './dto/integrated-balance.schema.js';
+import type { RegisterBalanceRequest } from './dto/register-balance.schema.js';
+import type { SecurityCompanyListResponse } from './dto/security-company-list.dto.js';
 import type {
   PurchaseHistoryItemDto,
   PurchaseHistoryResponse,
-} from './purchase-history.dto.js';
-import type { PurchaseHistoryRequest } from './purchase-history.schema.js';
+} from './dto/purchase-history.dto.js';
+import type { PurchaseHistoryRequest } from './dto/purchase-history.schema.js';
 import { PurchaseRateReader } from './purchase-rate.reader.js';
 import { PurchaseWriter } from './purchase.writer.js';
-import type { SellBalanceRequest } from './sell-balance.schema.js';
-import type { UpdateExchangeRateRequest } from './update-exchange-rate.schema.js';
-import type { UpdateSecurityCompanyRequest } from './update-security-company.schema.js';
+import type { SellBalanceRequest } from './dto/sell-balance.schema.js';
+import type { UpdateExchangeRateRequest } from './dto/update-exchange-rate.schema.js';
+import type { UpdateSecurityCompanyRequest } from './dto/update-security-company.schema.js';
 import { returnRate } from './return-rate.js';
 
 @Injectable()

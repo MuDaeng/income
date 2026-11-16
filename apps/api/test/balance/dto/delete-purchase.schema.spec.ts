@@ -1,4 +1,4 @@
-import { deletePurchaseSchema } from '../../src/balance/delete-purchase.schema.js';
+import { deletePurchaseSchema } from '../../../src/balance/dto/delete-purchase.schema.js';
 
 /** 쿼리 문자열 그대로 (sequence도 문자열) */
 const base = { securityId: '005930', purchaseDate: '2026-11-05', sequence: '2' };

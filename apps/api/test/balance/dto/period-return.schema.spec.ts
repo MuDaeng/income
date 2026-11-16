@@ -1,4 +1,4 @@
-import { periodReturnSchema } from '../../src/balance/period-return.schema.js';
+import { periodReturnSchema } from '../../../src/balance/dto/period-return.schema.js';
 
 describe('periodReturnSchema', () => {
   it('시작일 <= 종료일이면 통과한다', () => {

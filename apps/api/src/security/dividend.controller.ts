@@ -2,11 +2,11 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { PRICE_THROTTLE } from '../rate-limit.js';
-import { MonthlyDividendResponse } from './monthly-dividend.dto.js';
+import { MonthlyDividendResponse } from './dto/monthly-dividend.dto.js';
 import {
   type MonthlyDividendRequest,
   monthlyDividendSchema,
-} from './monthly-dividend.schema.js';
+} from './dto/monthly-dividend.schema.js';
 import { DividendService } from './dividend.service.js';
 
 @ApiTags('dividend')

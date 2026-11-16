@@ -18,8 +18,8 @@ import type {
   EvaluationItemDto,
   PeriodReturnResponse,
   TotalReturnItemDto,
-} from './period-return.dto.js';
-import type { PeriodReturnRequest } from './period-return.schema.js';
+} from './dto/period-return.dto.js';
+import type { PeriodReturnRequest } from './dto/period-return.schema.js';
 import { PurchaseRateReader } from './purchase-rate.reader.js';
 import { PurchaseReader } from './purchase.reader.js';
 import { returnRate } from './return-rate.js';

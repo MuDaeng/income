@@ -1,4 +1,4 @@
-import { integratedBalanceSchema } from '../../src/balance/integrated-balance.schema.js';
+import { integratedBalanceSchema } from '../../../src/balance/dto/integrated-balance.schema.js';
 
 describe('integratedBalanceSchema', () => {
   it.each([

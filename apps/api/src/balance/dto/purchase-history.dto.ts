@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { SecurityCompany } from '@app/common';
-import { DailyPriceSecurityDto } from '../security/daily-price.dto.js';
+import { DailyPriceSecurityDto } from '../../security/dto/daily-price.dto.js';
 import { CompanyAmountDto } from './company-amount.dto.js';
 
 /** 수량·가격은 decimal 문자열 (KRW 정수; USD 수량은 소수 6자리, 가격은 소수 2자리 버림) */

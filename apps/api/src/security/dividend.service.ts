@@ -3,8 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
 import { Repository } from 'typeorm';
 import { Dividend, DividendType, Security, truncateByCurrency } from '@app/common';
-import type { MonthlyDividendResponse } from './monthly-dividend.dto.js';
-import type { MonthlyDividendRequest } from './monthly-dividend.schema.js';
+import type { MonthlyDividendResponse } from './dto/monthly-dividend.dto.js';
+import type { MonthlyDividendRequest } from './dto/monthly-dividend.schema.js';
 import { SecurityRefresher } from './security.refresher.js';
 
 /** 저장된 배당을 읽어 조회 API 응답을 만든다. 원천에서 받아 저장하는 일은 DividendFetcher가 한다 */

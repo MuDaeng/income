@@ -1,4 +1,4 @@
-import { updateSecurityCompanySchema } from '../../src/balance/update-security-company.schema.js';
+import { updateSecurityCompanySchema } from '../../../src/balance/dto/update-security-company.schema.js';
 
 const base = {
   securityId: 'KR7005930003',

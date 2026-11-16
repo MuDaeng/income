@@ -1,4 +1,4 @@
-import { updateExchangeRateSchema } from '../../src/balance/update-exchange-rate.schema.js';
+import { updateExchangeRateSchema } from '../../../src/balance/dto/update-exchange-rate.schema.js';
 
 const base = {
   securityId: ' US0378331005 ',

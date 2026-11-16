@@ -1,4 +1,4 @@
-import { monthlyBalanceSchema } from '../../src/balance/monthly-balance.schema.js';
+import { monthlyBalanceSchema } from '../../../src/balance/dto/monthly-balance.schema.js';
 
 describe('monthlyBalanceSchema', () => {
   beforeEach(() => {

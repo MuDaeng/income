@@ -2,7 +2,7 @@ import { Like } from 'typeorm';
 import type { Repository } from 'typeorm';
 import { Currency, DailySecurity, Security } from '@app/common';
 import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
-import { searchSecuritiesSchema } from '../../src/security/search-securities.schema.js';
+import { searchSecuritiesSchema } from '../../src/security/dto/search-securities.schema.js';
 import { SEARCH_LIMIT, SecurityService } from '../../src/security/security.service.js';
 
 const security = (id: string, symbol: string, name: string, currency = Currency.KRW) => ({

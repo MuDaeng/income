@@ -3,8 +3,8 @@ import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   type SearchSecuritiesRequest,
   searchSecuritiesSchema,
-} from './search-securities.schema.js';
-import { SecuritySearchItemDto } from './security-search.dto.js';
+} from './dto/search-securities.schema.js';
+import { SecuritySearchItemDto } from './dto/security-search.dto.js';
 import { SecurityService } from './security.service.js';
 
 @ApiTags('security')

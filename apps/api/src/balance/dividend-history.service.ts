@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthUser } from '../auth/jwt.strategy.js';
 import { DividendHistoryCalculator } from './dividend-history.calculator.js';
-import type { DividendHistoryResponse } from './dividend-history.dto.js';
-import type { DividendHistoryRequest } from './dividend-history.schema.js';
+import type { DividendHistoryResponse } from './dto/dividend-history.dto.js';
+import type { DividendHistoryRequest } from './dto/dividend-history.schema.js';
 
 @Injectable()
 export class DividendHistoryService {

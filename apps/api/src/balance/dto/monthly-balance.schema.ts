@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SecurityCompany } from '@app/common';
-import { todayInSeoul } from '../security/iso-date.js';
+import { todayInSeoul } from '../../security/iso-date.js';
 
 const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 /** 한 번에 조회할 수 있는 최대 개월 수 */

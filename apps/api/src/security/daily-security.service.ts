@@ -2,9 +2,9 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Security, truncateByCurrency } from '@app/common';
-import type { DailyPriceResponse } from './daily-price.dto.js';
+import type { DailyPriceResponse } from './dto/daily-price.dto.js';
 import { DailyPriceReader } from './daily-price.reader.js';
-import type { DailyPriceRequest } from './daily-price.schema.js';
+import type { DailyPriceRequest } from './dto/daily-price.schema.js';
 import { SecurityRefresher } from './security.refresher.js';
 
 @Injectable()

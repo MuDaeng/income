@@ -1,4 +1,4 @@
-import { registerBalanceSchema } from '../../src/balance/register-balance.schema.js';
+import { registerBalanceSchema } from '../../../src/balance/dto/register-balance.schema.js';
 
 const base = {
   securityId: '005930',

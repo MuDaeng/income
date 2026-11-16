@@ -1,4 +1,4 @@
-import { dailyPriceSchema } from '../../src/security/daily-price.schema.js';
+import { dailyPriceSchema } from '../../../src/security/dto/daily-price.schema.js';
 
 describe('dailyPriceSchema', () => {
   it('securityId만 있거나 시작일 <= 종료일이면 통과하고 securityId 앞뒤 공백을 지운다', () => {

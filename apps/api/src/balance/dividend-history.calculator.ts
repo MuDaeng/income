@@ -25,8 +25,8 @@ import type {
   DividendHistoryResponse,
   DividendItemDto,
   DividendSummaryDto,
-} from './dividend-history.dto.js';
-import type { DividendHistoryRequest } from './dividend-history.schema.js';
+} from './dto/dividend-history.dto.js';
+import type { DividendHistoryRequest } from './dto/dividend-history.schema.js';
 import { PurchaseReader } from './purchase.reader.js';
 
 /**

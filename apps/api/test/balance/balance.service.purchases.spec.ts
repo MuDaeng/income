@@ -18,7 +18,7 @@ import { PurchaseRateReader } from '../../src/balance/purchase-rate.reader.js';
 import { PurchaseWriter } from '../../src/balance/purchase.writer.js';
 import { DailyPriceReader } from '../../src/security/daily-price.reader.js';
 import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
-import { purchaseHistorySchema } from '../../src/balance/purchase-history.schema.js';
+import { purchaseHistorySchema } from '../../src/balance/dto/purchase-history.schema.js';
 
 const AAPL = { id: 'US0378331005', symbol: 'AAPL', name: '애플', currency: Currency.USD };
 const REIT = { id: 'KR7476800008', symbol: '476800', name: '리츠', currency: Currency.KRW };

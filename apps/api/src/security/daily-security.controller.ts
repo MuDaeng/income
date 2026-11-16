@@ -2,11 +2,11 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { PRICE_THROTTLE } from '../rate-limit.js';
-import { DailyPriceResponse } from './daily-price.dto.js';
+import { DailyPriceResponse } from './dto/daily-price.dto.js';
 import {
   type DailyPriceRequest,
   dailyPriceSchema,
-} from './daily-price.schema.js';
+} from './dto/daily-price.schema.js';
 import { DailySecurityService } from './daily-security.service.js';
 
 @ApiTags('daily-security')

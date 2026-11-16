@@ -19,8 +19,8 @@ import type {
   MonthlyBalanceItemDto,
   MonthlyBalanceMonthDto,
   MonthlyBalanceResponse,
-} from './monthly-balance.dto.js';
-import type { MonthlyBalanceRequest } from './monthly-balance.schema.js';
+} from './dto/monthly-balance.dto.js';
+import type { MonthlyBalanceRequest } from './dto/monthly-balance.schema.js';
 import { PurchaseReader } from './purchase.reader.js';
 
 /** 날짜 오름차순 행 목록에서 date(포함) 이전 가장 최근 행을 찾기 위한 최소 형태 */

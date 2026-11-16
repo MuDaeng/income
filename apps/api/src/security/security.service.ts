@@ -3,8 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
 import { Security, truncateByCurrency } from '@app/common';
 import { DailyPriceReader } from './daily-price.reader.js';
-import type { SearchSecuritiesRequest } from './search-securities.schema.js';
-import type { SecuritySearchItemDto } from './security-search.dto.js';
+import type { SearchSecuritiesRequest } from './dto/search-securities.schema.js';
+import type { SecuritySearchItemDto } from './dto/security-search.dto.js';
 
 /** 종목 검색 결과 최대 건수 */
 export const SEARCH_LIMIT = 20;

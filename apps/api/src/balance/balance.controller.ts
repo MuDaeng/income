@@ -24,56 +24,56 @@ import { BalanceService } from './balance.service.js';
 import {
   type BulkSellBalanceRequest,
   bulkSellBalanceSchema,
-} from './bulk-sell-balance.schema.js';
+} from './dto/bulk-sell-balance.schema.js';
 import {
   type DeletePurchaseRequest,
   deletePurchaseSchema,
-} from './delete-purchase.schema.js';
-import { DividendHistoryResponse } from './dividend-history.dto.js';
+} from './dto/delete-purchase.schema.js';
+import { DividendHistoryResponse } from './dto/dividend-history.dto.js';
 import {
   type DividendHistoryRequest,
   dividendHistorySchema,
-} from './dividend-history.schema.js';
+} from './dto/dividend-history.schema.js';
 import { DividendHistoryService } from './dividend-history.service.js';
-import { MonthlyBalanceResponse } from './monthly-balance.dto.js';
+import { MonthlyBalanceResponse } from './dto/monthly-balance.dto.js';
 import {
   type MonthlyBalanceRequest,
   monthlyBalanceSchema,
-} from './monthly-balance.schema.js';
+} from './dto/monthly-balance.schema.js';
 import { MonthlyBalanceService } from './monthly-balance.service.js';
-import { PeriodReturnResponse } from './period-return.dto.js';
+import { PeriodReturnResponse } from './dto/period-return.dto.js';
 import {
   type PeriodReturnRequest,
   periodReturnSchema,
-} from './period-return.schema.js';
+} from './dto/period-return.schema.js';
 import { PeriodReturnService } from './period-return.service.js';
-import { PurchaseHistoryResponse } from './purchase-history.dto.js';
+import { PurchaseHistoryResponse } from './dto/purchase-history.dto.js';
 import {
   type PurchaseHistoryRequest,
   purchaseHistorySchema,
-} from './purchase-history.schema.js';
-import { IntegratedBalanceResponse } from './integrated-balance.dto.js';
+} from './dto/purchase-history.schema.js';
+import { IntegratedBalanceResponse } from './dto/integrated-balance.dto.js';
 import {
   type IntegratedBalanceRequest,
   integratedBalanceSchema,
-} from './integrated-balance.schema.js';
-import { SecurityCompanyListResponse } from './security-company-list.dto.js';
+} from './dto/integrated-balance.schema.js';
+import { SecurityCompanyListResponse } from './dto/security-company-list.dto.js';
 import {
   type RegisterBalanceRequest,
   registerBalanceSchema,
-} from './register-balance.schema.js';
+} from './dto/register-balance.schema.js';
 import {
   type SellBalanceRequest,
   sellBalanceSchema,
-} from './sell-balance.schema.js';
+} from './dto/sell-balance.schema.js';
 import {
   type UpdateExchangeRateRequest,
   updateExchangeRateSchema,
-} from './update-exchange-rate.schema.js';
+} from './dto/update-exchange-rate.schema.js';
 import {
   type UpdateSecurityCompanyRequest,
   updateSecurityCompanySchema,
-} from './update-security-company.schema.js';
+} from './dto/update-security-company.schema.js';
 
 @ApiTags('balance')
 @Controller('balance')
