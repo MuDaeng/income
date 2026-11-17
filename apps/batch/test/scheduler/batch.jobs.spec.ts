@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import {
   BatchStatus,
   DOMESTIC_MARKETS,
+  type DomesticDailyPriceFetcher,
   OVERSEAS_MARKETS,
   type BatchHistoryWriter,
   type ExchangeRateFetcher,
@@ -28,6 +29,7 @@ describe('BatchJobs', () => {
   const importFromMassive = vi.fn();
   const importFromToss = vi.fn();
   const importUsFromMassive = vi.fn();
+  const importFromDataGoKr = vi.fn();
   const deleteExpiredRefreshTokens = vi.fn();
   const start = vi.fn();
   const finish = vi.fn();
@@ -47,6 +49,7 @@ describe('BatchJobs', () => {
       {
         importFromMassive: importUsFromMassive,
       } as unknown as UsDailyPriceFetcher,
+      { importFromDataGoKr } as unknown as DomesticDailyPriceFetcher,
       { deleteExpiredRefreshTokens } as unknown as TokenProvider,
       { start, finish } as unknown as BatchHistoryWriter,
     );
@@ -58,7 +61,7 @@ describe('BatchJobs', () => {
     vi.restoreAllMocks();
   });
 
-  it('잡마다 한국 시간 일정이 붙어 있다 (환율 16시, 국내 17시, 해외 8시, 미국 시세 15시)', () => {
+  it('잡마다 한국 시간 일정이 붙어 있다 (환율 16시, 국내 17시, 해외 8시, 미국 시세 14시 30분, 국내 시세 13시 30분)', () => {
     expect(cronOf('importExchangeRates')).toMatchObject({
       cronTime: '0 16 * * *',
       timeZone: BATCH_TIME_ZONE,
@@ -73,9 +76,14 @@ describe('BatchJobs', () => {
       timeZone: 'Asia/Seoul',
     });
     expect(cronOf('importUsDailyPrices')).toMatchObject({
-      cronTime: '0 15 * * *',
+      cronTime: '30 14 * * *',
       timeZone: 'Asia/Seoul',
       name: 'us-daily-prices',
+    });
+    expect(cronOf('importDomesticDailyPrices')).toMatchObject({
+      cronTime: '30 13 * * *',
+      timeZone: 'Asia/Seoul',
+      name: 'domestic-daily-prices',
     });
     expect(cronOf('deleteExpiredTokens')).toMatchObject({
       cronTime: '0 0 * * *',
@@ -105,11 +113,11 @@ describe('BatchJobs', () => {
   });
 
   it.each([
-    // 한국 11-13 15:00 = 미국 동부 11-13 01:00
-    ['서머타임 아님', '2026-11-13T06:00:00Z', '2026-11-05', '2026-11-12'],
-    // 한국 07-14 15:00 = 미국 동부 07-14 02:00
-    ['서머타임', '2026-07-14T06:00:00Z', '2026-07-06', '2026-07-13'],
-  ])('미국 시세는 미국 동부 기준 어제까지 최근 7일을 가져온다 (%s)', async (_, now, from, to) => {
+    // 한국 11-13 14:30 = 미국 동부 11-13 00:30
+    ['서머타임 아님', '2026-11-13T05:30:00Z', '2026-11-05', '2026-11-12'],
+    // 한국 07-14 14:30 = 미국 동부 07-14 01:30
+    ['서머타임', '2026-07-14T05:30:00Z', '2026-07-06', '2026-07-13'],
+  ])('미국 시세는 미국 동부 기준 어제(방금 끝난 거래일)까지 최근 7일을 가져온다 (%s)', async (_, now, from, to) => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(now));
     importUsFromMassive.mockResolvedValue({ saved: 52_000 });
@@ -117,6 +125,20 @@ describe('BatchJobs', () => {
     await expect(jobs.importUsDailyPrices()).resolves.toBe(true);
     expect(importUsFromMassive).toHaveBeenCalledWith({ from, to });
     expect(importFromMassive).not.toHaveBeenCalled();
+  });
+
+  it('국내 시세는 한국 시간 오늘부터 4일 전까지 가져온다 (--run=domestic-daily-prices로도 실행)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-17T04:30:00Z')); // 한국 13:30
+    importFromDataGoKr.mockResolvedValue({ saved: 12_000 });
+
+    await expect(jobs.importDomesticDailyPrices()).resolves.toBe(true);
+    await expect(jobs.runByName('domestic-daily-prices')).resolves.toBe(true);
+    expect(importFromDataGoKr.mock.calls).toEqual([
+      [{ from: '2026-11-13', to: '2026-11-17' }],
+      [{ from: '2026-11-13', to: '2026-11-17' }],
+    ]);
+    expect(start).toHaveBeenCalledWith('domestic-daily-prices');
   });
 
   it('국내·해외 종목은 각자 시장만 가져온다', async () => {

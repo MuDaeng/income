@@ -1,13 +1,16 @@
 import { Logger } from '@nestjs/common';
 import {
   Currency,
+  type DailySecurity,
   SearchType,
   type Security,
   type SecuritySearch,
 } from '@app/common';
 import type { Repository } from 'typeorm';
 import type { DailyPriceFetcher } from '../../src/security/daily-price.fetcher.js';
+import type { DailyPriceReader } from '../../src/security/daily-price.reader.js';
 import type { DividendFetcher } from '../../src/security/dividend.fetcher.js';
+import { krwPriceDate } from '../../src/security/iso-date.js';
 import { SecurityRefresher } from '../../src/security/security.refresher.js';
 
 const SAMSUNG = {
@@ -23,20 +26,25 @@ const APPLE = {
 
 /** 한국 시간 오늘 */
 const TODAY = '2026-11-09';
-/** KRW 시작일: 배당 2000-01-01, 시세 2020-01-01 */
-const krwStart = (type: SearchType) =>
-  type === SearchType.INCOME ? '2000-01-01' : '2020-01-01';
-const search = (
-  type: SearchType,
+/** 15:30 전이라 채울 시세 날짜는 어제 */
+const YESTERDAY = '2026-11-08';
+const KRW_DIVIDEND_START = '2000-01-01';
+const income = (
   lastSearchDate: string,
-  fromDate: string | null = krwStart(type),
-) => ({ id: SAMSUNG.id, type, lastSearchDate, fromDate });
-const saved = (
-  security: Security,
-  type: SearchType,
-  fromDate = krwStart(type),
-) => [
-  { id: security.id, type, lastSearchDate: TODAY, fromDate },
+  fromDate: string | null = KRW_DIVIDEND_START,
+) => ({ id: SAMSUNG.id, type: SearchType.INCOME, lastSearchDate, fromDate });
+const price = (lastSearchDate: string) => ({
+  id: SAMSUNG.id,
+  type: SearchType.PRICE,
+  lastSearchDate,
+  fromDate: null,
+});
+const savedIncome = (security: Security, fromDate = KRW_DIVIDEND_START) => [
+  { id: security.id, type: SearchType.INCOME, lastSearchDate: TODAY, fromDate },
+  ['id', 'type'],
+];
+const savedPrice = (lastSearchDate = YESTERDAY) => [
+  { id: SAMSUNG.id, type: SearchType.PRICE, lastSearchDate },
   ['id', 'type'],
 ];
 
@@ -45,6 +53,7 @@ describe('SecurityRefresher.refresh', () => {
   const searchUpsert = vi.fn();
   const fetchDividends = vi.fn<DividendFetcher['fetchAndSave']>();
   const fetchPrices = vi.fn<DailyPriceFetcher['fetchAndSave']>();
+  const findOn = vi.fn<DailyPriceReader['findOn']>();
   let errorLog: ReturnType<typeof vi.spyOn>;
   let service: SecurityRefresher;
 
@@ -58,12 +67,14 @@ describe('SecurityRefresher.refresh', () => {
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
     findBy.mockResolvedValue([]);
+    findOn.mockResolvedValue(null);
     fetchDividends.mockResolvedValue({ fetched: 2, saved: 2 });
-    fetchPrices.mockResolvedValue(480);
+    fetchPrices.mockResolvedValue(1);
     service = new SecurityRefresher(
       { findBy, upsert: searchUpsert } as unknown as Repository<SecuritySearch>,
       { fetchAndSave: fetchDividends } as unknown as DividendFetcher,
       { fetchAndSave: fetchPrices } as unknown as DailyPriceFetcher,
+      { findOn } as unknown as DailyPriceReader,
     );
   });
 
@@ -72,21 +83,19 @@ describe('SecurityRefresher.refresh', () => {
     vi.restoreAllMocks();
   });
 
-  it('배당·시세 모두 오늘(한국 시간) 조회했으면 원천을 호출하지 않는다', async () => {
-    findBy.mockResolvedValue([
-      search(SearchType.INCOME, TODAY),
-      search(SearchType.PRICE, TODAY),
-    ]);
+  it('배당은 오늘, 시세는 채울 날짜로 이미 조회했으면 원천을 호출하지 않는다', async () => {
+    findBy.mockResolvedValue([income(TODAY), price(YESTERDAY)]);
 
     await service.refresh(SAMSUNG);
 
     expect(findBy).toHaveBeenCalledWith({ id: SAMSUNG.id });
     expect(fetchDividends).not.toHaveBeenCalled();
+    expect(findOn).not.toHaveBeenCalled();
     expect(fetchPrices).not.toHaveBeenCalled();
     expect(searchUpsert).not.toHaveBeenCalled();
   });
 
-  it('조회 기록이 없으면 KRW는 배당(2000-01-01~1년 뒤)과 시세(2020-01-01~오늘)를 받고 종류마다 조회일·시작일을 남긴다', async () => {
+  it('조회 기록이 없으면 KRW는 배당(2000-01-01~1년 뒤)과, 15:30 전이라 어제 시세(없으면 KIS)를 받고 종류마다 기록을 남긴다', async () => {
     await service.refresh(SAMSUNG);
 
     expect(fetchDividends).toHaveBeenCalledWith(
@@ -94,36 +103,53 @@ describe('SecurityRefresher.refresh', () => {
       '2000-01-01',
       '2027-11-09',
     );
-    expect(fetchPrices).toHaveBeenCalledWith(SAMSUNG, '2020-01-01', TODAY);
+    expect(findOn).toHaveBeenCalledWith(SAMSUNG.id, YESTERDAY);
+    expect(fetchPrices).toHaveBeenCalledWith(SAMSUNG, YESTERDAY);
     expect(searchUpsert.mock.calls).toEqual([
-      saved(SAMSUNG, SearchType.INCOME),
-      saved(SAMSUNG, SearchType.PRICE),
+      savedIncome(SAMSUNG),
+      savedPrice(),
     ]);
   });
 
-  it('배당만 오늘 조회했으면 시세만 받는다', async () => {
-    findBy.mockResolvedValue([
-      search(SearchType.INCOME, TODAY),
-      search(SearchType.PRICE, '2026-11-08'),
-    ]);
+  it('15:30이 지나면 오늘 시세를 채우고 조회일도 오늘로 남긴다', async () => {
+    vi.setSystemTime(new Date('2026-11-09T06:30:00Z')); // 한국 15:30
+    findBy.mockResolvedValue([income(TODAY), price(YESTERDAY)]);
 
     await service.refresh(SAMSUNG);
 
-    expect(fetchDividends).not.toHaveBeenCalled();
-    expect(fetchPrices).toHaveBeenCalledTimes(1);
-    expect(searchUpsert.mock.calls).toEqual([saved(SAMSUNG, SearchType.PRICE)]);
+    expect(findOn).toHaveBeenCalledWith(SAMSUNG.id, TODAY);
+    expect(fetchPrices).toHaveBeenCalledWith(SAMSUNG, TODAY);
+    expect(searchUpsert.mock.calls).toEqual([savedPrice(TODAY)]);
   });
 
-  it('시세만 오늘 조회했으면 배당만 받는다', async () => {
-    findBy.mockResolvedValue([search(SearchType.PRICE, TODAY)]);
+  it('채울 날짜 시세가 이미 있으면(배치가 받음) KIS를 부르지 않고 조회일만 남긴다', async () => {
+    findBy.mockResolvedValue([income(TODAY)]);
+    findOn.mockResolvedValue({ id: SAMSUNG.id, date: YESTERDAY } as DailySecurity);
+
+    await service.refresh(SAMSUNG);
+
+    expect(fetchPrices).not.toHaveBeenCalled();
+    expect(searchUpsert.mock.calls).toEqual([savedPrice()]);
+  });
+
+  it('KIS에 그날 시세가 없어도(휴장일) 조회일을 남겨 그날은 다시 부르지 않는다', async () => {
+    findBy.mockResolvedValue([income(TODAY), price('2026-11-07')]);
+    fetchPrices.mockResolvedValue(0);
+
+    await service.refresh(SAMSUNG);
+
+    expect(fetchPrices).toHaveBeenCalledWith(SAMSUNG, YESTERDAY);
+    expect(searchUpsert.mock.calls).toEqual([savedPrice()]);
+  });
+
+  it('시세만 채울 날짜로 조회했으면 배당만 받는다', async () => {
+    findBy.mockResolvedValue([price(YESTERDAY)]);
 
     await service.refresh(SAMSUNG);
 
     expect(fetchDividends).toHaveBeenCalledTimes(1);
     expect(fetchPrices).not.toHaveBeenCalled();
-    expect(searchUpsert.mock.calls).toEqual([
-      saved(SAMSUNG, SearchType.INCOME),
-    ]);
+    expect(searchUpsert.mock.calls).toEqual([savedIncome(SAMSUNG)]);
   });
 
   it('배당이 실패해도 시세는 받아 시세 조회일만 남기고, 예외 없이 로그를 남긴다', async () => {
@@ -135,20 +161,18 @@ describe('SecurityRefresher.refresh', () => {
     expect(errorLog).toHaveBeenCalledWith(
       expect.stringContaining('KIS 배당 조회 실패: 500'),
     );
-    expect(searchUpsert.mock.calls).toEqual([saved(SAMSUNG, SearchType.PRICE)]);
+    expect(searchUpsert.mock.calls).toEqual([savedPrice()]);
   });
 
   it('시세가 실패하면 배당 조회일만 남긴다', async () => {
-    fetchPrices.mockRejectedValue(new Error('data.go.kr 주식시세 조회 실패'));
+    fetchPrices.mockRejectedValue(new Error('KIS 일별 시세 조회 실패'));
 
     await expect(service.refresh(SAMSUNG)).resolves.toBeUndefined();
 
     expect(errorLog).toHaveBeenCalledWith(
       expect.stringContaining('price 갱신 실패'),
     );
-    expect(searchUpsert.mock.calls).toEqual([
-      saved(SAMSUNG, SearchType.INCOME),
-    ]);
+    expect(searchUpsert.mock.calls).toEqual([savedIncome(SAMSUNG)]);
   });
 
   it('USD 종목은 시세를 batch가 받으므로 배당만 받고 배당 조회일만 남긴다', async () => {
@@ -159,17 +183,15 @@ describe('SecurityRefresher.refresh', () => {
       '2024-11-09',
       '2027-11-09',
     );
+    expect(findOn).not.toHaveBeenCalled();
     expect(fetchPrices).not.toHaveBeenCalled();
     expect(searchUpsert.mock.calls).toEqual([
-      saved(APPLE, SearchType.INCOME, '2024-11-09'),
+      savedIncome(APPLE, '2024-11-09'),
     ]);
   });
 
-  it('받아 둔 구간이 시작일을 덮으면 시세는 마지막 조회일−7일, 배당은 −1년부터만 받고 시작일은 유지한다', async () => {
-    findBy.mockResolvedValue([
-      search(SearchType.INCOME, '2026-11-01'),
-      search(SearchType.PRICE, '2026-11-01'),
-    ]);
+  it('받아 둔 배당 구간이 시작일을 덮으면 마지막 조회일−1년부터만 받고 시작일은 유지한다', async () => {
+    findBy.mockResolvedValue([income('2026-11-01'), price(YESTERDAY)]);
 
     await service.refresh(SAMSUNG);
 
@@ -178,26 +200,11 @@ describe('SecurityRefresher.refresh', () => {
       '2025-11-01',
       '2027-11-09',
     );
-    expect(fetchPrices).toHaveBeenCalledWith(SAMSUNG, '2026-10-25', TODAY);
-    expect(searchUpsert.mock.calls).toEqual([
-      saved(SAMSUNG, SearchType.INCOME),
-      saved(SAMSUNG, SearchType.PRICE),
-    ]);
+    expect(searchUpsert.mock.calls).toEqual([savedIncome(SAMSUNG)]);
   });
 
-  it('최근 구간이 시작일보다 앞이면 시작일부터 받는다', async () => {
-    findBy.mockResolvedValue([search(SearchType.PRICE, '2020-01-03')]);
-
-    await service.refresh(SAMSUNG);
-
-    expect(fetchPrices).toHaveBeenCalledWith(SAMSUNG, '2020-01-01', TODAY);
-  });
-
-  it('시작일이 없거나(컬럼 추가 전 행) 시작일보다 늦으면 전체 구간을 다시 받는다', async () => {
-    findBy.mockResolvedValue([
-      search(SearchType.INCOME, '2026-11-08', null),
-      search(SearchType.PRICE, '2026-11-08', '2024-11-08'),
-    ]);
+  it('배당 시작일이 없으면(컬럼 추가 전 행) 전체 구간을 다시 받는다', async () => {
+    findBy.mockResolvedValue([income('2026-11-08', null), price(YESTERDAY)]);
 
     await service.refresh(SAMSUNG);
 
@@ -206,17 +213,12 @@ describe('SecurityRefresher.refresh', () => {
       '2000-01-01',
       '2027-11-09',
     );
-    expect(fetchPrices).toHaveBeenCalledWith(SAMSUNG, '2020-01-01', TODAY);
-    expect(searchUpsert.mock.calls).toEqual([
-      saved(SAMSUNG, SearchType.INCOME),
-      saved(SAMSUNG, SearchType.PRICE),
-    ]);
   });
 
   it('2020년부터 받아 둔 국내 배당은 2000년부터 한 번 다시 받는다', async () => {
     findBy.mockResolvedValue([
-      search(SearchType.INCOME, '2026-11-08', '2020-01-01'),
-      search(SearchType.PRICE, TODAY),
+      income('2026-11-08', '2020-01-01'),
+      price(YESTERDAY),
     ]);
 
     await service.refresh(SAMSUNG);
@@ -226,12 +228,17 @@ describe('SecurityRefresher.refresh', () => {
       '2000-01-01',
       '2027-11-09',
     );
-    expect(searchUpsert.mock.calls).toEqual([saved(SAMSUNG, SearchType.INCOME)]);
+    expect(searchUpsert.mock.calls).toEqual([savedIncome(SAMSUNG)]);
   });
 
   it('USD 배당은 오늘−2년을 덮고 있으면 마지막 조회일−1년부터만 받는다', async () => {
     findBy.mockResolvedValue([
-      { id: APPLE.id, type: SearchType.INCOME, lastSearchDate: '2026-11-08', fromDate: '2024-11-08' },
+      {
+        id: APPLE.id,
+        type: SearchType.INCOME,
+        lastSearchDate: '2026-11-08',
+        fromDate: '2024-11-08',
+      },
     ]);
 
     await service.refresh(APPLE);
@@ -242,7 +249,7 @@ describe('SecurityRefresher.refresh', () => {
       '2027-11-09',
     );
     expect(searchUpsert.mock.calls).toEqual([
-      saved(APPLE, SearchType.INCOME, '2024-11-08'),
+      savedIncome(APPLE, '2024-11-08'),
     ]);
   });
 
@@ -255,5 +262,16 @@ describe('SecurityRefresher.refresh', () => {
 
     expect(findBy).not.toHaveBeenCalled();
     expect(fetchDividends).not.toHaveBeenCalled();
+  });
+});
+
+describe('krwPriceDate', () => {
+  it.each([
+    ['15:29 KST는 어제', '2026-11-17T06:29:00Z', '2026-11-16'],
+    ['15:30 KST는 오늘', '2026-11-17T06:30:00Z', '2026-11-17'],
+    ['00:05 KST는 어제', '2026-11-16T15:05:00Z', '2026-11-16'],
+    ['23:59 KST는 오늘', '2026-11-17T14:59:00Z', '2026-11-17'],
+  ])('%s', (_, now, expected) => {
+    expect(krwPriceDate(new Date(now))).toBe(expected);
   });
 });

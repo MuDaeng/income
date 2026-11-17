@@ -12,3 +12,4 @@ export * from './exchange-rate.fetcher.js';
 export * from './security-import.module.js';
 export * from './security.fetcher.js';
 export * from './us-daily-price.fetcher.js';
+export * from './domestic-daily-price.fetcher.js';

@@ -154,3 +154,85 @@ describe('KisClient', () => {
     expect(headersOf(1).tr_cont).toBe('N');
   });
 });
+
+describe('KisClient.getDailyPrices', () => {
+  const fetchMock = vi.fn<typeof fetch>();
+  const findOneBy = vi.fn();
+  const save = vi.fn();
+  const create = vi.fn((row: Partial<ClientToken>) => row);
+  let client: KisClient;
+
+  const bar = {
+    stck_bsop_date: '20261116',
+    stck_oprc: '70000',
+    stck_hgpr: '71000',
+    stck_lwpr: '69500',
+    stck_clpr: '70500',
+  };
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    findOneBy.mockReset();
+    save.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+    findOneBy.mockResolvedValue({ clientType: ClientType.KIS, token: 'stored' });
+    client = new KisClient(
+      {
+        appKey: 'app-key',
+        appSecret: 'app-secret',
+        baseUrl: 'https://openapi.koreainvestment.com:9443',
+      },
+      { findOneBy, save, create } as unknown as Repository<ClientToken>,
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('국내주식기간별시세를 일봉·원주가로 조회한다', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json({ rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output2: [bar] }),
+    );
+
+    await expect(client.getDailyPrices('005930', '20261116', '20261116')).resolves.toEqual([
+      bar,
+    ]);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect((url as URL).href).toBe(
+      'https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=005930&FID_INPUT_DATE_1=20261116&FID_INPUT_DATE_2=20261116&FID_PERIOD_DIV_CODE=D&FID_ORG_ADJ_PRC=1',
+    );
+    expect(init?.headers).toMatchObject({
+      authorization: 'Bearer stored',
+      tr_id: 'FHKST03010100',
+      custtype: 'P',
+    });
+  });
+
+  it('시세가 없어 빈 객체가 오면 빈 배열', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json({ rt_cd: '0', msg_cd: 'MCA00000', msg1: '정상', output2: [{}] }),
+    );
+
+    await expect(client.getDailyPrices('005930', '20261115', '20261115')).resolves.toEqual([]);
+  });
+
+  it('토큰이 만료면 재발급해 한 번 다시 조회한다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({}, 401))
+      .mockResolvedValueOnce(tokenResponse('new'))
+      .mockResolvedValueOnce(json({ rt_cd: '0', msg_cd: '', msg1: '', output2: [bar] }));
+
+    await expect(client.getDailyPrices('005930', '20261116', '20261116')).resolves.toHaveLength(1);
+    expect(save).toHaveBeenCalledWith({ clientType: ClientType.KIS, token: 'new' });
+  });
+
+  it('rt_cd가 0이 아니면 502', async () => {
+    fetchMock.mockResolvedValueOnce(json({ rt_cd: '1', msg_cd: 'OPSQ0002', msg1: '오류' }));
+
+    await expect(client.getDailyPrices('005930', '20261116', '20261116')).rejects.toBeInstanceOf(
+      BadGatewayException,
+    );
+  });
+});

@@ -1,9 +1,10 @@
 import {
   Currency,
   type DailySecurity,
+  type KisClient,
+  type KisDailyPriceItem,
   type Security,
   SecurityType,
-  type DataGoKrClient,
 } from '@app/common';
 import type { Repository } from 'typeorm';
 import { DailyPriceFetcher } from '../../src/security/daily-price.fetcher.js';
@@ -14,73 +15,45 @@ const SAMSUNG = {
   type: SecurityType.STOCK,
   currency: Currency.KRW,
 } as Security;
-const KODEX = {
-  id: 'KR7476800008',
-  symbol: '476800',
-  type: SecurityType.ETF,
-  currency: Currency.KRW,
-} as Security;
-const BAC_P = {
-  id: 'US0605056821',
-  symbol: 'BAC-P',
+const APPLE = {
+  id: 'US0378331005',
+  symbol: 'AAPL',
   type: SecurityType.FOREIGN_STOCK,
   currency: Currency.USD,
 } as Security;
 
-const priceItem = (isinCd: string, basDt: string) => ({
-  basDt,
-  srtnCd: '',
-  isinCd,
-  itmsNm: '',
-  mkp: '71000',
-  clpr: '72000.5',
-  hipr: '72500',
-  lopr: ' ',
+const bar = (stck_bsop_date: string): KisDailyPriceItem => ({
+  stck_bsop_date,
+  stck_oprc: '71000',
+  stck_hgpr: '72500',
+  stck_lwpr: '',
+  stck_clpr: '72000.5',
 });
 
 describe('DailyPriceFetcher.fetchAndSave', () => {
   const upsert = vi.fn();
-  const getStockPrices = vi.fn<DataGoKrClient['getStockPrices']>();
-  const getEtfPrices = vi.fn<DataGoKrClient['getEtfPrices']>();
+  const getDailyPrices = vi.fn<KisClient['getDailyPrices']>();
   let fetcher: DailyPriceFetcher;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    getStockPrices.mockResolvedValue({ totalCount: 0, items: [] });
-    getEtfPrices.mockResolvedValue({ totalCount: 0, items: [] });
     fetcher = new DailyPriceFetcher(
       { upsert } as unknown as Repository<DailySecurity>,
-      { getStockPrices, getEtfPrices } as unknown as DataGoKrClient,
+      { getDailyPrices } as unknown as KisClient,
     );
   });
 
-  it('KRW 주식은 주식시세를 ISIN으로 조회해 원화 정수로 저장한다 (끝 날짜 포함)', async () => {
-    getStockPrices.mockResolvedValue({
-      totalCount: 2,
-      items: [
-        priceItem(SAMSUNG.id, '20261105'),
-        // 다른 종목이 섞여 와도 저장하지 않음
-        priceItem('KR7000660001', '20261105'),
-      ],
-    });
+  it('KIS에서 그날 하루 시세를 단축코드로 받아 원화 정수로 upsert한다', async () => {
+    getDailyPrices.mockResolvedValue([bar('20261116')]);
 
-    await expect(
-      fetcher.fetchAndSave(SAMSUNG, '2024-11-09', '2026-11-09'),
-    ).resolves.toBe(1);
+    await expect(fetcher.fetchAndSave(SAMSUNG, '2026-11-16')).resolves.toBe(1);
 
-    expect(getStockPrices).toHaveBeenCalledWith({
-      beginBasDt: '20241109',
-      endBasDt: '20261110',
-      pageNo: 1,
-      numOfRows: 10000,
-      isinCd: SAMSUNG.id,
-    });
-    expect(getEtfPrices).not.toHaveBeenCalled();
+    expect(getDailyPrices).toHaveBeenCalledWith('005930', '20261116', '20261116');
     expect(upsert).toHaveBeenCalledWith(
       [
         {
           id: SAMSUNG.id,
-          date: '2026-11-05',
+          date: '2026-11-16',
           openingPrice: '71000',
           closingPrice: '72000',
           highestPrice: '72500',
@@ -91,23 +64,22 @@ describe('DailyPriceFetcher.fetchAndSave', () => {
     );
   });
 
-  it('KRW ETF는 증권상품시세(ETF)로 조회한다', async () => {
-    await fetcher.fetchAndSave(KODEX, '2024-11-09', '2026-11-09');
+  it('시세가 없는 날(휴장일)이면 저장하지 않고 0', async () => {
+    getDailyPrices.mockResolvedValue([]);
 
-    expect(getEtfPrices).toHaveBeenCalledWith(
-      expect.objectContaining({ isinCd: KODEX.id }),
-    );
-    expect(getStockPrices).not.toHaveBeenCalled();
+    await expect(fetcher.fetchAndSave(SAMSUNG, '2026-11-15')).resolves.toBe(0);
     expect(upsert).not.toHaveBeenCalled();
   });
 
-  it('USD는 batch가 시세를 받으므로 조회하지 않는다', async () => {
-    await expect(
-      fetcher.fetchAndSave(BAC_P, '2024-11-09', '2026-11-09'),
-    ).resolves.toBe(0);
+  it('요청한 날짜가 아닌 행은 버린다', async () => {
+    getDailyPrices.mockResolvedValue([bar('20261113')]);
 
-    expect(getStockPrices).not.toHaveBeenCalled();
-    expect(getEtfPrices).not.toHaveBeenCalled();
+    await expect(fetcher.fetchAndSave(SAMSUNG, '2026-11-16')).resolves.toBe(0);
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('KRW 외 통화는 호출하지 않고 0', async () => {
+    await expect(fetcher.fetchAndSave(APPLE, '2026-11-16')).resolves.toBe(0);
+    expect(getDailyPrices).not.toHaveBeenCalled();
   });
 });

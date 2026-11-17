@@ -47,3 +47,29 @@ export interface KisDividendResponse {
   /** 연속조회 키. 다음 요청의 CTS로 넘김 */
   CTS?: string;
 }
+
+/**
+ * 국내주식기간별시세(일봉) 한 행. 값은 모두 문자열.
+ * 그 기간에 시세가 없으면 빈 객체가 한 행 오기도 한다
+ */
+export interface KisDailyPriceItem {
+  /** 영업일 'YYYYMMDD' */
+  stck_bsop_date: string;
+  /** 시가 */
+  stck_oprc: string;
+  /** 고가 */
+  stck_hgpr: string;
+  /** 저가 */
+  stck_lwpr: string;
+  /** 종가 */
+  stck_clpr: string;
+}
+
+/** GET /uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice 응답 */
+export interface KisDailyPriceResponse {
+  /** '0'이면 성공 */
+  rt_cd: string;
+  msg_cd: string;
+  msg1: string;
+  output2?: Partial<KisDailyPriceItem>[];
+}

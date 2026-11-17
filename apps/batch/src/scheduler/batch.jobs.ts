@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import {
   BatchHistoryWriter,
   BatchStatus,
+  DomesticDailyPriceFetcher,
   DOMESTIC_MARKETS,
   ExchangeRateFetcher,
   OVERSEAS_MARKETS,
@@ -19,6 +20,8 @@ export const US_MARKET_TIME_ZONE = 'America/New_York';
 export const EXCHANGE_RATE_LOOKBACK_DAYS = 7;
 /** 미국 시세도 최근 이만큼을 매일 다시 받는다 (휴장일·늦게 확정된 바 보정, Massive 호출은 평일 수만큼) */
 export const US_DAILY_PRICE_LOOKBACK_DAYS = 7;
+/** 국내 시세는 오늘부터 이만큼 전까지 매일 다시 받는다 (data.go.kr은 영업일 하루 늦게 공개, 휴장일 보정) */
+export const DOMESTIC_DAILY_PRICE_LOOKBACK_DAYS = 4;
 
 /** --run=<이름>으로 한 번 실행할 수 있는 잡 */
 export const BATCH_JOB_NAMES = [
@@ -26,6 +29,7 @@ export const BATCH_JOB_NAMES = [
   'domestic-securities',
   'overseas-securities',
   'us-daily-prices',
+  'domestic-daily-prices',
   'expired-tokens',
 ] as const;
 export type BatchJobName = (typeof BATCH_JOB_NAMES)[number];
@@ -35,9 +39,10 @@ export type BatchJobName = (typeof BATCH_JOB_NAMES)[number];
  * - 16:00 USD/KRW 일별 환율 (Massive)
  * - 17:00 국내 종목 목록 KOSPI·KOSDAQ (Toss) — 새로 상장된 종목 추가
  * - 08:00 해외 종목 목록 NYSE·NASDAQ·AMEX (Toss)
- * - 15:00 미국 주식 일별 시세 최근 7일 (Massive Daily Market Summary) — 미국 동부 자정이 지나야 전날 데이터가 공개됨
+ * - 14:30 미국 주식 일별 시세 최근 7일 (Massive Daily Market Summary) — 미국 동부 자정이 지나야 전날 데이터가 공개됨
+ * - 13:30 국내 주식·ETF 일별 시세 오늘−4일 ~ 오늘 (data.go.kr) — 전 영업일 시세가 낮에 공개됨
  * - 00:00 refresh token이 만료된 로그인 세션(Token 행) 삭제 (updatedAt 기준)
- * 국내 시세와 배당은 배치가 아니라 조회 API에서 가져온다.
+ * 배당은 배치가 아니라 조회 API에서 가져온다 (국내 시세도 조회 때 KIS로 하루치를 보충).
  * 각 잡은 실패해도 예외를 로그로 남기고 프로세스는 계속 돈다(다음 날 다시 실행).
  */
 @Injectable()
@@ -48,6 +53,7 @@ export class BatchJobs {
     private readonly exchangeRateFetcher: ExchangeRateFetcher,
     private readonly securityFetcher: SecurityFetcher,
     private readonly usDailyPriceFetcher: UsDailyPriceFetcher,
+    private readonly domesticDailyPriceFetcher: DomesticDailyPriceFetcher,
     private readonly tokenProvider: TokenProvider,
     private readonly batchHistoryWriter: BatchHistoryWriter,
   ) {}
@@ -89,10 +95,10 @@ export class BatchJobs {
 
   /**
    * Massive Basic은 미국 동부 시간 자정이 지나야 그날 데이터를 준다(전에 요청하면 403).
-   * 15:00 KST는 미국 동부 01:00(서머타임 02:00)이라, 미국 동부 기준 어제(to)가 방금 끝난 거래일.
+   * 14:30 KST는 미국 동부 00:30(서머타임 01:30)이라, 미국 동부 기준 어제(to)가 방금 끝난 거래일.
    * to부터 7일 전까지 평일마다 하루치 전 종목을 받는다.
    */
-  @Cron('0 15 * * *', {
+  @Cron('30 14 * * *', {
     name: 'us-daily-prices',
     timeZone: BATCH_TIME_ZONE,
     waitForCompletion: true,
@@ -102,6 +108,20 @@ export class BatchJobs {
     const from = daysBefore(to, US_DAILY_PRICE_LOOKBACK_DAYS);
     return this.run('us-daily-prices', () =>
       this.usDailyPriceFetcher.importFromMassive({ from, to }),
+    );
+  }
+
+  /** data.go.kr 국내 주식·ETF 시세를 한국 시간 오늘부터 4일 전까지 다시 받는다 */
+  @Cron('30 13 * * *', {
+    name: 'domestic-daily-prices',
+    timeZone: BATCH_TIME_ZONE,
+    waitForCompletion: true,
+  })
+  importDomesticDailyPrices(): Promise<boolean> {
+    const to = todayIn(BATCH_TIME_ZONE);
+    const from = daysBefore(to, DOMESTIC_DAILY_PRICE_LOOKBACK_DAYS);
+    return this.run('domestic-daily-prices', () =>
+      this.domesticDailyPriceFetcher.importFromDataGoKr({ from, to }),
     );
   }
 
@@ -128,6 +148,8 @@ export class BatchJobs {
         return this.importOverseasSecurities();
       case 'us-daily-prices':
         return this.importUsDailyPrices();
+      case 'domestic-daily-prices':
+        return this.importDomesticDailyPrices();
       case 'expired-tokens':
         return this.deleteExpiredTokens();
     }

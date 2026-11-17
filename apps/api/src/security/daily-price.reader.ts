@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { DailySecurity } from '@app/common';
 
-/** 저장된 종목 일별 시세 조회. 받아 저장하는 일은 DailyPriceFetcher(국내)·batch(미국)가 한다 */
+/** 저장된 종목 일별 시세 조회. 받아 저장하는 일은 batch(국내·미국 전 종목)와 DailyPriceFetcher(국내 하루치 보충)가 한다 */
 @Injectable()
 export class DailyPriceReader {
   constructor(

@@ -1,6 +1,14 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
+  ApiAcceptedResponse,
   ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
@@ -13,6 +21,7 @@ import {
   type BatchHistoryRequest,
   batchHistorySchema,
 } from './dto/batch-history.schema.js';
+import { DomesticDailyPriceImportDto } from './dto/domestic-daily-price-import.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -30,5 +39,17 @@ export class AdminController {
     @Query({ schema: batchHistorySchema }) query: BatchHistoryRequest,
   ): Promise<BatchHistoryItemDto[]> {
     return this.adminService.getBatchHistories(query);
+  }
+
+  /** 일회용: 한 번 실행하고 지운다 */
+  @Post('domestic-daily-prices/import')
+  @HttpCode(202)
+  @ApiOperation({
+    summary:
+      '[일회용] 국내 주식·ETF 일별 시세 2020-01-01~오늘 전체 적재 (관리자, data.go.kr): 백그라운드로 시작하고 바로 응답, 진행 중이면 409',
+  })
+  @ApiAcceptedResponse({ type: DomesticDailyPriceImportDto })
+  importDomesticDailyPrices(): DomesticDailyPriceImportDto {
+    return this.adminService.importDomesticDailyPrices();
   }
 }
