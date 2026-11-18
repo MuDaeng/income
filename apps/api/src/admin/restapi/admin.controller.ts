@@ -18,6 +18,7 @@ import {
   type BatchHistoryRequest,
   batchHistorySchema,
 } from './dto/batch-history.schema.js';
+import { PriceSearchItemDto } from './dto/price-search.dto.js';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -35,5 +36,15 @@ export class AdminController {
     @Query({ schema: batchHistorySchema }) query: BatchHistoryRequest,
   ): Promise<BatchHistoryItemDto[]> {
     return this.adminService.getBatchHistories(query);
+  }
+
+  @Get('security-searches/price')
+  @ApiOperation({
+    summary:
+      '종목별 일별 시세 조회 이력 (관리자): SecuritySearch type=PRICE의 lastSearchDate, 최근 조회순',
+  })
+  @ApiOkResponse({ type: [PriceSearchItemDto] })
+  getPriceSearches(): Promise<PriceSearchItemDto[]> {
+    return this.adminService.getPriceSearches();
   }
 }
