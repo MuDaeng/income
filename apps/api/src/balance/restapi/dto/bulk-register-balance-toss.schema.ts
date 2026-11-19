@@ -66,14 +66,7 @@ export const tossTransactionSchema = z.object({
   quantity: unsignedDecimalString.nullable(),
   /** 매매 단가. BUY·SELL 외, 미결제는 null */
   filledPrice: unsignedDecimalString.nullable(),
-  /** 거래금액. 증권 입출고는 null */
-  amount: unsignedDecimalString.nullable(),
-  /** 수수료. 없으면 "0" */
-  commission: unsignedDecimalString,
-  /** 세금 합계. 없으면 "0" */
-  tax: unsignedDecimalString,
-  /** 수수료·세금을 반영한 정산 금액. 증권 입출고는 null */
-  netAmount: unsignedDecimalString.nullable(),
+  // amount·commission·tax·netAmount는 쓰지 않아 받지 않는다. Toss 응답을 그대로 보내도 z.object가 모르는 키를 버린다
   /** 환율 (1 USD당 KRW). USD 결제 완료 거래 외에는 null */
   exchangeRate: unsignedDecimalString.nullable(),
   /** KST 기준 결제일 'YYYY-MM-DD'. 미결제는 예상 결제일 */

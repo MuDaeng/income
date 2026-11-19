@@ -9,10 +9,6 @@ const buy = {
   isinCode: 'US0378331005',
   quantity: '3',
   filledPrice: '189.12',
-  amount: '567.36',
-  commission: '0.57',
-  tax: '0',
-  netAmount: '567.93',
   exchangeRate: '1386.00',
   settlementDate: '2026-09-18',
   settled: true,
@@ -31,9 +27,6 @@ const deposit = {
   quantity: null,
   filledPrice: null,
   exchangeRate: null,
-  amount: '100000',
-  netAmount: '100000',
-  commission: '0',
 };
 
 const issuePaths = (transaction: object) =>
@@ -62,7 +55,7 @@ describe('bulkRegisterBalanceTossSchema', () => {
     ).toBe(false);
   });
 
-  it.each(['transactionType', 'commission', 'settlementDate', 'settled', 'isCancellation'])(
+  it.each(['transactionType', 'quantity', 'settlementDate', 'settled', 'isCancellation'])(
     '%s는 필수',
     (key) => {
       const rest: Record<string, unknown> = { ...buy };
@@ -98,17 +91,25 @@ describe('bulkRegisterBalanceTossSchema', () => {
     },
   );
 
-  it.each(['-1', 'abc', '1.'])('금액 %s는 오류', (amount) => {
-    expect(issuePaths({ ...buy, amount })).toEqual([
-      ['transactionList', 0, 'amount'],
+  it.each(['-1', 'abc', '1.'])('단가 %s는 오류', (filledPrice) => {
+    expect(issuePaths({ ...buy, filledPrice })).toEqual([
+      ['transactionList', 0, 'filledPrice'],
     ]);
   });
 
-  it('commission·tax는 null이면 오류', () => {
-    expect(issuePaths({ ...buy, commission: null, tax: null })).toEqual([
-      ['transactionList', 0, 'commission'],
-      ['transactionList', 0, 'tax'],
-    ]);
+  it('Toss 응답의 amount·commission·tax·netAmount가 와도 통과하고 버린다', () => {
+    const parsed = bulkRegisterBalanceTossSchema.parse({
+      transactionList: [
+        {
+          ...buy,
+          amount: '567.36',
+          commission: '0.57',
+          tax: '0',
+          netAmount: null,
+        },
+      ],
+    });
+    expect(parsed.transactionList[0]).toEqual(buy);
   });
 
   it('날짜·일시 형식이 틀리면 오류', () => {

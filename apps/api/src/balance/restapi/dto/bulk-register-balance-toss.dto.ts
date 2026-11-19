@@ -53,22 +53,6 @@ export class TossTransaction {
   @ApiProperty({ type: String, nullable: true, description: '매매 단가. BUY·SELL에만 제공, 미결제는 null' })
   filledPrice: string | null;
 
-  @ApiProperty({ type: String, nullable: true, description: '거래금액. 증권 입출고는 null' })
-  amount: string | null;
-
-  @ApiProperty({ description: '수수료. 값이 없으면 "0"' })
-  commission: string;
-
-  @ApiProperty({ description: '세금 합계. 값이 없으면 "0"' })
-  tax: string;
-
-  @ApiProperty({
-    type: String,
-    nullable: true,
-    description: '수수료·세금을 반영한 정산 금액. 증권 입출고는 null',
-  })
-  netAmount: string | null;
-
   @ApiProperty({
     type: String,
     nullable: true,
