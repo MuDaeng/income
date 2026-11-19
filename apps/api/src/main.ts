@@ -13,6 +13,8 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(ApiModule);
   // Nginx 뒤에서 실제 클라이언트 IP 인식
   app.set('trust proxy', 1);
+  // 기본 JSON body 한도(100kb)로는 토스 전체 거래내역 등록(/balance/toss) 요청이 413으로 거절됨
+  app.useBodyParser('json', { limit: '1mb' });
   // /auth/access에서 refresh token cookie를 읽기 위함
   app.use(cookieParser());
   // 프론트엔드에서 cookie를 담아(credentials: 'include') 호출할 수 있도록 허용 (www / non-www)

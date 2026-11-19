@@ -104,13 +104,13 @@ export class BulkRegisterBalanceTossDto {
 
 /** 건너뛴 거래 한 건 */
 export class TossSkippedTransactionDto {
-  @ApiProperty({ description: '거래 유형 (BUY·SELL)' })
+  @ApiProperty({ description: '거래 유형 (BUY·SELL·SECURITIES_TRANSFER_IN·SECURITIES_TRANSFER_OUT)' })
   transactionType: string;
 
   @ApiProperty({ type: String, nullable: true, description: '거래의 ISIN' })
   isinCode: string | null;
 
-  @ApiProperty({ description: '건너뛴 이유 (취소 거래 / 종목을 찾을 수 없음 / 수량 또는 단가 없음)' })
+  @ApiProperty({ description: '건너뛴 이유 (취소 거래 / 종목을 찾을 수 없음 / 수량 또는 단가 없음 / 입고일 시세 없음)' })
   reason: string;
 }
 
@@ -119,12 +119,12 @@ export class BulkRegisterBalanceTossResponse {
   @ApiProperty({ description: '삭제한 기존 TOSS 매수분(매도분 포함) 행 수' })
   deletedCount: number;
 
-  @ApiProperty({ description: '등록한 BUY 거래 수' })
+  @ApiProperty({ description: '등록한 BUY·SECURITIES_TRANSFER_IN 거래 수' })
   boughtCount: number;
 
-  @ApiProperty({ description: '매도 처리한 SELL 거래 수' })
+  @ApiProperty({ description: '매도 처리한 SELL·SECURITIES_TRANSFER_OUT 거래 수' })
   soldCount: number;
 
-  @ApiProperty({ type: [TossSkippedTransactionDto], description: '건너뛴 BUY·SELL 거래' })
+  @ApiProperty({ type: [TossSkippedTransactionDto], description: '건너뛴 매수·매도·입출고 거래' })
   skipped: TossSkippedTransactionDto[];
 }

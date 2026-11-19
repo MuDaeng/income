@@ -53,6 +53,11 @@ import type { UpdateExchangeRateRequest } from './dto/update-exchange-rate.schem
 import type { UpdateSecurityCompanyRequest } from './dto/update-security-company.schema.js';
 import { returnRate } from '../return-rate.js';
 
+/** Toss 일괄 등록에서 매수분으로 등록하는 거래 유형 (입고는 이벤트·소수점 주식 지급 등) */
+const BUY_TYPES: readonly string[] = ['BUY', 'SECURITIES_TRANSFER_IN'];
+/** Toss 일괄 등록에서 FIFO 매도하는 거래 유형 */
+const SELL_TYPES: readonly string[] = ['SELL', 'SECURITIES_TRANSFER_OUT'];
+
 @Injectable()
 export class BalanceService {
   constructor(
@@ -235,10 +240,12 @@ export class BalanceService {
   /**
    * Toss 거래내역으로 TOSS 증권사 잔고를 다시 만든다 (한 트랜잭션, 실패하면 삭제까지 롤백).
    * 1. 사용자의 TOSS 매수분(매도분 포함)을 모두 삭제
-   * 2. BUY를 거래일 오름차순으로 등록 — 일별 시세 존재·가격 범위는 검증하지 않음
+   * 2. BUY·SECURITIES_TRANSFER_IN을 거래일 오름차순으로 등록 — 일별 시세 존재·가격 범위는 검증하지 않음
    *    (amount = quantity, price = filledPrice, 종목 통화로 버림, 환율은 registerBalance와 같은 규칙)
-   * 3. SELL을 거래일 오름차순으로 TOSS 매수분에서 FIFO 매도 (보유 부족이면 400)
-   * 취소 거래, isinCode로 종목을 못 찾는 거래, 수량·단가가 없는 거래는 건너뛰고 skipped에 담는다. BUY·SELL 외 유형은 무시.
+   *    입고는 체결 단가가 없으므로 입고일(포함) 이전 가장 최근 종가를 price로 쓴다
+   * 3. SELL·SECURITIES_TRANSFER_OUT을 거래일 오름차순으로 TOSS 매수분에서 FIFO 매도 (보유 부족이면 400)
+   * 취소 거래, isinCode로 종목을 못 찾는 거래, 수량·단가가 없는 거래, 시세가 없는 입고는 건너뛰고 skipped에 담는다.
+   * 그 밖의 유형(입출금·배당 등)은 무시.
    * 거래일 규칙은 tossTradeDate. 외부 갱신(SecurityRefresher)은 하지 않는다(조회 API가 갱신).
    */
   @Transactional()
@@ -256,7 +263,9 @@ export class BalanceService {
     );
 
     const trades = input.transactionList.filter(
-      (t) => t.transactionType === 'BUY' || t.transactionType === 'SELL',
+      (t) =>
+        BUY_TYPES.includes(t.transactionType) ||
+        SELL_TYPES.includes(t.transactionType),
     );
     const isins = [
       ...new Set(
@@ -298,23 +307,33 @@ export class BalanceService {
         skip(transaction, '종목을 찾을 수 없음');
         continue;
       }
-      const { quantity, filledPrice: price } = transaction;
-      const isBuy = transaction.transactionType === 'BUY';
-      if (quantity === null || (isBuy && price === null)) {
+      const { quantity, transactionType } = transaction;
+      const isBuy = BUY_TYPES.includes(transactionType);
+      const isTransferIn = transactionType === 'SECURITIES_TRANSFER_IN';
+      if (
+        quantity === null ||
+        (isBuy && !isTransferIn && transaction.filledPrice === null)
+      ) {
         skip(transaction, '수량 또는 단가 없음');
         continue;
       }
-      const trade = {
-        transaction,
-        security,
-        date: tossTradeDate(transaction),
-        quantity,
-      };
-      if (isBuy && price !== null) {
-        buys.push({ ...trade, price });
-      } else {
+      const date = tossTradeDate(transaction);
+      const trade = { transaction, security, date, quantity };
+      if (!isBuy) {
         sells.push(trade);
+        continue;
       }
+      // 입고에는 체결 단가가 없으므로 입고일(휴장일이면 그 이전) 종가를 매수가로 쓴다
+      const price =
+        transaction.filledPrice ??
+        (await this.dailyPriceReader.findLatestOnOrBefore(security.id, date))
+          ?.closingPrice ??
+        null;
+      if (price === null) {
+        skip(transaction, '입고일 시세 없음');
+        continue;
+      }
+      buys.push({ ...trade, price });
     }
     const byDate = (a: Trade, b: Trade) => a.date.localeCompare(b.date);
     buys.sort(byDate);

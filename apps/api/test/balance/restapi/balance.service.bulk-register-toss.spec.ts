@@ -71,6 +71,7 @@ const user = { id: 1, rules: [] };
 describe('BalanceService.bulkRegisterToss', () => {
   const securityRepository = { findBy: vi.fn() };
   const exchangeRateRepository = { findOne: vi.fn() };
+  const dailySecurityRepository = { findOne: vi.fn() };
   const purchaseWriter = {
     lockOwner: vi.fn(),
     removeByCompany: vi.fn(),
@@ -99,7 +100,10 @@ describe('BalanceService.bulkRegisterToss', () => {
         { provide: getRepositoryToken(UserBalance), useValue: {} },
         { provide: getRepositoryToken(Security), useValue: securityRepository },
         { provide: SecurityRefresher, useValue: {} },
-        { provide: getRepositoryToken(DailySecurity), useValue: {} },
+        {
+          provide: getRepositoryToken(DailySecurity),
+          useValue: dailySecurityRepository,
+        },
         {
           provide: getRepositoryToken(DailyExchangeRate),
           useValue: exchangeRateRepository,
@@ -242,7 +246,103 @@ describe('BalanceService.bulkRegisterToss', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('취소·없는 종목·수량/단가 없는 거래는 건너뛰고, BUY·SELL 외 유형은 무시한다', async () => {
+  it('SECURITIES_TRANSFER_IN은 입고일 이전 최근 종가를 매수가로 등록한다', async () => {
+    dailySecurityRepository.findOne.mockResolvedValue({
+      closingPrice: '72.4567891',
+    });
+
+    const result = await service.bulkRegisterToss(user, {
+      transactionList: [
+        usBuy({
+          transactionType: 'SECURITIES_TRANSFER_IN',
+          quantity: '0.000496',
+          filledPrice: null,
+          amount: null,
+          netAmount: null,
+          exchangeRate: null,
+        }),
+      ],
+    });
+
+    expect(dailySecurityRepository.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: US_ISIN }),
+        order: { date: 'DESC' },
+      }),
+    );
+    expect(purchaseWriter.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        securityId: US_ISIN,
+        purchaseDate: '2026-10-15',
+        amount: '0.000496',
+        price: '72.456789',
+      }),
+    );
+    expect(result).toMatchObject({ boughtCount: 1, skipped: [] });
+  });
+
+  it('SECURITIES_TRANSFER_IN의 시세가 없으면 건너뛴다', async () => {
+    dailySecurityRepository.findOne.mockResolvedValue(null);
+
+    const result = await service.bulkRegisterToss(user, {
+      transactionList: [
+        krBuy({ transactionType: 'SECURITIES_TRANSFER_IN', filledPrice: null }),
+      ],
+    });
+
+    expect(purchaseWriter.append).not.toHaveBeenCalled();
+    expect(result.skipped).toEqual([
+      {
+        transactionType: 'SECURITIES_TRANSFER_IN',
+        isinCode: KR_ISIN,
+        reason: '입고일 시세 없음',
+      },
+    ]);
+  });
+
+  it('입고분을 매수분과 함께 먼저 등록하고, SECURITIES_TRANSFER_OUT은 SELL처럼 FIFO 매도한다', async () => {
+    dailySecurityRepository.findOne.mockResolvedValue({ closingPrice: '71000' });
+    const calls: string[] = [];
+    purchaseWriter.append.mockImplementation(({ purchaseDate, amount }) => {
+      calls.push(`BUY ${purchaseDate} ${amount}`);
+      return Promise.resolve({});
+    });
+    purchaseWriter.sellFifo.mockImplementation(
+      (_u, _s, _c, amount: Decimal, saleDate: string) => {
+        calls.push(`SELL ${saleDate} ${amount.toString()}`);
+        return Promise.resolve([]);
+      },
+    );
+
+    const result = await service.bulkRegisterToss(user, {
+      transactionList: [
+        krBuy({
+          transactionType: 'SECURITIES_TRANSFER_OUT',
+          quantity: '1',
+          filledPrice: null,
+          transactionTime: '2026-10-20T10:00:00+09:00',
+        }),
+        krBuy({ transactionType: 'SELL', quantity: '4', transactionTime: '2026-10-18T10:00:00+09:00' }),
+        krBuy({
+          transactionType: 'SECURITIES_TRANSFER_IN',
+          quantity: '2',
+          filledPrice: null,
+          transactionTime: '2026-10-17T10:00:00+09:00',
+        }),
+        krBuy({ transactionTime: '2026-10-16T10:00:00+09:00' }),
+      ],
+    });
+
+    expect(calls).toEqual([
+      'BUY 2026-10-16 3',
+      'BUY 2026-10-17 2',
+      'SELL 2026-10-18 4',
+      'SELL 2026-10-20 1',
+    ]);
+    expect(result).toMatchObject({ boughtCount: 2, soldCount: 2 });
+  });
+
+  it('취소·없는 종목·수량/단가 없는 거래는 건너뛰고, 매수·매도·입출고 외 유형은 무시한다', async () => {
     const result = await service.bulkRegisterToss(user, {
       transactionList: [
         krBuy({ isCancellation: true }),
