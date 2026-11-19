@@ -1,10 +1,15 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import {
   type Currency,
   PurchaseDateBalance,
+  type SecurityCompany,
   truncateByCurrency,
   User,
   UserBalance,
@@ -133,6 +138,86 @@ export class PurchaseWriter {
       saleDate,
       exchangeRate: source.exchangeRate,
     });
+  }
+
+  /**
+   * 증권사별 FIFO 매도. 그 증권사의 미매도 매수분 중 매도일 이전(포함)에 산 것을
+   * 매수일이 오래된 순(같은 날은 sequence 순)으로 amount만큼 sell 한다.
+   * 대상 보유 수량 합계 < amount면 400 (아무것도 매도하지 않음). 매도 처리된 행을 처리 순서대로 돌려준다.
+   */
+  async sellFifo(
+    userId: number,
+    securityId: string,
+    securityCompany: SecurityCompany,
+    amount: Decimal,
+    saleDate: string,
+    currency: Currency,
+  ): Promise<PurchaseDateBalance[]> {
+    const sources = await this.purchaseDateBalanceRepository.find({
+      where: {
+        userId,
+        securityId,
+        securityCompany,
+        saleDate: IsNull(),
+        purchaseDate: LessThanOrEqual(saleDate),
+      },
+      order: { purchaseDate: 'ASC', sequence: 'ASC' },
+    });
+    const held = sources.reduce(
+      (acc, source) => acc.plus(source.amount),
+      new Decimal(0),
+    );
+    if (amount.gt(held)) {
+      throw new BadRequestException('매도 수량이 보유 수량보다 많습니다.');
+    }
+
+    const results: PurchaseDateBalance[] = [];
+    let remaining = amount;
+    for (const source of sources) {
+      if (remaining.lte(0)) {
+        break;
+      }
+      const portion = Decimal.min(remaining, source.amount);
+      results.push(await this.sell(source, portion, saleDate, currency));
+      remaining = remaining.minus(portion);
+    }
+    return results;
+  }
+
+  /**
+   * 사용자의 한 증권사 매수분(매도분 포함)을 모두 삭제한다. 지운 행 수를 돌려준다.
+   * 매수분이 하나도 남지 않은 종목은 UserBalance도 지운다(remove와 같은 규칙).
+   */
+  async removeByCompany(
+    userId: number,
+    securityCompany: SecurityCompany,
+  ): Promise<number> {
+    const rows = await this.purchaseDateBalanceRepository.find({
+      where: { userId, securityCompany },
+      select: { securityId: true },
+    });
+    if (rows.length === 0) {
+      return 0;
+    }
+    const { affected } = await this.purchaseDateBalanceRepository.delete({
+      userId,
+      securityCompany,
+    });
+
+    const securityIds = [...new Set(rows.map((row) => row.securityId))];
+    const remaining = await this.purchaseDateBalanceRepository.find({
+      where: { userId, securityId: In(securityIds) },
+      select: { securityId: true },
+    });
+    const kept = new Set(remaining.map((row) => row.securityId));
+    const emptied = securityIds.filter((id) => !kept.has(id));
+    if (emptied.length > 0) {
+      await this.userBalanceRepository.delete({
+        userId,
+        securityId: In(emptied),
+      });
+    }
+    return affected ?? rows.length;
   }
 
   /** 매수분 하나의 변경(증권사·구매 환율 등)을 저장한다. 합치거나 나누지 않는다 */

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
-import { IsNull, LessThanOrEqual, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import {
   Currency,
@@ -26,6 +26,15 @@ import type {
   IntegratedBalanceResponse,
 } from './dto/integrated-balance.dto.js';
 import type { BulkSellBalanceRequest } from './dto/bulk-sell-balance.schema.js';
+import type {
+  BulkRegisterBalanceTossResponse,
+  TossSkippedTransactionDto,
+} from './dto/bulk-register-balance-toss.dto.js';
+import type {
+  BulkRegisterBalanceTossRequest,
+  TossTransactionRequest,
+} from './dto/bulk-register-balance-toss.schema.js';
+import { tossTradeDate } from '../toss-trade-date.js';
 import { companyAmountsOf } from '../company-amount.js';
 import type { CompanyAmountDto } from './dto/company-amount.dto.js';
 import type { DeletePurchaseRequest } from './dto/delete-purchase.schema.js';
@@ -213,38 +222,141 @@ export class BalanceService {
     }
     const { currency } = security;
     const amount = new Decimal(truncateByCurrency(input.amount, currency));
-
-    const sources = await this.purchaseDateBalanceRepository.find({
-      where: {
-        userId,
-        securityId,
-        securityCompany,
-        saleDate: IsNull(),
-        purchaseDate: LessThanOrEqual(saleDate),
-      },
-      order: { purchaseDate: 'ASC', sequence: 'ASC' },
-    });
-    const held = sources.reduce(
-      (acc, source) => acc.plus(source.amount),
-      new Decimal(0),
+    return this.purchaseWriter.sellFifo(
+      userId,
+      securityId,
+      securityCompany,
+      amount,
+      saleDate,
+      currency,
     );
-    if (amount.gt(held)) {
-      throw new BadRequestException('매도 수량이 보유 수량보다 많습니다.');
+  }
+
+  /**
+   * Toss 거래내역으로 TOSS 증권사 잔고를 다시 만든다 (한 트랜잭션, 실패하면 삭제까지 롤백).
+   * 1. 사용자의 TOSS 매수분(매도분 포함)을 모두 삭제
+   * 2. BUY를 거래일 오름차순으로 등록 — 일별 시세 존재·가격 범위는 검증하지 않음
+   *    (amount = quantity, price = filledPrice, 종목 통화로 버림, 환율은 registerBalance와 같은 규칙)
+   * 3. SELL을 거래일 오름차순으로 TOSS 매수분에서 FIFO 매도 (보유 부족이면 400)
+   * 취소 거래, isinCode로 종목을 못 찾는 거래, 수량·단가가 없는 거래는 건너뛰고 skipped에 담는다. BUY·SELL 외 유형은 무시.
+   * 거래일 규칙은 tossTradeDate. 외부 갱신(SecurityRefresher)은 하지 않는다(조회 API가 갱신).
+   */
+  @Transactional()
+  async bulkRegisterToss(
+    authUser: AuthUser,
+    input: BulkRegisterBalanceTossRequest,
+  ): Promise<BulkRegisterBalanceTossResponse> {
+    const userId = authUser.id;
+    const securityCompany = SecurityCompany.TOSS;
+
+    await this.purchaseWriter.lockOwner(userId);
+    const deletedCount = await this.purchaseWriter.removeByCompany(
+      userId,
+      securityCompany,
+    );
+
+    const trades = input.transactionList.filter(
+      (t) => t.transactionType === 'BUY' || t.transactionType === 'SELL',
+    );
+    const isins = [
+      ...new Set(
+        trades.flatMap((t) => (t.isinCode ? [t.isinCode] : [])),
+      ),
+    ];
+    const securities = new Map(
+      (isins.length > 0
+        ? await this.securityRepository.findBy({ id: In(isins) })
+        : []
+      ).map((security) => [security.id, security]),
+    );
+
+    const skipped: TossSkippedTransactionDto[] = [];
+    const skip = (t: TossTransactionRequest, reason: string) =>
+      skipped.push({
+        transactionType: t.transactionType,
+        isinCode: t.isinCode,
+        reason,
+      });
+
+    type Trade = {
+      transaction: TossTransactionRequest;
+      security: Security;
+      date: string;
+      quantity: string;
+    };
+    const buys: (Trade & { price: string })[] = [];
+    const sells: Trade[] = [];
+    for (const transaction of trades) {
+      if (transaction.isCancellation) {
+        skip(transaction, '취소 거래');
+        continue;
+      }
+      const security = transaction.isinCode
+        ? securities.get(transaction.isinCode)
+        : undefined;
+      if (!security) {
+        skip(transaction, '종목을 찾을 수 없음');
+        continue;
+      }
+      const { quantity, filledPrice: price } = transaction;
+      const isBuy = transaction.transactionType === 'BUY';
+      if (quantity === null || (isBuy && price === null)) {
+        skip(transaction, '수량 또는 단가 없음');
+        continue;
+      }
+      const trade = {
+        transaction,
+        security,
+        date: tossTradeDate(transaction),
+        quantity,
+      };
+      if (isBuy && price !== null) {
+        buys.push({ ...trade, price });
+      } else {
+        sells.push(trade);
+      }
+    }
+    const byDate = (a: Trade, b: Trade) => a.date.localeCompare(b.date);
+    buys.sort(byDate);
+    sells.sort(byDate);
+
+    for (const { transaction, security, date, quantity, price } of buys) {
+      let exchangeRate: string | null = null;
+      if (security.currency !== Currency.KRW) {
+        const rate =
+          transaction.exchangeRate ??
+          (await this.exchangeRateReader.findUsdOnOrBefore(date))?.closingRate;
+        exchangeRate = rate ? toRate(rate) : null;
+      }
+      await this.purchaseWriter.append({
+        userId,
+        securityId: security.id,
+        purchaseDate: date,
+        securityCompany,
+        amount: truncateByCurrency(quantity, security.currency),
+        price: truncateByCurrency(price, security.currency),
+        saleDate: null,
+        exchangeRate,
+      });
     }
 
-    const results: PurchaseDateBalance[] = [];
-    let remaining = amount;
-    for (const source of sources) {
-      if (remaining.lte(0)) {
-        break;
-      }
-      const portion = Decimal.min(remaining, source.amount);
-      results.push(
-        await this.purchaseWriter.sell(source, portion, saleDate, currency),
+    for (const { security, date, quantity } of sells) {
+      await this.purchaseWriter.sellFifo(
+        userId,
+        security.id,
+        securityCompany,
+        new Decimal(truncateByCurrency(quantity, security.currency)),
+        date,
+        security.currency,
       );
-      remaining = remaining.minus(portion);
     }
-    return results;
+
+    return {
+      deletedCount,
+      boughtCount: buys.length,
+      soldCount: sells.length,
+      skipped,
+    };
   }
 
   /**

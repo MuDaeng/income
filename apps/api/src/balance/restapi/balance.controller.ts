@@ -12,6 +12,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
@@ -25,6 +26,11 @@ import {
   type BulkSellBalanceRequest,
   bulkSellBalanceSchema,
 } from './dto/bulk-sell-balance.schema.js';
+import { BulkRegisterBalanceTossResponse } from './dto/bulk-register-balance-toss.dto.js';
+import {
+  type BulkRegisterBalanceTossRequest,
+  bulkRegisterBalanceTossSchema,
+} from './dto/bulk-register-balance-toss.schema.js';
 import {
   type DeletePurchaseRequest,
   deletePurchaseSchema,
@@ -125,6 +131,22 @@ export class BalanceController {
     @Body({ schema: bulkSellBalanceSchema }) body: BulkSellBalanceRequest,
   ): Promise<PurchaseDateBalance[]> {
     return this.balanceService.bulkSellBalance(user, body);
+  }
+
+  @Post('toss')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Toss 거래내역으로 TOSS 증권사 잔고 일괄 재등록: 기존 TOSS 매수분 삭제 → BUY 등록(시세 검증 없음) → SELL 일괄매도',
+  })
+  @ApiCreatedResponse({ type: BulkRegisterBalanceTossResponse })
+  bulkRegisterToss(
+    @CurrentUser() user: AuthUser,
+    @Body({ schema: bulkRegisterBalanceTossSchema })
+    body: BulkRegisterBalanceTossRequest,
+  ): Promise<BulkRegisterBalanceTossResponse> {
+    return this.balanceService.bulkRegisterToss(user, body);
   }
 
   @Get()
