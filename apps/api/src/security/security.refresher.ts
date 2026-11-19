@@ -31,10 +31,17 @@ const DIVIDEND_LOOKBACK_YEARS = 1;
  *   전 종목 시세는 batch의 domestic-daily-prices 잡(data.go.kr)이, USD 시세는 us-daily-prices 잡이 받는다.
  * - 종류마다 성공했을 때만 그 종류의 lastSearchDate를 남긴다. 실패는 로그만 남기고 예외를 던지지 않아
  *   호출한 API는 저장분으로 응답하고, 다음 조회 때 그 종류만 다시 시도한다.
+ * - 같은 종목의 갱신이 이미 진행 중이면 새로 부르지 않고 그 갱신을 함께 기다린다(inFlight).
  */
 @Injectable()
 export class SecurityRefresher {
   private readonly logger = new Logger(SecurityRefresher.name);
+  /**
+   * 종목별 진행 중인 갱신. 여러 조회 API가 동시에 같은 종목을 갱신하면 조회 기록이 남기 전이라
+   * 모두 원천을 부르게 되므로(외부 API 한도 초과), 진행 중이면 그 갱신을 함께 기다린다.
+   * pm2 프로세스 하나라 메모리로 충분하다
+   */
+  private readonly inFlight = new Map<string, Promise<void>>();
 
   constructor(
     @InjectRepository(SecuritySearch)
@@ -51,6 +58,18 @@ export class SecurityRefresher {
     ) {
       return;
     }
+    const running = this.inFlight.get(security.id);
+    if (running) {
+      return running;
+    }
+    const refreshing = this.refreshNow(security).finally(() => {
+      this.inFlight.delete(security.id);
+    });
+    this.inFlight.set(security.id, refreshing);
+    return refreshing;
+  }
+
+  private async refreshNow(security: Security): Promise<void> {
     const today = todayInSeoul();
     const searches = await this.securitySearchRepository.findBy({
       id: security.id,

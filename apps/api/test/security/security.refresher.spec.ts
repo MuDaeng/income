@@ -111,6 +111,45 @@ describe('SecurityRefresher.refresh', () => {
     ]);
   });
 
+  it('같은 종목을 동시에 갱신하면 원천은 한 번만 부르고 모두 그 갱신을 기다린다', async () => {
+    let finish!: (value: { fetched: number; saved: number }) => void;
+    fetchDividends.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+
+    const calls = [
+      service.refresh(SAMSUNG),
+      service.refresh(SAMSUNG),
+      service.refresh(SAMSUNG),
+    ];
+    await vi.waitFor(() => expect(fetchDividends).toHaveBeenCalled());
+    finish({ fetched: 2, saved: 2 });
+    await Promise.all(calls);
+
+    expect(findBy).toHaveBeenCalledTimes(1);
+    expect(fetchDividends).toHaveBeenCalledTimes(1);
+    expect(fetchPrices).toHaveBeenCalledTimes(1);
+  });
+
+  it('다른 종목은 동시에 따로 갱신하고, 끝난 뒤의 호출은 다시 조회 기록을 확인한다', async () => {
+    await Promise.all([service.refresh(SAMSUNG), service.refresh(APPLE)]);
+    expect(fetchDividends).toHaveBeenCalledTimes(2);
+
+    await service.refresh(SAMSUNG);
+    expect(findBy).toHaveBeenCalledTimes(3);
+  });
+
+  it('갱신 중 예외가 나도 진행 중 기록을 지워 다음 호출은 다시 시도한다', async () => {
+    findBy.mockRejectedValueOnce(new Error('DB down'));
+
+    await expect(service.refresh(SAMSUNG)).rejects.toThrow('DB down');
+    await service.refresh(SAMSUNG);
+
+    expect(fetchDividends).toHaveBeenCalledTimes(1);
+  });
+
   it('15:30이 지나면 오늘 시세를 채우고 조회일도 오늘로 남긴다', async () => {
     vi.setSystemTime(new Date('2026-11-09T06:30:00Z')); // 한국 15:30
     findBy.mockResolvedValue([income(TODAY), price(YESTERDAY)]);
