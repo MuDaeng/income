@@ -20,6 +20,7 @@ import {
 import type { AuthUser } from '../../auth/restapi/jwt.strategy.js';
 import { DailyPriceReader } from '../../security/daily-price.reader.js';
 import { ExchangeRateReader } from '../../security/exchange-rate.reader.js';
+import { addDays } from '../../security/iso-date.js';
 import { SecurityRefresher } from '../../security/security.refresher.js';
 import type {
   BalanceItemDto,
@@ -55,7 +56,7 @@ import { returnRate } from '../return-rate.js';
 
 /** Toss 일괄 등록에서 매수분으로 등록하는 거래 유형 (입고는 이벤트·소수점 주식 지급 등) */
 const BUY_TYPES: readonly string[] = ['BUY', 'SECURITIES_TRANSFER_IN'];
-/** Toss 일괄 등록에서 FIFO 매도하는 거래 유형 */
+/** Toss 일괄 등록에서 LIFO 매도하는 거래 유형 */
 const SELL_TYPES: readonly string[] = ['SELL', 'SECURITIES_TRANSFER_OUT'];
 
 @Injectable()
@@ -203,7 +204,7 @@ export class BalanceService {
 
   /**
    * 증권사별 일괄매도. 그 증권사의 미매도 매수분 중 매도일 이전(포함)에 산 것을
-   * 매수일이 오래된 순(같은 날은 sequence 순)으로 매도 수량만큼 매도 처리한다.
+   * 매수일이 최근인 순(같은 날은 sequence 큰 순)으로 매도 수량만큼 매도 처리한다(LIFO).
    * - 대상 보유 수량 합계 < 매도 수량: 400 (아무것도 매도하지 않음)
    * - 행마다의 전량/일부 매도·같은 매도 행 병합 규칙은 sellBalance와 같다(PurchaseWriter.sell).
    * 매도 처리된 행(saleDate가 찍힌 행, 합쳐진 행, 새 매도 행)을 처리 순서대로 돌려준다.
@@ -227,7 +228,7 @@ export class BalanceService {
     }
     const { currency } = security;
     const amount = new Decimal(truncateByCurrency(input.amount, currency));
-    return this.purchaseWriter.sellFifo(
+    return this.purchaseWriter.sellLifo(
       userId,
       securityId,
       securityCompany,
@@ -243,10 +244,11 @@ export class BalanceService {
    * 2. BUY·SECURITIES_TRANSFER_IN을 거래일 오름차순으로 등록 — 일별 시세 존재·가격 범위는 검증하지 않음
    *    (amount = quantity, price = filledPrice, 종목 통화로 버림, 환율은 registerBalance와 같은 규칙)
    *    입고는 체결 단가가 없으므로 입고일(포함) 이전 가장 최근 종가를 price로 쓴다
-   * 3. SELL·SECURITIES_TRANSFER_OUT을 거래일 오름차순으로 TOSS 매수분에서 FIFO 매도 (보유 부족이면 400)
+   * 3. SELL·SECURITIES_TRANSFER_OUT을 거래일 오름차순으로 TOSS 매수분에서 LIFO 매도 (보유 부족이면 400)
    * 취소 거래, isinCode로 종목을 못 찾는 거래, 수량·단가가 없는 거래, 시세가 없는 입고는 건너뛰고 skipped에 담는다.
    * 그 밖의 유형(입출금·배당 등)은 무시.
-   * 거래일 규칙은 tossTradeDate. 외부 갱신(SecurityRefresher)은 하지 않는다(조회 API가 갱신).
+   * 거래일 = settlementDate − 2거래일(tossTradeDate, 국내 거래일 목록은 한 번만 읽음).
+   * 외부 갱신(SecurityRefresher)은 하지 않는다(조회 API가 갱신).
    */
   @Transactional()
   async bulkRegisterToss(
@@ -278,6 +280,15 @@ export class BalanceService {
         : []
       ).map((security) => [security.id, security]),
     );
+    // 체결일 계산용 국내 거래일: 결제일 범위(+ 앞쪽 여유 14일)를 한 번만 읽는다
+    const settlementDates = trades.map((t) => t.settlementDate).sort();
+    const tradingDays =
+      settlementDates.length > 0
+        ? await this.dailyPriceReader.findKrwTradingDays(
+            addDays(settlementDates[0], -14),
+            settlementDates[settlementDates.length - 1],
+          )
+        : [];
 
     const skipped: TossSkippedTransactionDto[] = [];
     const skip = (t: TossTransactionRequest, reason: string) =>
@@ -317,7 +328,7 @@ export class BalanceService {
         skip(transaction, '수량 또는 단가 없음');
         continue;
       }
-      const date = tossTradeDate(transaction);
+      const date = tossTradeDate(transaction.settlementDate, tradingDays);
       const trade = { transaction, security, date, quantity };
       if (!isBuy) {
         sells.push(trade);
@@ -360,7 +371,7 @@ export class BalanceService {
     }
 
     for (const { security, date, quantity } of sells) {
-      await this.purchaseWriter.sellFifo(
+      await this.purchaseWriter.sellLifo(
         userId,
         security.id,
         securityCompany,

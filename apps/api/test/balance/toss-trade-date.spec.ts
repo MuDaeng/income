@@ -1,56 +1,27 @@
 import { tossTradeDate } from '../../src/balance/toss-trade-date.js';
 
-const tx = (marketCountry: string, transactionTime: string | null) => ({
-  marketCountry,
-  transactionTime,
-  settlementDate: '2026-09-18',
-});
-
 describe('tossTradeDate', () => {
-  it.each(['2026-10-16T00:00:00+09:00', '2026-10-16T21:59:59+09:00', '2026-10-16T23:59:59+09:00'])(
-    '국내는 KST 날짜 그대로 (%s)',
-    (time) => {
-      expect(tossTradeDate(tx('KR', time))).toBe('2026-10-16');
-    },
-  );
-
-  it.each(['2026-10-16T22:00:00+09:00', '2026-10-16T23:59:59+09:00'])(
-    '미국 22:00~23:59:59는 당일 (%s)',
-    (time) => {
-      expect(tossTradeDate(tx('US', time))).toBe('2026-10-16');
-    },
-  );
-
   it.each([
-    '2026-10-16T00:00:00+09:00',
-    '2026-10-16T06:30:00+09:00',
-    '2026-10-16T21:59:59+09:00',
-  ])('미국 00:00~21:59:59는 전날 (%s)', (time) => {
-    expect(tossTradeDate(tx('US', time))).toBe('2026-10-15');
+    ['2026-10-22', '2026-10-20'], // 목 → 화
+    ['2026-10-19', '2026-10-15'], // 월 → 지난주 목
+    ['2026-10-20', '2026-10-16'], // 화 → 지난주 금
+    ['2026-10-18', '2026-10-14'], // 일 → 금 기준 2평일 전
+    ['2026-01-02', '2025-12-31'], // 연 경계
+  ])('거래일 목록이 없으면 평일 2일 앞당긴다 (%s → %s)', (settlement, expected) => {
+    expect(tossTradeDate(settlement, [])).toBe(expected);
   });
 
-  it('목록 밖의 시장도 미국 규칙', () => {
-    expect(tossTradeDate(tx('JP', '2026-10-16T06:30:00+09:00'))).toBe(
+  it('거래일 목록이 결제일을 덮으면 휴장일을 건너뛴다', () => {
+    // 10-16(금) 휴장
+    const tradingDays = [
+      '2026-10-08',
+      '2026-10-12',
+      '2026-10-13',
+      '2026-10-14',
       '2026-10-15',
-    );
-  });
-
-  it('미국 전날은 월·연 경계를 넘는다', () => {
-    expect(tossTradeDate(tx('US', '2026-01-01T05:00:00+09:00'))).toBe(
-      '2025-12-31',
-    );
-    expect(tossTradeDate(tx('US', '2026-03-01T05:00:00+09:00'))).toBe(
-      '2026-02-28',
-    );
-  });
-
-  it('다른 오프셋이어도 KST로 환산한다', () => {
-    // UTC 13:30 = KST 22:30 → 당일
-    expect(tossTradeDate(tx('US', '2026-10-16T13:30:00Z'))).toBe('2026-10-16');
-  });
-
-  it('transactionTime이 null(미결제)이면 settlementDate', () => {
-    expect(tossTradeDate(tx('US', null))).toBe('2026-09-18');
-    expect(tossTradeDate(tx('KR', null))).toBe('2026-09-18');
+      '2026-10-19',
+      '2026-10-20',
+    ];
+    expect(tossTradeDate('2026-10-20', tradingDays)).toBe('2026-10-15');
   });
 });

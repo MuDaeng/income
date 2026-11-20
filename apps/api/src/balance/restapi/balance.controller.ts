@@ -131,7 +131,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '증권사별 일괄매도: 해당 증권사의 미매도 매수분(매도일 이전 매수)을 매수일 오래된 순으로 수량만큼 매도',
+      '증권사별 일괄매도: 해당 증권사의 미매도 매수분(매도일 이전 매수)을 매수일 최근 순으로 수량만큼 매도',
   })
   bulkSell(
     @CurrentUser() user: AuthUser,

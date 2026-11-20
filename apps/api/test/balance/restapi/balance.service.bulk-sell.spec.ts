@@ -92,7 +92,7 @@ describe('BalanceService.bulkSellBalance', () => {
     service = moduleRef.get(BalanceService);
   });
 
-  it('그 증권사의 미매도·매도일 이전 매수분을 매수일 오래된 순으로 조회한다', async () => {
+  it('그 증권사의 미매도·매도일 이전 매수분을 매수일 최근 순으로 조회한다', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([
       row('2026-11-01', 1, '5'),
     ]);
@@ -107,12 +107,12 @@ describe('BalanceService.bulkSellBalance', () => {
         saleDate: IsNull(),
         purchaseDate: LessThanOrEqual('2026-11-08'),
       },
-      order: { purchaseDate: 'ASC', sequence: 'ASC' },
+      order: { purchaseDate: 'DESC', sequence: 'DESC' },
     });
   });
 
   it('첫 매수분만으로 충분하면 첫 행만 일부 매도한다', async () => {
-    const first = row('2026-11-01', 1, '5');
+    const first = row('2026-11-05', 1, '5');
     const second = row('2026-11-03', 1, '4');
     purchaseDateBalanceRepository.find.mockResolvedValue([first, second]);
     // 1) 같은 매도 행 없음 2) 같은 매수일의 마지막 sequence = 1
@@ -126,7 +126,7 @@ describe('BalanceService.bulkSellBalance', () => {
     expect(second.amount).toBe('4');
     expect(result).toEqual([
       expect.objectContaining({
-        purchaseDate: '2026-11-01',
+        purchaseDate: '2026-11-05',
         sequence: 2,
         amount: '2',
         saleDate: '2026-11-08',
@@ -136,9 +136,9 @@ describe('BalanceService.bulkSellBalance', () => {
   });
 
   it('여러 매수분에 걸치면 앞 행은 전량, 마지막 행은 일부 매도한다', async () => {
-    const first = row('2026-11-01', 1, '5');
+    const first = row('2026-11-05', 1, '5');
     const second = row('2026-11-03', 2, '4');
-    const third = row('2026-11-05', 1, '10');
+    const third = row('2026-11-01', 1, '10');
     purchaseDateBalanceRepository.find.mockResolvedValue([
       first,
       second,
@@ -155,7 +155,7 @@ describe('BalanceService.bulkSellBalance', () => {
     expect(result).toHaveLength(2);
     // 첫 행 전량: saleDate만 저장
     expect(result[0]).toMatchObject({
-      purchaseDate: '2026-11-01',
+      purchaseDate: '2026-11-05',
       sequence: 1,
       amount: '5',
       saleDate: '2026-11-08',

@@ -141,11 +141,11 @@ export class PurchaseWriter {
   }
 
   /**
-   * 증권사별 FIFO 매도. 그 증권사의 미매도 매수분 중 매도일 이전(포함)에 산 것을
-   * 매수일이 오래된 순(같은 날은 sequence 순)으로 amount만큼 sell 한다.
+   * 증권사별 LIFO 매도. 그 증권사의 미매도 매수분 중 매도일 이전(포함)에 산 것을
+   * 매수일이 최근인 순(같은 날은 sequence 큰 순)으로 amount만큼 sell 한다.
    * 대상 보유 수량 합계 < amount면 400 (아무것도 매도하지 않음). 매도 처리된 행을 처리 순서대로 돌려준다.
    */
-  async sellFifo(
+  async sellLifo(
     userId: number,
     securityId: string,
     securityCompany: SecurityCompany,
@@ -161,7 +161,7 @@ export class PurchaseWriter {
         saleDate: IsNull(),
         purchaseDate: LessThanOrEqual(saleDate),
       },
-      order: { purchaseDate: 'ASC', sequence: 'ASC' },
+      order: { purchaseDate: 'DESC', sequence: 'DESC' },
     });
     const held = sources.reduce(
       (acc, source) => acc.plus(source.amount),

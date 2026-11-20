@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
-import { In } from 'typeorm';
+import { Between, In } from 'typeorm';
 import {
   Currency,
   DailyExchangeRate,
@@ -40,7 +40,7 @@ const krBuy = (
   quantity: '3',
   filledPrice: '70000.7',
   exchangeRate: null,
-  settlementDate: '2026-10-18',
+  settlementDate: '2026-10-20',
   settled: true,
   transactionTime: '2026-10-16T10:00:00+09:00',
   isCancellation: false,
@@ -67,12 +67,12 @@ const user = { id: 1, rules: [] };
 describe('BalanceService.bulkRegisterToss', () => {
   const securityRepository = { findBy: vi.fn() };
   const exchangeRateRepository = { findOne: vi.fn() };
-  const dailySecurityRepository = { findOne: vi.fn() };
+  const dailySecurityRepository = { findOne: vi.fn(), find: vi.fn() };
   const purchaseWriter = {
     lockOwner: vi.fn(),
     removeByCompany: vi.fn(),
     append: vi.fn(),
-    sellFifo: vi.fn(),
+    sellLifo: vi.fn(),
   };
   let service: BalanceService;
 
@@ -84,6 +84,8 @@ describe('BalanceService.bulkRegisterToss', () => {
       { id: US_ISIN, currency: Currency.USD },
     ]);
     exchangeRateRepository.findOne.mockResolvedValue(null);
+    // 저장된 거래일 없음 → 평일 계산
+    dailySecurityRepository.find.mockResolvedValue([]);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -118,6 +120,7 @@ describe('BalanceService.bulkRegisterToss', () => {
       SecurityCompany.TOSS,
     );
     expect(securityRepository.findBy).not.toHaveBeenCalled();
+    expect(dailySecurityRepository.find).not.toHaveBeenCalled();
     expect(result).toEqual({
       deletedCount: 5,
       boughtCount: 0,
@@ -126,7 +129,7 @@ describe('BalanceService.bulkRegisterToss', () => {
     });
   });
 
-  it('국내 BUY는 거래일로 시세 검증 없이 정수로 버려 등록하고 환율은 null', async () => {
+  it('국내 BUY는 결제일 2거래일 전 체결일로 시세 검증 없이 정수로 버려 등록하고 환율은 null', async () => {
     await service.bulkRegisterToss(user, { transactionList: [krBuy()] });
 
     expect(securityRepository.findBy).toHaveBeenCalledWith({
@@ -144,13 +147,13 @@ describe('BalanceService.bulkRegisterToss', () => {
     });
   });
 
-  it('미국 BUY는 00시 이후면 전날, 소수 6자리로 버리고 입력 환율을 쓴다', async () => {
+  it('미국 BUY도 결제일 2거래일 전 체결일, 소수 6자리로 버리고 입력 환율을 쓴다', async () => {
     await service.bulkRegisterToss(user, { transactionList: [usBuy()] });
 
     expect(purchaseWriter.append).toHaveBeenCalledWith(
       expect.objectContaining({
         securityId: US_ISIN,
-        purchaseDate: '2026-10-15',
+        purchaseDate: '2026-10-16',
         amount: '0.123456',
         price: '189.123456',
         exchangeRate: '1386.123456',
@@ -173,23 +176,56 @@ describe('BalanceService.bulkRegisterToss', () => {
     );
   });
 
-  it('미결제(transactionTime null)는 settlementDate로 등록한다', async () => {
+  it('transactionTime과 무관하게 결제일에서 평일 2일 앞당긴다 (주말 건너뜀)', async () => {
     await service.bulkRegisterToss(user, {
-      transactionList: [krBuy({ settled: false, transactionTime: null })],
+      transactionList: [
+        // 월요일 결제 → 지난주 목요일 체결
+        krBuy({ settlementDate: '2026-10-19', transactionTime: null }),
+      ],
     });
 
     expect(purchaseWriter.append).toHaveBeenCalledWith(
-      expect.objectContaining({ purchaseDate: '2026-10-18' }),
+      expect.objectContaining({ purchaseDate: '2026-10-15' }),
     );
   });
 
-  it('BUY를 날짜 오름차순으로 모두 등록한 뒤 SELL을 날짜 오름차순으로 FIFO 매도한다', async () => {
+  it('저장된 국내 거래일이 결제일을 덮으면 휴장일을 건너뛰고, 거래일은 결제일 범위로 한 번만 읽는다', async () => {
+    // 10-16(금) 휴장
+    dailySecurityRepository.find.mockResolvedValue(
+      ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-19', '2026-10-20', '2026-10-21'].map(
+        (date) => ({ date }),
+      ),
+    );
+
+    await service.bulkRegisterToss(user, {
+      transactionList: [
+        krBuy({ settlementDate: '2026-10-21' }),
+        krBuy({ settlementDate: '2026-10-20' }),
+      ],
+    });
+
+    expect(dailySecurityRepository.find).toHaveBeenCalledTimes(1);
+    expect(dailySecurityRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          date: Between('2026-10-06', '2026-10-21'),
+        }),
+      }),
+    );
+    const dates = purchaseWriter.append.mock.calls.map(
+      ([arg]: [{ purchaseDate: string }]) => arg.purchaseDate,
+    );
+    // 10-20 → 10-19, 10-15 / 10-21 → 10-20, 10-19 (날짜 오름차순으로 등록)
+    expect(dates).toEqual(['2026-10-15', '2026-10-19']);
+  });
+
+  it('BUY를 날짜 오름차순으로 모두 등록한 뒤 SELL을 날짜 오름차순으로 LIFO 매도한다', async () => {
     const calls: string[] = [];
     purchaseWriter.append.mockImplementation(({ purchaseDate }) => {
       calls.push(`BUY ${purchaseDate}`);
       return Promise.resolve({});
     });
-    purchaseWriter.sellFifo.mockImplementation(
+    purchaseWriter.sellLifo.mockImplementation(
       (_u, _s, _c, _a, saleDate: string) => {
         calls.push(`SELL ${saleDate}`);
         return Promise.resolve([]);
@@ -199,18 +235,18 @@ describe('BalanceService.bulkRegisterToss', () => {
     // Toss는 최신순으로 준다
     const result = await service.bulkRegisterToss(user, {
       transactionList: [
-        krBuy({ transactionType: 'SELL', transactionTime: '2026-10-20T10:00:00+09:00' }),
-        krBuy({ transactionTime: '2026-10-19T10:00:00+09:00' }),
-        krBuy({ transactionType: 'SELL', transactionTime: '2026-10-17T10:00:00+09:00' }),
-        krBuy({ transactionTime: '2026-10-16T10:00:00+09:00' }),
+        krBuy({ transactionType: 'SELL', settlementDate: '2026-10-26' }),
+        krBuy({ settlementDate: '2026-10-23' }),
+        krBuy({ transactionType: 'SELL', settlementDate: '2026-10-21' }),
+        krBuy({ settlementDate: '2026-10-20' }),
       ],
     });
 
     expect(calls).toEqual([
       'BUY 2026-10-16',
-      'BUY 2026-10-19',
-      'SELL 2026-10-17',
-      'SELL 2026-10-20',
+      'BUY 2026-10-21',
+      'SELL 2026-10-19',
+      'SELL 2026-10-22',
     ]);
     expect(result).toMatchObject({ boughtCount: 2, soldCount: 2 });
   });
@@ -220,18 +256,18 @@ describe('BalanceService.bulkRegisterToss', () => {
       transactionList: [usBuy({ transactionType: 'SELL', filledPrice: null })],
     });
 
-    expect(purchaseWriter.sellFifo).toHaveBeenCalledWith(
+    expect(purchaseWriter.sellLifo).toHaveBeenCalledWith(
       1,
       US_ISIN,
       SecurityCompany.TOSS,
       new Decimal('0.123456'),
-      '2026-10-15',
+      '2026-10-16',
       Currency.USD,
     );
   });
 
   it('보유 부족으로 매도가 실패하면 그대로 던진다(전체 롤백)', async () => {
-    purchaseWriter.sellFifo.mockRejectedValue(
+    purchaseWriter.sellLifo.mockRejectedValue(
       new BadRequestException('매도 수량이 보유 수량보다 많습니다.'),
     );
 
@@ -267,7 +303,7 @@ describe('BalanceService.bulkRegisterToss', () => {
     expect(purchaseWriter.append).toHaveBeenCalledWith(
       expect.objectContaining({
         securityId: US_ISIN,
-        purchaseDate: '2026-10-15',
+        purchaseDate: '2026-10-16',
         amount: '0.000496',
         price: '72.456789',
       }),
@@ -294,14 +330,14 @@ describe('BalanceService.bulkRegisterToss', () => {
     ]);
   });
 
-  it('입고분을 매수분과 함께 먼저 등록하고, SECURITIES_TRANSFER_OUT은 SELL처럼 FIFO 매도한다', async () => {
+  it('입고분을 매수분과 함께 먼저 등록하고, SECURITIES_TRANSFER_OUT은 SELL처럼 LIFO 매도한다', async () => {
     dailySecurityRepository.findOne.mockResolvedValue({ closingPrice: '71000' });
     const calls: string[] = [];
     purchaseWriter.append.mockImplementation(({ purchaseDate, amount }) => {
       calls.push(`BUY ${purchaseDate} ${amount}`);
       return Promise.resolve({});
     });
-    purchaseWriter.sellFifo.mockImplementation(
+    purchaseWriter.sellLifo.mockImplementation(
       (_u, _s, _c, amount: Decimal, saleDate: string) => {
         calls.push(`SELL ${saleDate} ${amount.toString()}`);
         return Promise.resolve([]);
@@ -314,24 +350,24 @@ describe('BalanceService.bulkRegisterToss', () => {
           transactionType: 'SECURITIES_TRANSFER_OUT',
           quantity: '1',
           filledPrice: null,
-          transactionTime: '2026-10-20T10:00:00+09:00',
+          settlementDate: '2026-10-26',
         }),
-        krBuy({ transactionType: 'SELL', quantity: '4', transactionTime: '2026-10-18T10:00:00+09:00' }),
+        krBuy({ transactionType: 'SELL', quantity: '4', settlementDate: '2026-10-22' }),
         krBuy({
           transactionType: 'SECURITIES_TRANSFER_IN',
           quantity: '2',
           filledPrice: null,
-          transactionTime: '2026-10-17T10:00:00+09:00',
+          settlementDate: '2026-10-21',
         }),
-        krBuy({ transactionTime: '2026-10-16T10:00:00+09:00' }),
+        krBuy({ settlementDate: '2026-10-20' }),
       ],
     });
 
     expect(calls).toEqual([
       'BUY 2026-10-16 3',
-      'BUY 2026-10-17 2',
-      'SELL 2026-10-18 4',
-      'SELL 2026-10-20 1',
+      'BUY 2026-10-19 2',
+      'SELL 2026-10-20 4',
+      'SELL 2026-10-22 1',
     ]);
     expect(result).toMatchObject({ boughtCount: 2, soldCount: 2 });
   });
@@ -351,7 +387,7 @@ describe('BalanceService.bulkRegisterToss', () => {
     });
 
     expect(purchaseWriter.append).not.toHaveBeenCalled();
-    expect(purchaseWriter.sellFifo).not.toHaveBeenCalled();
+    expect(purchaseWriter.sellLifo).not.toHaveBeenCalled();
     expect(result.skipped).toEqual([
       { transactionType: 'BUY', isinCode: KR_ISIN, reason: '취소 거래' },
       { transactionType: 'BUY', isinCode: 'KR0000000000', reason: '종목을 찾을 수 없음' },
