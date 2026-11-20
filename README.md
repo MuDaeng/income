@@ -8,19 +8,23 @@
 ## 주요 기능
 
 - **Google 로그인**: Google OAuth 후 JWT 액세스 토큰과 httpOnly 쿠키의 리프레시 토큰(재발급 시 교체)으로 인증
-- **종목 검색**: 종목코드(심볼) 또는 종목명으로 검색하고, 종목별 일별 시세 조회
-- **잔고 관리**: 매수 등록, 매도 처리, 잘못 등록한 매수분 삭제, 매수 내역 조회
+- **종목 검색**: 종목코드(심볼) 또는 종목명으로 검색하고, 종목별 일별 시세·월별 주당 배당금 조회
+- **잔고 관리**: 증권사별 매수 등록, 매도·일괄매도(선입선출) 처리, 구매 환율·증권사 수정, 잘못 등록한 매수분 삭제, 매수 내역 조회
+- **Toss 거래내역 가져오기**: Toss 거래내역(매수·매도·입출고)으로 TOSS 잔고를 한 번에 다시 등록
 - **통합잔고**: 종목별 매입평균가·평가금액·수익률과 한국/미국/전체 합계 (USD는 최신 환율로 원화 환산)
 - **배당금 내역**: 기준일 보유수량 × 주당배당금, 월별·기간 합계 (USD는 지급일 환율로 원화 환산)
 - **기간 수익률**: 기간 말 평가수익 + 기간 배당금, 원금 대비 수익금·수익률 (매수 시점 환율 기준이라 환차익 포함)
+- **월별 잔고**: 월말별 원금·평가금액·누적 배당금
+- **관리자**: 배치 실행 이력, 종목별 국내 시세 조회 이력 (`admin` 권한 사용자만)
 - **데이터 자동 수집**: 매일 종목 목록·국내/미국 시세·환율을 가져오는 배치, 조회 시 배당을 하루 한 번 갱신하고 국내 시세 하루치를 KIS로 보충 (API에는 수집용 엔드포인트가 없음)
+- **보안**: Google 로그인 CSRF 방지(state 쿠키), IP별 요청 수 제한(기본 분당 100회, 인증·공개 조회 API는 더 낮게)
 
 ## 기술 스택
 
 - NestJS 12 (모노레포, ESM), TypeScript, rspack
 - MySQL + TypeORM (`typeorm-transactional`), decimal.js로 금액 계산
 - Zod 요청 검증, Swagger (`/api-docs`, 운영 환경에서는 비활성)
-- Passport (Google OAuth 2.0, JWT), `@nestjs/schedule`
+- Passport (Google OAuth 2.0, JWT), `@nestjs/schedule`, `@nestjs/throttler`
 - Vitest, oxlint
 - 배포: GitHub Actions → EC2 (pm2 + Nginx)
 
@@ -31,17 +35,16 @@
 | Toss Open API | 국내·미국 상장 종목 목록 |
 | Massive | USD/KRW 환율, 미국 일별 시세, 미국 배당 |
 | 공공데이터포털 (금융위원회) | 국내 주식·ETF 일별 시세 |
-| 한국투자증권 Open API | 국내 배당 일정 |
+| 한국투자증권 Open API | 국내 배당 일정, 국내 일별 시세 하루치 보충 |
 
 ## 구조
 
 ```
 apps/
-  api/     HTTP API (auth, balance, security)
-  batch/   매일 도는 수집 작업 (HTTP 없음)
+  api/     HTTP API (admin, auth, balance, security)
+  batch/   매일 도는 수집·정리 작업 (HTTP 없음)
 libs/
-  common/  DB 설정, TypeORM 엔티티, 통화별 소수점 처리
-  core/    외부 API 클라이언트와 수집 서비스 (api·batch 공용)
+  common/  DB 설정, TypeORM 엔티티, 외부 API 클라이언트, JWT 발급, 수집 로직 (api·batch 공용)
 deploy/    Nginx 설정
 ```
 
@@ -49,11 +52,14 @@ deploy/    Nginx 설정
 
 | 시각 | 작업 | 내용 |
 |---|---|---|
+| 00:00 | `expired-tokens` | 만료된 로그인 세션(리프레시 토큰) 삭제 |
 | 08:00 | `overseas-securities` | 미국 상장 종목 목록 |
 | 13:30 | `domestic-daily-prices` | 국내 주식·ETF 일별 시세 (오늘~4일 전, data.go.kr) |
 | 14:30 | `us-daily-prices` | 미국 일별 시세 (최근 7일) |
 | 16:00 | `exchange-rates` | USD/KRW 환율 (최근 7일) |
 | 17:00 | `domestic-securities` | 국내 상장 종목 목록 |
+
+실패한 작업은 로그만 남기고 프로세스는 계속 돕니다. 실행마다 결과가 `batch_history` 테이블에 남습니다.
 
 ## API
 
@@ -66,9 +72,11 @@ deploy/    Nginx 설정
 | GET | `/auth/me` | 내 정보 |
 | GET | `/securities` | 종목 검색 |
 | GET | `/daily-securities` | 종목 일별 시세 |
+| GET | `/dividends` | 종목 월별 1주당 현금배당금 |
 | POST | `/balance` | 매수 등록 (증권사 `securityCompany` 필수) |
 | POST | `/balance/sale` | 매도 등록 |
 | POST | `/balance/sale/bulk` | 증권사별 일괄매도 (매수일 오래된 순) |
+| POST | `/balance/toss` | Toss 거래내역으로 TOSS 잔고 일괄 재등록 |
 | GET | `/balance` | 통합잔고 (`securityCompany`를 주면 그 증권사만) |
 | GET | `/balance/purchases` | 종목 매수 내역 (`securityCompany`를 주면 그 증권사만) |
 | GET | `/balance/security-companies` | 매수 기록이 있는 증권사 목록 |
@@ -78,6 +86,10 @@ deploy/    Nginx 설정
 | GET | `/balance/dividends` | 배당금 내역 (`securityCompany`를 주면 그 증권사 보유분만) |
 | GET | `/balance/monthly` | 월말별 원금·평가금액·평가금액+누적배당금 (from~to 년월, 이번 달은 오늘 기준, `securityCompany`를 주면 그 증권사만) |
 | GET | `/balance/returns` | 기간 수익률 (`securityCompany`를 주면 그 증권사만) |
+| GET | `/admin/batch-histories` | 배치 실행 이력 (관리자) |
+| GET | `/admin/security-searches/price` | 종목별 국내 시세 조회 이력 (관리자) |
+
+관리자 권한은 DB에서만 부여합니다: `INSERT INTO user_rule (id, rule) VALUES (<userId>, 'admin');` (다음 토큰 발급부터 적용)
 
 요청·응답 형식은 로컬 실행 후 Swagger UI(`http://localhost:8080/api-docs`)에서 볼 수 있습니다.
 
@@ -95,6 +107,7 @@ npm run start:batch:dev
 # 배치 작업 하나만 바로 실행하고 종료 (빌드 후)
 npm run build:batch
 node dist/apps/batch/main --run=exchange-rates
+# --run=exchange-rates | domestic-securities | overseas-securities | us-daily-prices | domestic-daily-prices | expired-tokens
 ```
 
 MySQL과 루트의 `.env`가 필요합니다. 주요 항목:
