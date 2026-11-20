@@ -9,6 +9,7 @@ import {
   type Security,
 } from '@app/common';
 import type { Repository } from 'typeorm';
+import type { DailyPriceReader } from '../../src/security/daily-price.reader.js';
 import { DividendFetcher } from '../../src/security/dividend.fetcher.js';
 
 const SAMSUNG = {
@@ -31,20 +32,30 @@ describe('DividendFetcher', () => {
   const dividendUpsert = vi.fn();
   const getDividends = vi.fn<KisClient['getDividends']>();
   const getMassiveDividends = vi.fn<MassiveClient['getDividends']>();
+  const findKrwTradingDays = vi.fn<DailyPriceReader['findKrwTradingDays']>();
   let service: DividendFetcher;
 
   beforeEach(() => {
     vi.resetAllMocks();
     getDividends.mockResolvedValue([]);
     getMassiveDividends.mockResolvedValue([]);
+    findKrwTradingDays.mockResolvedValue([]);
     service = new DividendFetcher(
       { upsert: dividendUpsert } as unknown as Repository<Dividend>,
       { getDividends } as unknown as KisClient,
       { getDividends: getMassiveDividends } as unknown as MassiveClient,
+      { findKrwTradingDays } as unknown as DailyPriceReader,
     );
   });
 
-  it('KRW 종목은 KIS로 기준일 기간을 조회해 현금·주식 배당을 저장한다', async () => {
+  it('KRW 종목은 KIS로 기준일 기간을 조회해 현금·주식 배당을 저장하고, 배당락일은 저장된 거래일로 계산한다', async () => {
+    // 2025-12-31(수)은 휴장 → 마지막 거래일 12-30, 배당락일 12-29. 2025-06-30(월) → 배당락일 06-27(금)
+    findKrwTradingDays.mockResolvedValue([
+      '2025-06-20', '2025-06-23', '2025-06-24', '2025-06-25', '2025-06-26', '2025-06-27',
+      '2025-06-30', '2025-07-01',
+      '2025-12-19', '2025-12-22', '2025-12-23', '2025-12-24', '2025-12-26', '2025-12-29',
+      '2025-12-30', '2026-01-02',
+    ]);
     getDividends.mockResolvedValue([
       // 실제 응답처럼 지급일은 'YYYY/MM/DD'
       item({ per_sto_divi_amt: '361.9', divi_pay_dt: '2026/04/20' }),
@@ -62,6 +73,9 @@ describe('DividendFetcher', () => {
     ).resolves.toEqual({ fetched: 3, saved: 2 });
 
     expect(getDividends).toHaveBeenCalledWith('005930', '20241109', '20271109');
+    // 기간 앞 2주부터 거래일을 한 번만 읽는다
+    expect(findKrwTradingDays).toHaveBeenCalledTimes(1);
+    expect(findKrwTradingDays).toHaveBeenCalledWith('2024-10-26', '2027-11-09');
     expect(getMassiveDividends).not.toHaveBeenCalled();
     expect(dividendUpsert).toHaveBeenCalledWith(
       [
@@ -69,6 +83,7 @@ describe('DividendFetcher', () => {
           id: SAMSUNG.id,
           paymentDate: '2026-04-20',
           noticeDate: '2025-12-31',
+          exDividendDate: '2025-12-29',
           amount: '361',
           type: DividendType.MONEY,
         },
@@ -76,6 +91,7 @@ describe('DividendFetcher', () => {
           id: SAMSUNG.id,
           paymentDate: '2025-08-01',
           noticeDate: '2025-06-30',
+          exDividendDate: '2025-06-27',
           amount: '2.500000',
           type: DividendType.STOCK,
         },
@@ -89,6 +105,8 @@ describe('DividendFetcher', () => {
       service.fetchAndSave(SAMSUNG, '2024-11-09', '2027-11-09'),
     ).resolves.toEqual({ fetched: 0, saved: 0 });
     expect(dividendUpsert).not.toHaveBeenCalled();
+    // 배당이 없으면 거래일도 읽지 않는다
+    expect(findKrwTradingDays).not.toHaveBeenCalled();
   });
 
   it('USD 종목은 symbol을 Massive 티커로 바꿔 배당락일 기간으로 조회하고 6자리 버림으로 저장한다', async () => {
@@ -117,6 +135,12 @@ describe('DividendFetcher', () => {
         ex_dividend_date: '2026-07-15',
         pay_date: '2026-08-01',
       }),
+      // 배당락일이 없으면 기준일을 배당락일로
+      dividend({
+        ex_dividend_date: undefined,
+        record_date: '2026-04-15',
+        pay_date: '2026-05-01',
+      }),
       // 지급일 미정 → 건너뜀
       dividend({ pay_date: undefined }),
     ]);
@@ -135,12 +159,19 @@ describe('DividendFetcher', () => {
           id: preferred.id,
           paymentDate: '2026-11-02',
           noticeDate: '2026-10-15',
+          exDividendDate: '2026-10-15',
           amount: '0.257812',
           type: DividendType.MONEY,
         },
         expect.objectContaining({
           paymentDate: '2026-08-01',
           noticeDate: '2026-07-15',
+          exDividendDate: '2026-07-15',
+        }),
+        expect.objectContaining({
+          paymentDate: '2026-05-01',
+          noticeDate: '2026-04-15',
+          exDividendDate: '2026-04-15',
         }),
       ],
       ['id', 'paymentDate'],

@@ -15,8 +15,16 @@ export class DividendItemDto {
   @ApiProperty({ enum: Currency, description: '종목 통화' })
   currency: Currency;
 
-  @ApiProperty({ description: '배당 기준일 YYYY-MM-DD (이 날 보유한 수량으로 계산)' })
+  @ApiProperty({ description: '배당 기준일 YYYY-MM-DD' })
   noticeDate: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      '배당락일 YYYY-MM-DD. 전날까지 매수하고 이 날 이후(당일 포함) 매도한 수량으로 계산. 예전에 저장된 배당은 null(기준일 보유 수량으로 계산)',
+  })
+  exDividendDate: string | null;
 
   @ApiProperty({ description: '배당 지급일 YYYY-MM-DD' })
   paymentDate: string;
@@ -24,7 +32,9 @@ export class DividendItemDto {
   @ApiProperty({ description: '주당 배당금 (종목 통화)' })
   perShareAmount: string;
 
-  @ApiProperty({ description: '기준일 보유 수량' })
+  @ApiProperty({
+    description: '배당을 받을 권리가 있는 수량 (배당락일 전날 보유 수량, 배당락일이 없으면 기준일 보유 수량)',
+  })
   quantity: string;
 
   @ApiProperty({ description: '배당금 (종목 통화) = 주당 배당금 × 보유 수량' })

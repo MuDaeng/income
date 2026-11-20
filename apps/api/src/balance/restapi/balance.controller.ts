@@ -41,6 +41,12 @@ import {
   dividendHistorySchema,
 } from './dto/dividend-history.schema.js';
 import { DividendHistoryService } from './dividend-history.service.js';
+import { DividendMetricsResponse } from './dto/dividend-metrics.dto.js';
+import {
+  type DividendMetricsRequest,
+  dividendMetricsSchema,
+} from './dto/dividend-metrics.schema.js';
+import { DividendMetricsService } from './dividend-metrics.service.js';
 import { MonthlyBalanceResponse } from './dto/monthly-balance.dto.js';
 import {
   type MonthlyBalanceRequest,
@@ -89,6 +95,7 @@ export class BalanceController {
     private readonly dividendHistoryService: DividendHistoryService,
     private readonly periodReturnService: PeriodReturnService,
     private readonly monthlyBalanceService: MonthlyBalanceService,
+    private readonly dividendMetricsService: DividendMetricsService,
   ) {}
 
   @Post()
@@ -242,7 +249,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '배당금 내역 조회: 기준일 보유수량 × 주당배당금, USD는 지급일 환율로 원화 환산, 기간 총배당금과 월별 내역 (securityCompany를 주면 그 증권사 보유분만)',
+      '배당금 내역 조회: 배당락일 전날 보유수량 × 주당배당금, USD는 지급일 환율로 원화 환산, 기간 총배당금과 월별 내역 (securityCompany를 주면 그 증권사 보유분만)',
   })
   @ApiOkResponse({ type: DividendHistoryResponse })
   getDividendHistory(
@@ -250,6 +257,21 @@ export class BalanceController {
     @Query({ schema: dividendHistorySchema }) query: DividendHistoryRequest,
   ): Promise<DividendHistoryResponse> {
     return this.dividendHistoryService.getDividendHistory(user, query);
+  }
+
+  @Get('dividend-metrics')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      '배당 지표 조회: 현재 보유 종목별 최근 12개월 주당 배당·예상 연배당·YOC(매입가 대비 배당률)·현재 배당률·배당 성장률(세전)과 합계 (securityCompany를 주면 그 증권사 보유분만)',
+  })
+  @ApiOkResponse({ type: DividendMetricsResponse })
+  getDividendMetrics(
+    @CurrentUser() user: AuthUser,
+    @Query({ schema: dividendMetricsSchema }) query: DividendMetricsRequest,
+  ): Promise<DividendMetricsResponse> {
+    return this.dividendMetricsService.getDividendMetrics(user, query);
   }
 
   @Get('returns')

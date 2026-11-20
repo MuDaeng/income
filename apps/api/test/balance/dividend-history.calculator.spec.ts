@@ -84,7 +84,7 @@ describe('DividendHistoryCalculator.calculate', () => {
     ]);
   });
 
-  it('기준일 보유 수량 × 주당 배당금으로 계산하고 USD는 지급일 이전 최근 환율로 환산해 월별로 묶는다', async () => {
+  it('배당락일이 없는 예전 행은 기준일 보유 수량 × 주당 배당금으로 계산하고 USD는 지급일 이전 최근 환율로 환산해 월별로 묶는다', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([
       // 기준일 당일 매수 → 포함
       purchase(KRW_SECURITY.id, '2026-03-31', '10.000000'),
@@ -144,6 +144,7 @@ describe('DividendHistoryCalculator.calculate', () => {
             name: '삼성전자',
             currency: Currency.KRW,
             noticeDate: '2026-03-31',
+            exDividendDate: null,
             paymentDate: '2026-04-20',
             perShareAmount: '361',
             quantity: '13',
@@ -165,6 +166,7 @@ describe('DividendHistoryCalculator.calculate', () => {
             name: 'Apple',
             currency: Currency.USD,
             noticeDate: '2026-05-11',
+            exDividendDate: null,
             paymentDate: '2026-05-16',
             perShareAmount: '0.260000',
             quantity: '2.500000',
@@ -182,6 +184,38 @@ describe('DividendHistoryCalculator.calculate', () => {
       usdAmount: '0.650000',
       usdKrwAmount: '910',
       totalKrwAmount: '5603',
+    });
+  });
+
+  it('배당락일이 있으면 락일 전날까지 매수하고 락일 이후(당일 포함) 매도한 수량으로 계산한다', async () => {
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      // 락일 전날 매수 → 포함
+      purchase(KRW_SECURITY.id, '2025-12-26', '10.000000'),
+      // 락일 당일 매수 → 제외 (기준일 이전이지만 받지 못함)
+      purchase(KRW_SECURITY.id, '2025-12-29', '7.000000'),
+      // 락일 당일 매도 → 포함 (기준일 전에 팔았지만 받음)
+      purchase(KRW_SECURITY.id, '2025-01-02', '3.000000', '2025-12-29'),
+      // 락일 전날 매도 → 제외
+      purchase(KRW_SECURITY.id, '2025-01-02', '5.000000', '2025-12-26'),
+    ]);
+    dividendRepository.find.mockResolvedValue([
+      {
+        id: KRW_SECURITY.id,
+        noticeDate: '2025-12-31',
+        exDividendDate: '2025-12-29',
+        paymentDate: '2026-04-20',
+        amount: '100.000000',
+        type: DividendType.MONEY,
+      },
+    ]);
+
+    const result = await service.calculate({ id: 1, rules: [] }, {});
+
+    expect(result.months[0].items[0]).toMatchObject({
+      noticeDate: '2025-12-31',
+      exDividendDate: '2025-12-29',
+      quantity: '13',
+      amount: '1300',
     });
   });
 

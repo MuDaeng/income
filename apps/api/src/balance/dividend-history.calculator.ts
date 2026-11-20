@@ -50,8 +50,9 @@ export class DividendHistoryCalculator {
    * 1. 사용자의 매수일별 잔고(매도분 포함)로 지금까지 보유한 종목을 구하고, 종목마다 배당·시세를 원천에서 갱신한다
    *    (종목별 하루 한 번, 실패해도 저장분으로 계속)
    * 2. 그 종목들의 현금배당(MONEY) 중 지급일이 [from, to]인 것 (입력이 없으면 그쪽은 제한 없음, 지급 예정 포함)
-   * 3. 배당마다 기준일(noticeDate) 보유 수량 = purchaseDate <= 기준일 < saleDate(없으면 보유 중)인 매수분 수량 합.
-   *    0이면 받지 않은 배당이라 제외
+   * 3. 배당마다 받을 권리가 있는 수량 = 배당락일 전날까지 매수하고 배당락일 이후(당일 포함) 매도했거나 보유 중인
+   *    매수분 수량 합 (purchaseDate < 배당락일 <= saleDate). 배당락일이 없는 예전 행은 기준일 보유
+   *    (purchaseDate <= 기준일 < saleDate)로 판정. 0이면 받지 않은 배당이라 제외
    * 4. 배당금 = 주당 배당금 × 보유 수량 (종목 통화로 버림). USD는 지급일(없으면 직전) USD 종가 환율로 원화 환산
    * 5. 지급월별로 묶고, 월·전체 합계는 응답에 보이는 값(버림 후)을 더한다
    */
@@ -110,9 +111,9 @@ export class DividendHistoryCalculator {
       if (!security) {
         continue;
       }
-      const quantity = heldQuantity(
+      const quantity = entitledQuantity(
         purchasesBySecurity.get(dividend.id) ?? [],
-        dividend.noticeDate,
+        dividend,
       );
       if (quantity.lte(0)) {
         continue;
@@ -127,6 +128,7 @@ export class DividendHistoryCalculator {
         name: security.name,
         currency,
         noticeDate: dividend.noticeDate,
+        exDividendDate: dividend.exDividendDate ?? null,
         paymentDate: dividend.paymentDate,
         perShareAmount: truncateByCurrency(dividend.amount, currency),
         quantity: truncateByCurrency(quantity, currency),
@@ -195,18 +197,26 @@ const paymentDateFilter = (
   return null;
 };
 
-/** 기준일에 보유 중인 수량: 매수일 <= 기준일 이고 (미매도 또는 매도일 > 기준일) */
-const heldQuantity = (
+/**
+ * 배당을 받을 권리가 있는 수량.
+ * - 배당락일이 있으면: 매수일 < 배당락일 이고 (미매도 또는 매도일 >= 배당락일). 락일 당일 매수는 못 받고, 락일 당일 매도는 받는다
+ * - 없으면(예전 행): 매수일 <= 기준일 이고 (미매도 또는 매도일 > 기준일)
+ */
+export const entitledQuantity = (
   purchases: PurchaseDateBalance[],
-  noticeDate: string,
-): Decimal =>
-  purchases
-    .filter(
-      (p) =>
-        p.purchaseDate <= noticeDate &&
-        (p.saleDate === null || p.saleDate > noticeDate),
-    )
+  dividend: Pick<Dividend, 'noticeDate' | 'exDividendDate'>,
+): Decimal => {
+  const exDate = dividend.exDividendDate ?? null;
+  const entitled = exDate
+    ? (p: PurchaseDateBalance) =>
+        p.purchaseDate < exDate && (p.saleDate === null || p.saleDate >= exDate)
+    : (p: PurchaseDateBalance) =>
+        p.purchaseDate <= dividend.noticeDate &&
+        (p.saleDate === null || p.saleDate > dividend.noticeDate);
+  return purchases
+    .filter(entitled)
     .reduce((acc, p) => acc.plus(p.amount), new Decimal(0));
+};
 
 const summarize = (items: DividendItemDto[]): DividendSummaryDto => {
   let krw = new Decimal(0);

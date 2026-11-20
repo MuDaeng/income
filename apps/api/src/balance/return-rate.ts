@@ -16,3 +16,19 @@ export const returnRate = (
     .toDecimalPlaces(2, Decimal.ROUND_DOWN)
     .toFixed(2);
 };
+
+/** 비율(%) = part / whole × 100, 소수 2자리 버림. whole이 0이면 null (배당률·YOC 등) */
+export const percentOf = (
+  part: Decimal.Value,
+  whole: Decimal.Value,
+): string | null => {
+  const base = new Decimal(whole);
+  if (base.isZero()) {
+    return null;
+  }
+  return new Decimal(part)
+    .dividedBy(base)
+    .times(100)
+    .toDecimalPlaces(2, Decimal.ROUND_DOWN)
+    .toFixed(2);
+};

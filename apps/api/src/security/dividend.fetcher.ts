@@ -14,17 +14,19 @@ import {
   type KisDividendItem,
   type MassiveDividend,
 } from '@app/common';
-import { toYmd } from './iso-date.js';
+import { DailyPriceReader } from './daily-price.reader.js';
+import { krwExDividendDate } from './ex-dividend-date.js';
+import { addDays, toYmd } from './iso-date.js';
 
 type DividendRow = Pick<
   Dividend,
-  'id' | 'paymentDate' | 'noticeDate' | 'amount' | 'type'
+  'id' | 'paymentDate' | 'noticeDate' | 'exDividendDate' | 'amount' | 'type'
 >;
 
 /**
  * 종목 하나의 배당을 원천에서 받아 dividend에 upsert한다. 언제 부를지(하루 한 번)는 SecurityRefresher가 정한다.
- * - KRW: KIS 예탁원 배당일정 (6자리 symbol, 기간은 기준일)
- * - USD: Massive Dividends (symbol을 Massive 티커로, 기간은 배당락일)
+ * - KRW: KIS 예탁원 배당일정 (6자리 symbol, 기간은 기준일). 배당락일은 KIS가 주지 않아 저장된 거래일로 계산
+ * - USD: Massive Dividends (symbol을 Massive 티커로, 기간은 배당락일). 배당락일은 Massive 값
  */
 @Injectable()
 export class DividendFetcher {
@@ -33,6 +35,7 @@ export class DividendFetcher {
     private readonly dividendRepository: Repository<Dividend>,
     private readonly kisClient: KisClient,
     private readonly massiveClient: MassiveClient,
+    private readonly dailyPriceReader: DailyPriceReader,
   ) {}
 
   /** [from, to] 배당을 저장하고 { 받은 건수, 저장한 행 수 }를 돌려준다. KRW·USD 외 통화는 0 */
@@ -54,16 +57,19 @@ export class DividendFetcher {
     return { fetched, saved: rows.length };
   }
 
-  /** KIS 배당일정. 기간은 기준일 */
+  /** KIS 배당일정. 기간은 기준일. 배당락일 계산용 거래일은 기간 앞 2주부터 한 번에 읽는다 */
   private async fetchKrwDividends(security: Security, from: string, to: string) {
     const items = await this.kisClient.getDividends(
       security.symbol,
       toYmd(from),
       toYmd(to),
     );
+    const tradingDays = items.length
+      ? await this.dailyPriceReader.findKrwTradingDays(addDays(from, -14), to)
+      : [];
     return {
       fetched: items.length,
-      rows: items.flatMap((item) => fromKisItem(security.id, item)),
+      rows: items.flatMap((item) => fromKisItem(security.id, item, tradingDays)),
     };
   }
 
@@ -82,15 +88,20 @@ export class DividendFetcher {
 }
 
 /**
- * KIS 배당일정 한 행 → dividend 행(현금·주식 각각). noticeDate는 기준일.
+ * KIS 배당일정 한 행 → dividend 행(현금·주식 각각). noticeDate는 기준일, exDividendDate는 거래일로 계산한 배당락일.
  * 지급일이 아직 정해지지 않은 행은 PK(id, paymentDate)를 만들 수 없어 건너뛴다 (다음 날 조회 때 채워짐).
  */
-const fromKisItem = (id: string, item: KisDividendItem): DividendRow[] => {
+const fromKisItem = (
+  id: string,
+  item: KisDividendItem,
+  tradingDays: string[],
+): DividendRow[] => {
   const rows: DividendRow[] = [];
   const noticeDate = toIsoDate(item.record_date);
   if (!noticeDate) {
     return rows;
   }
+  const exDividendDate = krwExDividendDate(noticeDate, tradingDays);
   const cash = toDecimal(item.per_sto_divi_amt);
   const cashPayDate = toIsoDate(item.divi_pay_dt);
   if (cashPayDate && cash.gt(0)) {
@@ -98,6 +109,7 @@ const fromKisItem = (id: string, item: KisDividendItem): DividendRow[] => {
       id,
       paymentDate: cashPayDate,
       noticeDate,
+      exDividendDate,
       amount: truncateByCurrency(cash, Currency.KRW),
       type: DividendType.MONEY,
     });
@@ -109,6 +121,7 @@ const fromKisItem = (id: string, item: KisDividendItem): DividendRow[] => {
       id,
       paymentDate: stockPayDate,
       noticeDate,
+      exDividendDate,
       // 주식배당률(%), 소수 6자리 버림
       amount: stockRate.toDecimalPlaces(6, Decimal.ROUND_DOWN).toFixed(6),
       type: DividendType.STOCK,
@@ -119,12 +132,13 @@ const fromKisItem = (id: string, item: KisDividendItem): DividendRow[] => {
 
 /**
  * Massive 현금배당 한 건 → dividend 행. noticeDate는 KRW와 같게 기준일(record_date), 없으면 배당락일.
+ * exDividendDate는 배당락일(ex_dividend_date), 없으면 기준일 (미국은 T+1 결제라 둘이 같은 날).
  * 지급일이 없거나 금액이 0 이하면 건너뛴다. 금액은 소수 6자리 버림.
  */
 const fromMassiveDividend = (id: string, dividend: MassiveDividend): DividendRow[] => {
   const paymentDate = toIsoDate(dividend.pay_date);
-  const noticeDate =
-    toIsoDate(dividend.record_date) ?? toIsoDate(dividend.ex_dividend_date);
+  const exDate = toIsoDate(dividend.ex_dividend_date);
+  const noticeDate = toIsoDate(dividend.record_date) ?? exDate;
   const cash = new Decimal(Number.isFinite(dividend.cash_amount) ? dividend.cash_amount : 0);
   if (!paymentDate || !noticeDate || cash.lte(0)) {
     return [];
@@ -134,6 +148,7 @@ const fromMassiveDividend = (id: string, dividend: MassiveDividend): DividendRow
       id,
       paymentDate,
       noticeDate,
+      exDividendDate: exDate ?? noticeDate,
       amount: truncateByCurrency(cash, Currency.USD),
       type: DividendType.MONEY,
     },
