@@ -76,8 +76,8 @@ Calls only point down: a controller calls services; a service calls implementati
 
   | Role | Does | Examples |
   |---|---|---|
-  | `Reader` | Repository reads only. `find*` returns null/empty when missing, `get*` throws | `DailyPriceReader`, `ExchangeRateReader` (`security/`), `PurchaseReader`, `PurchaseRateReader` (`balance/`) |
-  | `Writer` | Repository saves/updates/deletes, called inside the service's `@Transactional()` method | `PurchaseWriter` (`balance/`: `lockOwner`, `append`, `sell`, `update`, `remove`) |
+  | `Reader` | Repository reads only. `find*` returns null/empty when missing, `get*` throws | `DailyPriceReader`, `ExchangeRateReader` (`security/`), `PurchaseReader`, `PurchaseRateReader` (`balance/`), `AccountReader` (`user/`) |
+  | `Writer` | Repository saves/updates/deletes, called inside the service's `@Transactional()` method | `PurchaseWriter` (`balance/`: `lockOwner`, `append`, `sell`, `sellLifo`, `update`, `moveAccount`, `remove`, `removeByAccount`), `AccountWriter` (`user/`: `lockOwner`, `create`, `resolve`, `updateType`, `remove`) |
   | `Fetcher` | Fetches from an external client and saves | `DailyPriceFetcher`, `DividendFetcher` (api); `SecurityFetcher`, `ExchangeRateFetcher`, `UsDailyPriceFetcher`, `DomesticDailyPriceFetcher` (`libs/common`, batch) |
   | `Refresher` | Decides when to run fetchers | `SecurityRefresher` |
   | `Calculator` | Builds a computed result from readers | `DividendHistoryCalculator` |
