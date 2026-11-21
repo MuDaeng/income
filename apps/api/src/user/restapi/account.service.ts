@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
+import { Transactional } from 'typeorm-transactional';
 import type { Account } from '@app/common';
 import type { AuthUser } from '../../auth/restapi/jwt.strategy.js';
 import { AccountReader } from '../account.reader.js';
 import { AccountWriter } from '../account.writer.js';
 import type { AccountDto, AccountListResponse } from './dto/account.dto.js';
 import type { AccountListRequest } from './dto/account-list.schema.js';
+import type { CreateAccountRequest } from './dto/create-account.schema.js';
 import type {
   AccountIdParam,
   UpdateAccountTypeRequest,
@@ -27,6 +29,22 @@ export class AccountService {
       input.securityCompany,
     );
     return { accounts: accounts.map(toAccountDto) };
+  }
+
+  /** 계좌 생성. id는 내 계좌 중 max + 1 (User 행을 잠가 동시 생성 시 중복 방지) */
+  @Transactional()
+  async createAccount(
+    authUser: AuthUser,
+    input: CreateAccountRequest,
+  ): Promise<AccountDto> {
+    await this.accountWriter.lockOwner(authUser.id);
+    return toAccountDto(
+      await this.accountWriter.create(
+        authUser.id,
+        input.securityCompany,
+        input.accountType,
+      ),
+    );
   }
 
   /** 내 계좌 하나의 타입 변경. 내 계좌가 아니면 404 */

@@ -4,12 +4,14 @@ import {
   Get,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -22,6 +24,10 @@ import {
   type AccountListRequest,
   accountListSchema,
 } from './dto/account-list.schema.js';
+import {
+  type CreateAccountRequest,
+  createAccountSchema,
+} from './dto/create-account.schema.js';
 import {
   type AccountIdParam,
   accountIdParamSchema,
@@ -47,6 +53,20 @@ export class AccountController {
     @Query({ schema: accountListSchema }) query: AccountListRequest,
   ): Promise<AccountListResponse> {
     return this.accountService.getAccounts(user, query);
+  }
+
+  @Post()
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: '계좌 생성 (accountType 생략 시 일반 계좌, id는 내 계좌 중 max + 1)',
+  })
+  @ApiCreatedResponse({ type: AccountDto })
+  createAccount(
+    @CurrentUser() user: AuthUser,
+    @Body({ schema: createAccountSchema }) body: CreateAccountRequest,
+  ): Promise<AccountDto> {
+    return this.accountService.createAccount(user, body);
   }
 
   @Patch(':id/type')

@@ -1,20 +1,50 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Account, AccountType, type SecurityCompany } from '@app/common';
+import { Account, AccountType, type SecurityCompany, User } from '@app/common';
 import { AccountReader } from './account.reader.js';
 
 /**
- * 계좌(Account) 쓰기. resolve는 Service의 @Transactional() 메서드 안에서
- * User 행을 잠근 뒤(PurchaseWriter.lockOwner)에 불러야 id(사용자별 max + 1)가 중복되지 않는다.
+ * 계좌(Account) 쓰기. resolve·create는 Service의 @Transactional() 메서드 안에서
+ * User 행을 잠근 뒤(lockOwner 또는 PurchaseWriter.lockOwner)에 불러야 id(사용자별 max + 1)가 중복되지 않는다.
  */
 @Injectable()
 export class AccountWriter {
   constructor(
     @InjectRepository(Account)
     private readonly accountRepository: Repository<Account>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly accountReader: AccountReader,
   ) {}
+
+  /** 같은 사용자의 계좌 채번이 동시에 일어나지 않도록 User 행을 잠근다 */
+  async lockOwner(userId: number): Promise<void> {
+    await this.userRepository.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+  }
+
+  /** 계좌 생성 (id = 사용자 계좌 중 max + 1) */
+  async create(
+    userId: number,
+    securityCompany: SecurityCompany,
+    accountType: AccountType,
+  ): Promise<Account> {
+    const last = await this.accountRepository.findOne({
+      where: { userId },
+      order: { id: 'DESC' },
+    });
+    return this.accountRepository.save(
+      this.accountRepository.create({
+        userId,
+        id: (last?.id ?? 0) + 1,
+        securityCompany,
+        accountType,
+      }),
+    );
+  }
 
   /**
    * 매수·매도에 쓸 계좌를 정한다.
@@ -43,18 +73,7 @@ export class AccountWriter {
     if (existing) {
       return existing;
     }
-    const last = await this.accountRepository.findOne({
-      where: { userId },
-      order: { id: 'DESC' },
-    });
-    return this.accountRepository.save(
-      this.accountRepository.create({
-        userId,
-        id: (last?.id ?? 0) + 1,
-        securityCompany,
-        accountType: AccountType.NORMAL,
-      }),
-    );
+    return this.create(userId, securityCompany, AccountType.NORMAL);
   }
 
   /** 계좌 타입 변경 */

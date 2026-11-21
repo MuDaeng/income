@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Account, AccountType, SecurityCompany } from '@app/common';
+import { Account, AccountType, SecurityCompany, User } from '@app/common';
 import { AccountReader } from '../../src/user/account.reader.js';
 import { AccountWriter } from '../../src/user/account.writer.js';
 
@@ -20,6 +20,7 @@ describe('AccountWriter.resolve', () => {
     save: vi.fn(),
     create: vi.fn(),
   };
+  const userRepository = { findOne: vi.fn() };
   let writer: AccountWriter;
 
   beforeEach(async () => {
@@ -33,6 +34,7 @@ describe('AccountWriter.resolve', () => {
         AccountWriter,
         AccountReader,
         { provide: getRepositoryToken(Account), useValue: accountRepository },
+        { provide: getRepositoryToken(User), useValue: userRepository },
       ],
     }).compile();
     writer = moduleRef.get(AccountWriter);
@@ -90,6 +92,28 @@ describe('AccountWriter.resolve', () => {
 
     await expect(writer.resolve(1, SecurityCompany.TOSS)).resolves.toMatchObject({
       id: 1,
+    });
+  });
+
+  it('create는 지정한 타입으로 max + 1 id 계좌를 만든다', async () => {
+    accountRepository.findOne.mockResolvedValue(KIWOOM);
+
+    await expect(
+      writer.create(1, SecurityCompany.SAMSUNG, AccountType.IRP),
+    ).resolves.toEqual({
+      userId: 1,
+      id: 3,
+      securityCompany: SecurityCompany.SAMSUNG,
+      accountType: AccountType.IRP,
+    });
+  });
+
+  it('lockOwner는 User 행을 비관적 쓰기 잠금으로 읽는다', async () => {
+    await writer.lockOwner(7);
+
+    expect(userRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 7 },
+      lock: { mode: 'pessimistic_write' },
     });
   });
 });
