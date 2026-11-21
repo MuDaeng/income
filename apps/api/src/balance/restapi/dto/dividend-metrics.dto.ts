@@ -1,6 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Currency } from '@app/common';
 
+/** 성장률 계산 방식. TOTAL: 12개월 합끼리, PER_PAYMENT: 회당 평균끼리 (KRW 종목만, 첫 배당이 직전 12개월 안이라 직전 기간이 덜 찬 종목) */
+export type GrowthBasis = 'TOTAL' | 'PER_PAYMENT';
+
 /**
  * 배당 지표 응답 DTO. 금액·수량은 decimal 문자열(원화 정수, 외화 소수 6자리 버림),
  * 비율은 퍼센트(소수 2자리 버림). 배당은 세전 금액.
@@ -30,12 +33,23 @@ export class DividendMetricsItemDto {
   @ApiProperty({ description: '그 직전 12개월 주당 현금배당 합 (종목 통화)' })
   previousPerShare: string;
 
+  @ApiProperty({ description: '직전 12개월 지급 횟수' })
+  previousPaymentCount: number;
+
   @ApiProperty({
     type: String,
     nullable: true,
-    description: '배당 성장률(%) = 최근 12개월 ÷ 직전 12개월 − 1. 직전 12개월 배당이 없으면 null',
+    description:
+      '배당 성장률(%) = 최근 12개월 ÷ 직전 12개월 − 1 (growthBasis가 PER_PAYMENT면 회당 평균끼리). 직전 12개월 배당이 없으면 null',
   })
   growthRate: string | null;
+
+  @ApiProperty({
+    enum: ['TOTAL', 'PER_PAYMENT'],
+    description:
+      '성장률 계산 방식. TOTAL: 12개월 합끼리, PER_PAYMENT: KRW 종목의 첫 현금배당이 직전 12개월 안이고 직전 지급 횟수가 최근보다 적어(상장 1년 남짓) 회당 평균끼리 비교',
+  })
+  growthBasis: GrowthBasis;
 
   @ApiProperty({ description: '예상 연배당 (종목 통화) = 최근 12개월 주당 배당 × 현재 수량' })
   annualDividend: string;

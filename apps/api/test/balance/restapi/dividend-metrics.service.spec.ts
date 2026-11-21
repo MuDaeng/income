@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Between, In } from 'typeorm';
+import { Between, In, LessThanOrEqual } from 'typeorm';
 import {
   Currency,
   DailyExchangeRate,
@@ -47,7 +47,7 @@ const PRICES: Record<string, string> = {
 describe('DividendMetricsService.getDividendMetrics', () => {
   const purchaseDateBalanceRepository = { find: vi.fn() };
   const securityRepository = { findBy: vi.fn() };
-  const dividendRepository = { find: vi.fn() };
+  const dividendRepository = { find: vi.fn(), existsBy: vi.fn() };
   const dailySecurityRepository = { findOne: vi.fn() };
   const dailyExchangeRateRepository = { findOne: vi.fn() };
   const securityRefresher = { refresh: vi.fn() };
@@ -76,6 +76,8 @@ describe('DividendMetricsService.getDividendMetrics', () => {
     service = moduleRef.get(DividendMetricsService);
 
     securityRepository.findBy.mockResolvedValue([USD, KRW]);
+    // 기본: 직전 12개월 이전에도 배당 기록이 있는 종목 (성장률은 12개월 합끼리)
+    dividendRepository.existsBy.mockResolvedValue(true);
     dailySecurityRepository.findOne.mockImplementation(
       ({ where }: { where: { id: string } }) =>
         Promise.resolve(
@@ -139,8 +141,10 @@ describe('DividendMetricsService.getDividendMetrics', () => {
           trailingPerShare: '461',
           paymentCount: 2,
           previousPerShare: '300',
+          previousPaymentCount: 1,
           // 461 / 300 − 1 = 53.666…
           growthRate: '53.66',
+          growthBasis: 'TOTAL',
           annualDividend: '46100',
           krwAnnualDividend: '46100',
           krwPurchaseAmount: '500000',
@@ -161,7 +165,9 @@ describe('DividendMetricsService.getDividendMetrics', () => {
           trailingPerShare: '0.500000',
           paymentCount: 2,
           previousPerShare: '0.000000',
+          previousPaymentCount: 0,
           growthRate: null,
+          growthBasis: 'TOTAL',
           annualDividend: '5.000000',
           // 5 × 1400
           krwAnnualDividend: '7000',
@@ -258,5 +264,89 @@ describe('DividendMetricsService.getDividendMetrics', () => {
     await expect(
       service.getDividendMetrics({ id: 1, rules: [] }, {}),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe('배당 성장률', () => {
+    // KR70013P0000 (2025-05 상장, 월배당) 실제 1주당 배당. 오늘(2026-11-20) 기준 직전 12개월 7회, 최근 12개월 12회
+    const LISTED_AMOUNTS = ['21', '18', '17', '18', '18', '19', '19', '19', '22', '22', '21', '17', '19', '21', '18', '22', '23', '17', '17'];
+    const listedDividends = LISTED_AMOUNTS.map((amount, i) => {
+      const paymentDate = new Date(Date.UTC(2025, 4 + i, 15)).toISOString().slice(0, 10);
+      return dividend(KRW.id, paymentDate, `${amount}.000000`);
+    });
+
+    beforeEach(() => {
+      securityRepository.findBy.mockResolvedValue([KRW]);
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(KRW.id, '2025-06-02', '10.000000', '10000.000000'),
+      ]);
+    });
+
+    it('첫 배당이 직전 12개월 안이고 직전 횟수가 적으면(상장 1년 남짓) 회당 평균끼리 비교한다', async () => {
+      dividendRepository.find.mockResolvedValue(listedDividends);
+      dividendRepository.existsBy.mockResolvedValue(false);
+
+      const result = await service.getDividendMetrics({ id: 1, rules: [] }, {});
+
+      expect(dividendRepository.existsBy).toHaveBeenCalledWith({
+        id: KRW.id,
+        type: DividendType.MONEY,
+        paymentDate: LessThanOrEqual('2024-11-20'),
+      });
+      expect(result.items[0]).toMatchObject({
+        trailingPerShare: '238',
+        paymentCount: 12,
+        previousPerShare: '130',
+        previousPaymentCount: 7,
+        // 회당 평균 238/12 = 19.83 vs 130/7 = 18.57 → 6.79% (합끼리면 83.07%)
+        growthRate: '6.79',
+        growthBasis: 'PER_PAYMENT',
+      });
+    });
+
+    it('직전 12개월 이전에도 배당 기록이 있으면 횟수가 달라도 12개월 합끼리 비교한다', async () => {
+      dividendRepository.find.mockResolvedValue(listedDividends);
+      dividendRepository.existsBy.mockResolvedValue(true);
+
+      const result = await service.getDividendMetrics({ id: 1, rules: [] }, {});
+
+      expect(result.items[0]).toMatchObject({ growthRate: '83.07', growthBasis: 'TOTAL' });
+    });
+
+    it('USD 종목은 횟수가 달라도 기록 시작을 확인하지 않고 12개월 합끼리 비교한다 (분기→월배당 전환 등)', async () => {
+      securityRepository.findBy.mockResolvedValue([USD]);
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(USD.id, '2025-06-02', '10.000000', '100.000000'),
+      ]);
+      dividendRepository.find.mockResolvedValue(
+        listedDividends.map((d) => ({ ...d, id: USD.id })),
+      );
+      dividendRepository.existsBy.mockResolvedValue(false);
+
+      const result = await service.getDividendMetrics({ id: 1, rules: [] }, {});
+
+      expect(dividendRepository.existsBy).not.toHaveBeenCalled();
+      expect(result.items[0]).toMatchObject({
+        previousPaymentCount: 7,
+        paymentCount: 12,
+        growthRate: '83.07',
+        growthBasis: 'TOTAL',
+      });
+    });
+
+    it('지급 횟수가 같으면 기록 시작을 확인하지 않고 12개월 합끼리 비교한다', async () => {
+      dividendRepository.find.mockResolvedValue([
+        dividend(KRW.id, '2025-04-15', '100.000000'),
+        dividend(KRW.id, '2026-04-15', '110.000000'),
+      ]);
+
+      const result = await service.getDividendMetrics({ id: 1, rules: [] }, {});
+
+      expect(dividendRepository.existsBy).not.toHaveBeenCalled();
+      expect(result.items[0]).toMatchObject({
+        previousPaymentCount: 1,
+        growthRate: '10.00',
+        growthBasis: 'TOTAL',
+      });
+    });
   });
 });

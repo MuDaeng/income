@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
-import { Between, In, Repository } from 'typeorm';
+import { Between, In, LessThanOrEqual, Repository } from 'typeorm';
 import {
   Currency,
   type DailyExchangeRate,
@@ -22,6 +22,7 @@ import { percentOf } from '../return-rate.js';
 import type {
   DividendMetricsItemDto,
   DividendMetricsResponse,
+  GrowthBasis,
 } from './dto/dividend-metrics.dto.js';
 import type { DividendMetricsRequest } from './dto/dividend-metrics.schema.js';
 
@@ -46,7 +47,8 @@ export class DividendMetricsService {
    * 3. 지급일 기준 최근 12개월(오늘−1년 초과 ~ 오늘)과 그 직전 12개월의 주당 현금배당 합
    * 4. 예상 연배당 = 최근 12개월 주당 배당 × 현재 수량, USD는 최신 환율로 원화 환산
    * 5. YOC = 원화 예상 연배당 ÷ 원화 원금, 현재 배당률 = 최근 12개월 주당 배당 ÷ 최신 종가,
-   *    성장률 = 최근 12개월 ÷ 직전 12개월 − 1 (직전이 0이면 null)
+   *    성장률 = 최근 12개월 ÷ 직전 12개월 − 1 (직전이 0이면 null). 다만 KRW 종목의 첫 현금배당이 직전 12개월 안이고
+   *    (상장 1년 남짓) 직전 지급 횟수가 최근보다 적으면, 합은 횟수 차이만큼 부풀려지므로 회당 평균끼리 비교한다
    * 합계는 종목별 값(버림 후)을 더한다.
    */
   async getDividendMetrics(
@@ -107,7 +109,7 @@ export class DividendMetricsService {
           security,
           heldBySecurity.get(security.id) ?? [],
           dividends.filter((d) => d.id === security.id),
-          { today, trailingFrom, endRate, rateCache },
+          { today, trailingFrom, previousFrom, endRate, rateCache },
         ),
       );
     }
@@ -133,6 +135,44 @@ export class DividendMetricsService {
     };
   }
 
+  /**
+   * 배당 성장률(%). 보통은 최근 12개월 합 ÷ 직전 12개월 합 − 1 (연배당 증감, 분기→월배당 전환도 반영).
+   * KRW 종목이고 직전 지급 횟수가 최근보다 적고 첫 현금배당이 직전 12개월 안이면(previousFrom 이전 지급이 없으면)
+   * 상장 1년 남짓이라 직전 기간이 덜 찬 것이므로 회당 평균끼리 비교한다 (횟수가 같으면 두 방식은 같다). 직전 배당이 0이면 null.
+   * USD는 항상 합끼리: 배당이 최근 2년치만 저장돼 상장 시점을 알 수 없고, 오래된 종목이 분기→월배당으로 바뀌면
+   * 회당 평균 비교가 큰 마이너스로 잘못 나온다.
+   */
+  private async growthRate(
+    security: Security,
+    previousFrom: string,
+    { trailing, paymentCount, previous, previousPaymentCount }: {
+      trailing: Decimal;
+      paymentCount: number;
+      previous: Decimal;
+      previousPaymentCount: number;
+    },
+  ): Promise<{ rate: string | null; basis: GrowthBasis }> {
+    if (previous.isZero()) return { rate: null, basis: 'TOTAL' };
+    const partialPrevious =
+      security.currency === Currency.KRW &&
+      previousPaymentCount > 0 &&
+      previousPaymentCount < paymentCount &&
+      !(await this.dividendRepository.existsBy({
+        id: security.id,
+        type: DividendType.MONEY,
+        paymentDate: LessThanOrEqual(previousFrom),
+      }));
+    if (!partialPrevious) {
+      return { rate: percentOf(trailing.minus(previous), previous), basis: 'TOTAL' };
+    }
+    const trailingAverage = trailing.dividedBy(paymentCount);
+    const previousAverage = previous.dividedBy(previousPaymentCount);
+    return {
+      rate: percentOf(trailingAverage.minus(previousAverage), previousAverage),
+      basis: 'PER_PAYMENT',
+    };
+  }
+
   /** 종목 하나의 지표 */
   private async evaluate(
     security: Security,
@@ -141,6 +181,7 @@ export class DividendMetricsService {
     context: {
       today: string;
       trailingFrom: string;
+      previousFrom: string;
       endRate: DailyExchangeRate | null;
       rateCache: Map<string, DailyExchangeRate | null>;
     },
@@ -165,14 +206,22 @@ export class DividendMetricsService {
     let trailing = new Decimal(0);
     let previous = new Decimal(0);
     let paymentCount = 0;
+    let previousPaymentCount = 0;
     for (const dividend of dividends) {
       if (dividend.paymentDate > context.trailingFrom) {
         trailing = trailing.plus(dividend.amount);
         paymentCount += 1;
       } else {
         previous = previous.plus(dividend.amount);
+        previousPaymentCount += 1;
       }
     }
+    const growth = await this.growthRate(security, context.previousFrom, {
+      trailing,
+      paymentCount,
+      previous,
+      previousPaymentCount,
+    });
 
     const annual = new Decimal(truncateByCurrency(trailing.times(quantity), currency));
     const krwAnnual = toKrw(
@@ -201,9 +250,9 @@ export class DividendMetricsService {
       trailingPerShare: truncateByCurrency(trailing, currency),
       paymentCount,
       previousPerShare: truncateByCurrency(previous, currency),
-      growthRate: previous.isZero()
-        ? null
-        : percentOf(trailing.minus(previous), previous),
+      previousPaymentCount,
+      growthRate: growth.rate,
+      growthBasis: growth.basis,
       annualDividend: truncateByCurrency(annual, currency),
       krwAnnualDividend: krwAnnual,
       krwPurchaseAmount,
