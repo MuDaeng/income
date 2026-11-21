@@ -88,7 +88,7 @@ deploy/    Nginx 설정
 | PATCH | `/balance/purchases` | 매수분 구매 환율 수정 |
 | PATCH | `/balance/purchases/account` | 매수분을 내 다른 계좌로 이동 (타사 이전 등) |
 | DELETE | `/balance/purchases` | 매수 내역 삭제 |
-| GET | `/balance/dividends` | 배당금 내역, 세전·세후 (일반 계좌만 국내 15.4%·미국 15% 과세, `accountId`를 주면 그 계좌 보유분만) |
+| GET | `/balance/dividends` | 배당금 내역, 세전·세후, 지급 예정 배당은 `scheduled`로 분리 (일반 계좌만 국내 15.4%·미국 15% 과세, `accountId`를 주면 그 계좌 보유분만) |
 | GET | `/balance/dividend-metrics` | 배당 지표: 보유 종목별 최근 12개월 주당 배당·예상 연배당·YOC·현재 배당률·배당 성장률(세전) (`accountId`를 주면 그 계좌만) |
 | GET | `/balance/monthly` | 월말별 원금·평가금액·평가금액+누적배당금 (from~to 년월, 이번 달은 오늘 기준, `accountId`를 주면 그 계좌만) |
 | GET | `/balance/returns` | 기간 수익률, 배당·수익금·수익률 세전·세후 (`accountId`를 주면 그 계좌만) |

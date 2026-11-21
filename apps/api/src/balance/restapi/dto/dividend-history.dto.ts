@@ -113,6 +113,14 @@ export class MonthlyDividendDto {
   items: DividendItemDto[];
 }
 
+export class ScheduledDividendDto {
+  @ApiProperty({ type: DividendSummaryDto, description: '지급 예정 배당 합계' })
+  total: DividendSummaryDto;
+
+  @ApiProperty({ type: [DividendItemDto], description: '지급 예정 배당 내역 (지급일·종목 순)' })
+  items: DividendItemDto[];
+}
+
 export class DividendHistoryResponse {
   @ApiProperty({ type: String, nullable: true, description: '조회 시작일 (입력값, 없으면 null)' })
   from: string | null;
@@ -120,9 +128,15 @@ export class DividendHistoryResponse {
   @ApiProperty({ type: String, nullable: true, description: '조회 종료일 (입력값, 없으면 null)' })
   to: string | null;
 
-  @ApiProperty({ type: DividendSummaryDto, description: '기간 총배당금' })
+  @ApiProperty({ type: DividendSummaryDto, description: '기간 총배당금 (지급분만, 지급 예정은 scheduled)' })
   total: DividendSummaryDto;
 
-  @ApiProperty({ type: [MonthlyDividendDto], description: '월별 배당 내역 (월 오름차순)' })
+  @ApiProperty({ type: [MonthlyDividendDto], description: '월별 배당 내역 (월 오름차순, 지급일이 오늘 이전인 지급분만)' })
   months: MonthlyDividendDto[];
+
+  @ApiProperty({
+    type: ScheduledDividendDto,
+    description: '지급 예정 배당 (지급일이 오늘 이후, 기간 안). total·months에는 들어가지 않음',
+  })
+  scheduled: ScheduledDividendDto;
 }

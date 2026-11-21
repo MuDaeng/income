@@ -20,6 +20,7 @@ import {
 } from '@app/common';
 import type { AuthUser } from '../auth/restapi/jwt.strategy.js';
 import { ExchangeRateReader } from '../security/exchange-rate.reader.js';
+import { todayInSeoul } from '../security/iso-date.js';
 import { SecurityRefresher } from '../security/security.refresher.js';
 import { AccountReader } from '../user/account.reader.js';
 import { dividendTax, isTaxedAccount } from './dividend-tax.js';
@@ -58,7 +59,9 @@ export class DividendHistoryCalculator {
    *    (purchaseDate <= 기준일 < saleDate)로 판정. 0이면 받지 않은 배당이라 제외
    * 4. 배당금 = 주당 배당금 × 보유 수량 (종목 통화로 버림). USD는 지급일(없으면 직전) USD 종가 환율로 원화 환산.
    *    세후 = 세전 − 세금. 세금은 일반 계좌 매수분 수량에만 매긴다 (KRW 15.4%, USD 15%, dividend-tax.ts)
-   * 5. 지급월별로 묶고, 월·전체 합계는 응답에 보이는 값(버림 후)을 더한다
+   * 5. 지급일이 오늘(한국 시간) 이전인 지급분만 지급월별로 묶어 months·total에 넣고, 오늘 이후 지급 예정분은
+   *    scheduled(합계 + 지급일 순 목록)로 따로 돌려준다. 합계는 응답에 보이는 값(버림 후)을 더한다
+   *    (기간 수익률·월별 잔고는 months만 쓰므로 지급 예정 배당은 들어가지 않는다)
    */
   async calculate(
     authUser: AuthUser,
@@ -80,7 +83,13 @@ export class DividendHistoryCalculator {
     }
     const securityIds = [...purchasesBySecurity.keys()];
     if (securityIds.length === 0) {
-      return { from, to, total: summarize([]), months: [] };
+      return {
+        from,
+        to,
+        total: summarize([]),
+        months: [],
+        scheduled: { total: summarize([]), items: [] },
+      };
     }
 
     const taxedAccountIds = new Set(
@@ -186,9 +195,12 @@ export class DividendHistoryCalculator {
       }
     }
 
-    // 5. 월별
+    // 5. 지급분(지급일 <= 오늘)은 월별로, 지급 예정분(지급일 > 오늘)은 scheduled로 따로
+    const today = todayInSeoul();
+    const paid = items.filter((item) => item.paymentDate <= today);
+    const scheduled = items.filter((item) => item.paymentDate > today);
     const byMonth = new Map<string, DividendItemDto[]>();
-    for (const item of items) {
+    for (const item of paid) {
       const month = item.paymentDate.slice(0, 7);
       const list = byMonth.get(month) ?? [];
       list.push(item);
@@ -198,7 +210,8 @@ export class DividendHistoryCalculator {
     return {
       from,
       to,
-      total: summarize(items),
+      total: summarize(paid),
+      scheduled: { total: summarize(scheduled), items: scheduled },
       months: [...byMonth.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([month, monthItems]) => ({

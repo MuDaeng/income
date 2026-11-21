@@ -82,6 +82,7 @@ describe('DividendHistoryCalculator.calculate', () => {
         afterTaxTotalKrwAmount: '0',
       },
       months: [],
+      scheduled: { total: expect.objectContaining({ totalKrwAmount: '0' }), items: [] },
     });
     expect(dividendRepository.find).not.toHaveBeenCalled();
     expect(securityRefresher.refresh).not.toHaveBeenCalled();
@@ -333,5 +334,30 @@ describe('DividendHistoryCalculator.calculate', () => {
       taxAmount: '0',
       afterTaxAmount: '3610',
     });
+  });
+
+  it('지급일이 오늘 이후인 배당은 months·total에서 빼고 scheduled로 따로 돌려준다', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-04-20T12:00:00+09:00'));
+    try {
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(KRW_SECURITY.id, '2026-01-02', '10.000000'),
+      ]);
+      dividendRepository.find.mockResolvedValue([
+        // 오늘 지급 → 지급분
+        { id: KRW_SECURITY.id, noticeDate: '2026-03-31', paymentDate: '2026-04-20', amount: '100.000000', type: DividendType.MONEY },
+        // 내일 지급 → 예정
+        { id: KRW_SECURITY.id, noticeDate: '2026-03-31', paymentDate: '2026-04-21', amount: '50.000000', type: DividendType.MONEY },
+      ]);
+
+      const result = await service.calculate({ id: 1, rules: [] }, {});
+
+      expect(result.months.flatMap((m) => m.items).map((i) => i.paymentDate)).toEqual(['2026-04-20']);
+      expect(result.total).toMatchObject({ totalKrwAmount: '1000', afterTaxTotalKrwAmount: '846' });
+      expect(result.scheduled.items.map((i) => [i.paymentDate, i.amount])).toEqual([['2026-04-21', '500']]);
+      expect(result.scheduled.total).toMatchObject({ totalKrwAmount: '500', afterTaxTotalKrwAmount: '423' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
