@@ -98,16 +98,16 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       months: [
         {
           items: [
-            { securityId: KRW.id, usdAmount: null, krwAmount: '30000' },
-            { securityId: USD.id, usdAmount: '2.500000', krwAmount: '3500' },
-            { securityId: SOLD.id, usdAmount: null, krwAmount: '3610' },
+            { securityId: KRW.id, usdAmount: null, krwAmount: '30000', afterTaxUsdAmount: null, afterTaxKrwAmount: '25380' },
+            { securityId: USD.id, usdAmount: '2.500000', krwAmount: '3500', afterTaxUsdAmount: '2.125000', afterTaxKrwAmount: '2975' },
+            { securityId: SOLD.id, usdAmount: null, krwAmount: '3610', afterTaxUsdAmount: null, afterTaxKrwAmount: '3054' },
           ],
         },
         {
           items: [
-            { securityId: KRW.id, usdAmount: null, krwAmount: '45000' },
+            { securityId: KRW.id, usdAmount: null, krwAmount: '45000', afterTaxUsdAmount: null, afterTaxKrwAmount: '38070' },
             // 환율 없는 배당은 원화 합계에서 빠진다
-            { securityId: USD.id, usdAmount: '3.750000', krwAmount: null },
+            { securityId: USD.id, usdAmount: '3.750000', krwAmount: null, afterTaxUsdAmount: '3.187500', afterTaxKrwAmount: null },
           ],
         },
       ],
@@ -162,11 +162,16 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     });
 
     expect(result.dividend.items).toEqual([
-      { securityId: SOLD.id, name: '삼성전자', currency: Currency.KRW, usdAmount: null, krwAmount: '3610' },
-      { securityId: KRW.id, name: '리츠', currency: Currency.KRW, usdAmount: null, krwAmount: '75000' },
-      { securityId: USD.id, name: '애플', currency: Currency.USD, usdAmount: '6.250000', krwAmount: '3500' },
+      { securityId: SOLD.id, name: '삼성전자', currency: Currency.KRW, usdAmount: null, krwAmount: '3610', afterTaxUsdAmount: null, afterTaxKrwAmount: '3054' },
+      { securityId: KRW.id, name: '리츠', currency: Currency.KRW, usdAmount: null, krwAmount: '75000', afterTaxUsdAmount: null, afterTaxKrwAmount: '63450' },
+      { securityId: USD.id, name: '애플', currency: Currency.USD, usdAmount: '6.250000', krwAmount: '3500', afterTaxUsdAmount: '5.312500', afterTaxKrwAmount: '2975' },
     ]);
-    expect(result.dividend.total).toEqual({ usdAmount: '6.250000', krwAmount: '82110' });
+    expect(result.dividend.total).toEqual({
+      usdAmount: '6.250000',
+      krwAmount: '82110',
+      afterTaxUsdAmount: '5.312500',
+      afterTaxKrwAmount: '69479',
+    });
 
     expect(result.total.items[1]).toEqual({
       securityId: KRW.id,
@@ -177,6 +182,11 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       totalAmount: '6075000',
       profit: '-1325000',
       returnRate: '-17.90',
+      // 세후: 6,000,000 + 63,450 − 7,400,000
+      afterTaxDividendAmount: '63450',
+      afterTaxTotalAmount: '6063450',
+      afterTaxProfit: '-1336550',
+      afterTaxReturnRate: '-18.06',
     });
     expect(result.total.total).toEqual({
       purchaseAmount: '9554000',
@@ -185,6 +195,10 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       totalAmount: '8309610',
       profit: '-1244390',
       returnRate: '-13.02',
+      afterTaxDividendAmount: '69479',
+      afterTaxTotalAmount: '8296979',
+      afterTaxProfit: '-1257021',
+      afterTaxReturnRate: '-13.15',
     });
   });
 
@@ -239,6 +253,10 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       totalAmount: '0',
       profit: '0',
       returnRate: '0.00',
+      afterTaxDividendAmount: '0',
+      afterTaxTotalAmount: '0',
+      afterTaxProfit: '0',
+      afterTaxReturnRate: '0.00',
     });
     expect(result.exchangeRate).toBeNull();
   });

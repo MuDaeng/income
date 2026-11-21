@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Between, In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import {
+  AccountType,
   Currency,
   DailyExchangeRate,
   Dividend,
@@ -13,6 +14,10 @@ import { SecurityRefresher } from '../../src/security/security.refresher.js';
 import { DividendHistoryCalculator } from '../../src/balance/dividend-history.calculator.js';
 import { PurchaseReader } from '../../src/balance/purchase.reader.js';
 import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
+import { ACCOUNT, accountProviders } from './account-providers.js';
+
+// 1: 일반(과세), 2: ISA(비과세)
+const ACCOUNTS = [ACCOUNT, { ...ACCOUNT, id: 2, accountType: AccountType.ISA }];
 
 const KRW_SECURITY = { id: 'KR7005930003', name: '삼성전자', currency: Currency.KRW };
 const USD_SECURITY = { id: 'US0378331005', name: 'Apple', currency: Currency.USD };
@@ -22,7 +27,8 @@ const purchase = (
   purchaseDate: string,
   amount: string,
   saleDate: string | null = null,
-) => ({ securityId, purchaseDate, amount, saleDate, price: '1.000000', sequence: 1 });
+  accountId = 1,
+) => ({ securityId, purchaseDate, amount, saleDate, accountId, price: '1.000000', sequence: 1 });
 
 describe('DividendHistoryCalculator.calculate', () => {
   const purchaseDateBalanceRepository = { find: vi.fn() };
@@ -50,6 +56,7 @@ describe('DividendHistoryCalculator.calculate', () => {
           useValue: dailyExchangeRateRepository,
         },
         { provide: SecurityRefresher, useValue: securityRefresher },
+        ...accountProviders(ACCOUNTS),
       ],
     }).compile();
     service = moduleRef.get(DividendHistoryCalculator);
@@ -64,7 +71,16 @@ describe('DividendHistoryCalculator.calculate', () => {
     expect(result).toEqual({
       from: null,
       to: null,
-      total: { krwAmount: '0', usdAmount: '0.000000', usdKrwAmount: '0', totalKrwAmount: '0' },
+      total: {
+        krwAmount: '0',
+        usdAmount: '0.000000',
+        usdKrwAmount: '0',
+        totalKrwAmount: '0',
+        afterTaxKrwAmount: '0',
+        afterTaxUsdAmount: '0.000000',
+        afterTaxUsdKrwAmount: '0',
+        afterTaxTotalKrwAmount: '0',
+      },
       months: [],
     });
     expect(dividendRepository.find).not.toHaveBeenCalled();
@@ -136,7 +152,8 @@ describe('DividendHistoryCalculator.calculate', () => {
     expect(result.months).toEqual([
       {
         month: '2026-04',
-        summary: { krwAmount: '4693', usdAmount: '0.000000', usdKrwAmount: '0', totalKrwAmount: '4693' },
+        // 세금 4693 × 15.4% = 722.722 → 722
+        summary: { krwAmount: '4693', usdAmount: '0.000000', usdKrwAmount: '0', totalKrwAmount: '4693', afterTaxKrwAmount: '3971', afterTaxUsdAmount: '0.000000', afterTaxUsdKrwAmount: '0', afterTaxTotalKrwAmount: '3971' },
         items: [
           {
             securityId: KRW_SECURITY.id,
@@ -148,6 +165,10 @@ describe('DividendHistoryCalculator.calculate', () => {
             perShareAmount: '361',
             quantity: '13',
             amount: '4693',
+            taxAmount: '722',
+            afterTaxAmount: '3971',
+            afterTaxUsdAmount: null,
+            afterTaxKrwAmount: '3971',
             usdAmount: null,
             krwAmount: '4693',
             exchangeRate: null,
@@ -158,7 +179,8 @@ describe('DividendHistoryCalculator.calculate', () => {
       {
         month: '2026-05',
         // 0.65 × 1400.5 = 910.325 → 910
-        summary: { krwAmount: '0', usdAmount: '0.650000', usdKrwAmount: '910', totalKrwAmount: '910' },
+        // 세금 0.65 × 15% = 0.0975, 세후 0.5525 × 1400.5 = 773.77 → 773
+        summary: { krwAmount: '0', usdAmount: '0.650000', usdKrwAmount: '910', totalKrwAmount: '910', afterTaxKrwAmount: '0', afterTaxUsdAmount: '0.552500', afterTaxUsdKrwAmount: '773', afterTaxTotalKrwAmount: '773' },
         items: [
           {
             securityId: USD_SECURITY.id,
@@ -170,6 +192,10 @@ describe('DividendHistoryCalculator.calculate', () => {
             perShareAmount: '0.260000',
             quantity: '2.500000',
             amount: '0.650000',
+            taxAmount: '0.097500',
+            afterTaxAmount: '0.552500',
+            afterTaxUsdAmount: '0.552500',
+            afterTaxKrwAmount: '773',
             usdAmount: '0.650000',
             krwAmount: '910',
             exchangeRate: '1400.5',
@@ -183,6 +209,10 @@ describe('DividendHistoryCalculator.calculate', () => {
       usdAmount: '0.650000',
       usdKrwAmount: '910',
       totalKrwAmount: '5603',
+      afterTaxKrwAmount: '3971',
+      afterTaxUsdAmount: '0.552500',
+      afterTaxUsdKrwAmount: '773',
+      afterTaxTotalKrwAmount: '4744',
     });
   });
 
@@ -235,6 +265,8 @@ describe('DividendHistoryCalculator.calculate', () => {
     expect(result.months[0].items[0]).toMatchObject({
       usdAmount: '0.250000',
       krwAmount: null,
+      afterTaxUsdAmount: '0.212500',
+      afterTaxKrwAmount: null,
       exchangeRate: null,
       exchangeRateDate: null,
     });
@@ -243,6 +275,10 @@ describe('DividendHistoryCalculator.calculate', () => {
       usdAmount: '0.250000',
       usdKrwAmount: '0',
       totalKrwAmount: '0',
+      afterTaxKrwAmount: '0',
+      afterTaxUsdAmount: '0.212500',
+      afterTaxUsdKrwAmount: '0',
+      afterTaxTotalKrwAmount: '0',
     });
   });
 
@@ -255,5 +291,47 @@ describe('DividendHistoryCalculator.calculate', () => {
     await service.calculate({ id: 1, rules: [] }, {});
 
     expect(dividendRepository.find.mock.calls[0][0].where).not.toHaveProperty('paymentDate');
+  });
+
+  it('세금은 일반 계좌 매수분에만 매기고, ISA 등 비과세 계좌 매수분은 세후 = 세전', async () => {
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      purchase(KRW_SECURITY.id, '2026-01-02', '10.000000', null, 1),
+      purchase(KRW_SECURITY.id, '2026-01-05', '30.000000', null, 2),
+    ]);
+    dividendRepository.find.mockResolvedValue([
+      { id: KRW_SECURITY.id, noticeDate: '2026-03-31', paymentDate: '2026-04-20', amount: '361.000000', type: DividendType.MONEY },
+    ]);
+
+    const result = await service.calculate({ id: 1, rules: [] }, {});
+
+    // 세전 361 × 40 = 14440, 세금은 일반 10주분 3610 × 15.4% = 555.94 → 555
+    expect(result.months[0].items[0]).toMatchObject({
+      quantity: '40',
+      amount: '14440',
+      taxAmount: '555',
+      afterTaxAmount: '13885',
+      afterTaxKrwAmount: '13885',
+    });
+    expect(result.total).toMatchObject({
+      totalKrwAmount: '14440',
+      afterTaxTotalKrwAmount: '13885',
+    });
+  });
+
+  it('비과세 계좌만 보유하면 세금 0', async () => {
+    purchaseDateBalanceRepository.find.mockResolvedValue([
+      purchase(KRW_SECURITY.id, '2026-01-02', '10.000000', null, 2),
+    ]);
+    dividendRepository.find.mockResolvedValue([
+      { id: KRW_SECURITY.id, noticeDate: '2026-03-31', paymentDate: '2026-04-20', amount: '361.000000', type: DividendType.MONEY },
+    ]);
+
+    const result = await service.calculate({ id: 1, rules: [] }, {});
+
+    expect(result.months[0].items[0]).toMatchObject({
+      amount: '3610',
+      taxAmount: '0',
+      afterTaxAmount: '3610',
+    });
   });
 });

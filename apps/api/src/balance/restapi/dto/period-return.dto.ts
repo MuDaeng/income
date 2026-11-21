@@ -80,6 +80,12 @@ export class DividendSumItemDto {
 
   @ApiProperty({ description: '기간 원화 배당금 합계 (USD는 지급일 환율 환산, 환율 없는 건 제외)' })
   krwAmount: string;
+
+  @ApiProperty({ type: String, nullable: true, description: '기간 세후 달러 배당금 합계 (KRW 종목은 null)' })
+  afterTaxUsdAmount: string | null;
+
+  @ApiProperty({ description: '기간 세후 원화 배당금 합계 (일반 계좌만 과세, 환율 없는 건 제외)' })
+  afterTaxKrwAmount: string;
 }
 
 export class DividendSumSummaryDto {
@@ -88,6 +94,12 @@ export class DividendSumSummaryDto {
 
   @ApiProperty({ description: '원화 배당금 합계 (USD 원화 환산 포함)' })
   krwAmount: string;
+
+  @ApiProperty({ description: '세후 달러 배당금 합계' })
+  afterTaxUsdAmount: string;
+
+  @ApiProperty({ description: '세후 원화 배당금 합계 (USD 원화 환산 포함)' })
+  afterTaxKrwAmount: string;
 }
 
 export class DividendSumSectionDto {
@@ -122,6 +134,18 @@ export class TotalReturnItemDto {
 
   @ApiProperty({ description: '원금 대비 수익률(%)' })
   returnRate: string;
+
+  @ApiProperty({ description: '세후 배당금 합계 (원화)' })
+  afterTaxDividendAmount: string;
+
+  @ApiProperty({ description: '평가금액 + 세후 배당금 (원화)' })
+  afterTaxTotalAmount: string;
+
+  @ApiProperty({ description: '세후 수익금 = 평가금액 + 세후 배당금 − 원금' })
+  afterTaxProfit: string;
+
+  @ApiProperty({ description: '세후 수익률(%)' })
+  afterTaxReturnRate: string;
 }
 
 export class TotalReturnSummaryDto {
@@ -142,6 +166,18 @@ export class TotalReturnSummaryDto {
 
   @ApiProperty({ description: '원금 대비 수익률(%)' })
   returnRate: string;
+
+  @ApiProperty({ description: '세후 배당금 합계 (원화)' })
+  afterTaxDividendAmount: string;
+
+  @ApiProperty({ description: '평가금액 + 세후 배당금 합계 (원화)' })
+  afterTaxTotalAmount: string;
+
+  @ApiProperty({ description: '세후 수익금 합계' })
+  afterTaxProfit: string;
+
+  @ApiProperty({ description: '세후 수익률(%)' })
+  afterTaxReturnRate: string;
 }
 
 export class TotalReturnSectionDto {

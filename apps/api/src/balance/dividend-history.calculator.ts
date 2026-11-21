@@ -21,6 +21,8 @@ import {
 import type { AuthUser } from '../auth/restapi/jwt.strategy.js';
 import { ExchangeRateReader } from '../security/exchange-rate.reader.js';
 import { SecurityRefresher } from '../security/security.refresher.js';
+import { AccountReader } from '../user/account.reader.js';
+import { dividendTax, isTaxedAccount } from './dividend-tax.js';
 import type {
   DividendHistoryResponse,
   DividendItemDto,
@@ -43,6 +45,7 @@ export class DividendHistoryCalculator {
     private readonly purchaseReader: PurchaseReader,
     private readonly exchangeRateReader: ExchangeRateReader,
     private readonly securityRefresher: SecurityRefresher,
+    private readonly accountReader: AccountReader,
   ) {}
 
   /**
@@ -53,7 +56,8 @@ export class DividendHistoryCalculator {
    * 3. 배당마다 받을 권리가 있는 수량 = 배당락일 전날까지 매수하고 배당락일 이후(당일 포함) 매도했거나 보유 중인
    *    매수분 수량 합 (purchaseDate < 배당락일 <= saleDate). 배당락일이 없는 예전 행은 기준일 보유
    *    (purchaseDate <= 기준일 < saleDate)로 판정. 0이면 받지 않은 배당이라 제외
-   * 4. 배당금 = 주당 배당금 × 보유 수량 (종목 통화로 버림). USD는 지급일(없으면 직전) USD 종가 환율로 원화 환산
+   * 4. 배당금 = 주당 배당금 × 보유 수량 (종목 통화로 버림). USD는 지급일(없으면 직전) USD 종가 환율로 원화 환산.
+   *    세후 = 세전 − 세금. 세금은 일반 계좌 매수분 수량에만 매긴다 (KRW 15.4%, USD 15%, dividend-tax.ts)
    * 5. 지급월별로 묶고, 월·전체 합계는 응답에 보이는 값(버림 후)을 더한다
    */
   async calculate(
@@ -78,6 +82,12 @@ export class DividendHistoryCalculator {
     if (securityIds.length === 0) {
       return { from, to, total: summarize([]), months: [] };
     }
+
+    const taxedAccountIds = new Set(
+      (await this.accountReader.findByUser(authUser.id))
+        .filter((account) => isTaxedAccount(account.accountType))
+        .map((account) => account.id),
+    );
 
     const securities = await this.securityRepository.findBy({
       id: In(securityIds),
@@ -111,16 +121,27 @@ export class DividendHistoryCalculator {
       if (!security) {
         continue;
       }
-      const quantity = entitledQuantity(
-        purchasesBySecurity.get(dividend.id) ?? [],
-        dividend,
+      const entitled = (purchasesBySecurity.get(dividend.id) ?? []).filter(
+        (purchase) => isEntitled(purchase, dividend),
       );
+      const quantity = sumAmount(entitled);
       if (quantity.lte(0)) {
         continue;
       }
-      const { currency } = security;
+      const currency = security.currency as Currency.KRW | Currency.USD;
       const amount = truncateByCurrency(
         new Decimal(dividend.amount).times(quantity),
+        currency,
+      );
+      const taxableQuantity = sumAmount(
+        entitled.filter((purchase) => taxedAccountIds.has(purchase.accountId)),
+      );
+      const taxAmount = dividendTax(
+        new Decimal(dividend.amount).times(taxableQuantity),
+        currency,
+      );
+      const afterTaxAmount = truncateByCurrency(
+        new Decimal(amount).minus(taxAmount),
         currency,
       );
       const base = {
@@ -133,6 +154,8 @@ export class DividendHistoryCalculator {
         perShareAmount: truncateByCurrency(dividend.amount, currency),
         quantity: truncateByCurrency(quantity, currency),
         amount,
+        taxAmount,
+        afterTaxAmount,
       };
       if (currency === Currency.USD) {
         const rate = await this.exchangeRateReader.findUsdOnOrBefore(
@@ -143,6 +166,10 @@ export class DividendHistoryCalculator {
           ...base,
           usdAmount: amount,
           krwAmount: rate ? toKrw(new Decimal(amount).times(rate.closingRate)) : null,
+          afterTaxUsdAmount: afterTaxAmount,
+          afterTaxKrwAmount: rate
+            ? toKrw(new Decimal(afterTaxAmount).times(rate.closingRate))
+            : null,
           exchangeRate: rate ? new Decimal(rate.closingRate).toString() : null,
           exchangeRateDate: rate?.date ?? null,
         });
@@ -151,6 +178,8 @@ export class DividendHistoryCalculator {
           ...base,
           usdAmount: null,
           krwAmount: amount,
+          afterTaxUsdAmount: null,
+          afterTaxKrwAmount: afterTaxAmount,
           exchangeRate: null,
           exchangeRateDate: null,
         });
@@ -205,38 +234,64 @@ const paymentDateFilter = (
 export const entitledQuantity = (
   purchases: PurchaseDateBalance[],
   dividend: Pick<Dividend, 'noticeDate' | 'exDividendDate'>,
-): Decimal => {
+): Decimal => sumAmount(purchases.filter((p) => isEntitled(p, dividend)));
+
+/** 매수분 하나가 배당을 받을 권리가 있는지 (규칙은 entitledQuantity) */
+export const isEntitled = (
+  p: Pick<PurchaseDateBalance, 'purchaseDate' | 'saleDate'>,
+  dividend: Pick<Dividend, 'noticeDate' | 'exDividendDate'>,
+): boolean => {
   const exDate = dividend.exDividendDate ?? null;
-  const entitled = exDate
-    ? (p: PurchaseDateBalance) =>
-        p.purchaseDate < exDate && (p.saleDate === null || p.saleDate >= exDate)
-    : (p: PurchaseDateBalance) =>
-        p.purchaseDate <= dividend.noticeDate &&
+  return exDate
+    ? p.purchaseDate < exDate && (p.saleDate === null || p.saleDate >= exDate)
+    : p.purchaseDate <= dividend.noticeDate &&
         (p.saleDate === null || p.saleDate > dividend.noticeDate);
-  return purchases
-    .filter(entitled)
-    .reduce((acc, p) => acc.plus(p.amount), new Decimal(0));
+};
+
+const sumAmount = (purchases: Pick<PurchaseDateBalance, 'amount'>[]): Decimal =>
+  purchases.reduce((acc, p) => acc.plus(p.amount), new Decimal(0));
+
+type CurrencySum = { krw: Decimal; usd: Decimal; usdKrw: Decimal };
+
+const newSum = (): CurrencySum => ({
+  krw: new Decimal(0),
+  usd: new Decimal(0),
+  usdKrw: new Decimal(0),
+});
+
+/** USD는 달러 합과 원화 환산 합(환율 없는 건 제외)에, KRW는 원화 합에 더한다 */
+const addTo = (
+  sum: CurrencySum,
+  currency: Currency,
+  amount: string,
+  krwAmount: string | null,
+): void => {
+  if (currency === Currency.USD) {
+    sum.usd = sum.usd.plus(amount);
+    if (krwAmount !== null) {
+      sum.usdKrw = sum.usdKrw.plus(krwAmount);
+    }
+  } else {
+    sum.krw = sum.krw.plus(amount);
+  }
 };
 
 const summarize = (items: DividendItemDto[]): DividendSummaryDto => {
-  let krw = new Decimal(0);
-  let usd = new Decimal(0);
-  let usdKrw = new Decimal(0);
+  const pre = newSum();
+  const post = newSum();
   for (const item of items) {
-    if (item.currency === Currency.USD) {
-      usd = usd.plus(item.amount);
-      if (item.krwAmount !== null) {
-        usdKrw = usdKrw.plus(item.krwAmount);
-      }
-    } else {
-      krw = krw.plus(item.amount);
-    }
+    addTo(pre, item.currency, item.amount, item.krwAmount);
+    addTo(post, item.currency, item.afterTaxAmount, item.afterTaxKrwAmount);
   }
   return {
-    krwAmount: toKrw(krw),
-    usdAmount: truncateByCurrency(usd, Currency.USD),
-    usdKrwAmount: toKrw(usdKrw),
-    totalKrwAmount: toKrw(krw.plus(usdKrw)),
+    krwAmount: toKrw(pre.krw),
+    usdAmount: truncateByCurrency(pre.usd, Currency.USD),
+    usdKrwAmount: toKrw(pre.usdKrw),
+    totalKrwAmount: toKrw(pre.krw.plus(pre.usdKrw)),
+    afterTaxKrwAmount: toKrw(post.krw),
+    afterTaxUsdAmount: truncateByCurrency(post.usd, Currency.USD),
+    afterTaxUsdKrwAmount: toKrw(post.usdKrw),
+    afterTaxTotalKrwAmount: toKrw(post.krw.plus(post.usdKrw)),
   };
 };
 

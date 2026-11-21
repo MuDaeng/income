@@ -40,6 +40,25 @@ export class DividendItemDto {
   @ApiProperty({ description: '배당금 (종목 통화) = 주당 배당금 × 보유 수량' })
   amount: string;
 
+  @ApiProperty({
+    description:
+      '세금 (종목 통화). 일반 계좌 매수분에만 KRW 15.4%·USD 15%, ISA·IRP·연금저축은 0',
+  })
+  taxAmount: string;
+
+  @ApiProperty({ description: '세후 배당금 (종목 통화) = 배당금 − 세금' })
+  afterTaxAmount: string;
+
+  @ApiProperty({ type: String, nullable: true, description: '세후 달러 배당금 (KRW 종목은 null)' })
+  afterTaxUsdAmount: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: '세후 원화 배당금 (USD 종목은 지급일 환율로 환산, 환율이 없으면 null)',
+  })
+  afterTaxKrwAmount: string | null;
+
   @ApiProperty({ type: String, nullable: true, description: '달러 배당금 (KRW 종목은 null)' })
   usdAmount: string | null;
 
@@ -69,6 +88,18 @@ export class DividendSummaryDto {
 
   @ApiProperty({ description: '총배당금 (원화) = KRW 합계 + USD 원화 환산 합계' })
   totalKrwAmount: string;
+
+  @ApiProperty({ description: '세후 한국증권(KRW) 배당금 합계 (원화)' })
+  afterTaxKrwAmount: string;
+
+  @ApiProperty({ description: '세후 미국증권(USD) 배당금 합계 (달러)' })
+  afterTaxUsdAmount: string;
+
+  @ApiProperty({ description: '세후 미국증권(USD) 배당금 원화 환산 합계 (환율 없는 건 제외)' })
+  afterTaxUsdKrwAmount: string;
+
+  @ApiProperty({ description: '세후 총배당금 (원화)' })
+  afterTaxTotalKrwAmount: string;
 }
 
 export class MonthlyDividendDto {

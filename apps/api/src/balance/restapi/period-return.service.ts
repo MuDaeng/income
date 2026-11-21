@@ -75,17 +75,28 @@ export class PeriodReturnService {
       authUser,
       { from, to, accountId },
     );
-    const dividends = new Map<string, { usd: Decimal; krw: Decimal }>();
+    const dividends = new Map<
+      string,
+      { usd: Decimal; krw: Decimal; afterTaxUsd: Decimal; afterTaxKrw: Decimal }
+    >();
     for (const item of history.months.flatMap((month) => month.items)) {
       const sum = dividends.get(item.securityId) ?? {
         usd: new Decimal(0),
         krw: new Decimal(0),
+        afterTaxUsd: new Decimal(0),
+        afterTaxKrw: new Decimal(0),
       };
       if (item.usdAmount !== null) {
         sum.usd = sum.usd.plus(item.usdAmount);
       }
       if (item.krwAmount !== null) {
         sum.krw = sum.krw.plus(item.krwAmount);
+      }
+      if (item.afterTaxUsdAmount !== null) {
+        sum.afterTaxUsd = sum.afterTaxUsd.plus(item.afterTaxUsdAmount);
+      }
+      if (item.afterTaxKrwAmount !== null) {
+        sum.afterTaxKrw = sum.afterTaxKrw.plus(item.afterTaxKrwAmount);
       }
       dividends.set(item.securityId, sum);
     }
@@ -133,12 +144,21 @@ export class PeriodReturnService {
         usdAmount:
           security.currency === Currency.USD ? toUsd(sum?.usd ?? 0) : null,
         krwAmount: toKrw(sum?.krw ?? 0),
+        afterTaxUsdAmount:
+          security.currency === Currency.USD
+            ? toUsd(sum?.afterTaxUsd ?? 0)
+            : null,
+        afterTaxKrwAmount: toKrw(sum?.afterTaxKrw ?? 0),
       };
     });
 
     const totalItems: TotalReturnItemDto[] = evaluationItems.map((e, i) => {
       const dividendAmount = dividendItems[i].krwAmount;
       const totalAmount = new Decimal(e.krwEvaluationAmount).plus(dividendAmount);
+      const afterTaxDividendAmount = dividendItems[i].afterTaxKrwAmount;
+      const afterTaxTotalAmount = new Decimal(e.krwEvaluationAmount).plus(
+        afterTaxDividendAmount,
+      );
       return {
         securityId: e.securityId,
         name: e.name,
@@ -148,6 +168,10 @@ export class PeriodReturnService {
         totalAmount: toKrw(totalAmount),
         profit: toKrw(totalAmount.minus(e.krwPurchaseAmount)),
         returnRate: returnRate(e.krwPurchaseAmount, totalAmount),
+        afterTaxDividendAmount,
+        afterTaxTotalAmount: toKrw(afterTaxTotalAmount),
+        afterTaxProfit: toKrw(afterTaxTotalAmount.minus(e.krwPurchaseAmount)),
+        afterTaxReturnRate: returnRate(e.krwPurchaseAmount, afterTaxTotalAmount),
       };
     });
 
@@ -156,6 +180,10 @@ export class PeriodReturnService {
     const evaluationSum = sum(evaluationItems.map((e) => e.krwEvaluationAmount));
     const dividendKrwSum = sum(dividendItems.map((d) => d.krwAmount));
     const totalSum = evaluationSum.plus(dividendKrwSum);
+    const afterTaxDividendKrwSum = sum(
+      dividendItems.map((d) => d.afterTaxKrwAmount),
+    );
+    const afterTaxTotalSum = evaluationSum.plus(afterTaxDividendKrwSum);
 
     return {
       from,
@@ -176,6 +204,10 @@ export class PeriodReturnService {
         total: {
           usdAmount: toUsd(sum(dividendItems.map((d) => d.usdAmount))),
           krwAmount: toKrw(dividendKrwSum),
+          afterTaxUsdAmount: toUsd(
+            sum(dividendItems.map((d) => d.afterTaxUsdAmount)),
+          ),
+          afterTaxKrwAmount: toKrw(afterTaxDividendKrwSum),
         },
       },
       total: {
@@ -187,6 +219,10 @@ export class PeriodReturnService {
           totalAmount: toKrw(totalSum),
           profit: toKrw(totalSum.minus(purchaseSum)),
           returnRate: returnRate(purchaseSum, totalSum),
+          afterTaxDividendAmount: toKrw(afterTaxDividendKrwSum),
+          afterTaxTotalAmount: toKrw(afterTaxTotalSum),
+          afterTaxProfit: toKrw(afterTaxTotalSum.minus(purchaseSum)),
+          afterTaxReturnRate: returnRate(purchaseSum, afterTaxTotalSum),
         },
       },
     };
