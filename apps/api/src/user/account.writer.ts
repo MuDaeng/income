@@ -76,6 +76,14 @@ export class AccountWriter {
     return this.create(userId, securityCompany, AccountType.NORMAL);
   }
 
+  /** 계좌 삭제 */
+  async remove(account: Account): Promise<void> {
+    await this.accountRepository.delete({
+      userId: account.userId,
+      id: account.id,
+    });
+  }
+
   /** 계좌 타입 변경 */
   updateType(account: Account, accountType: AccountType): Promise<Account> {
     account.accountType = accountType;

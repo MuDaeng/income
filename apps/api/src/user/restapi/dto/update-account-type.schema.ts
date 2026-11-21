@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AccountType } from '@app/common';
 
-/** 계좌 id (PATCH /accounts/:id/type 경로) */
+/** 계좌 id (PATCH /accounts/:id/type, DELETE /accounts/:id 경로) */
 export const accountIdParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });

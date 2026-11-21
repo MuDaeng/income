@@ -1,7 +1,13 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Account, AccountType, SecurityCompany, User } from '@app/common';
+import {
+  Account,
+  AccountType,
+  PurchaseDateBalance,
+  SecurityCompany,
+  User,
+} from '@app/common';
 import { AccountReader } from '../../src/user/account.reader.js';
 import { AccountWriter } from '../../src/user/account.writer.js';
 
@@ -35,6 +41,7 @@ describe('AccountWriter.resolve', () => {
         AccountReader,
         { provide: getRepositoryToken(Account), useValue: accountRepository },
         { provide: getRepositoryToken(User), useValue: userRepository },
+        { provide: getRepositoryToken(PurchaseDateBalance), useValue: {} },
       ],
     }).compile();
     writer = moduleRef.get(AccountWriter);

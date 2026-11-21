@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -12,6 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -67,6 +70,21 @@ export class AccountController {
     @Body({ schema: createAccountSchema }) body: CreateAccountRequest,
   ): Promise<AccountDto> {
     return this.accountService.createAccount(user, body);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: '계좌 삭제 (매수 내역이 남아 있으면 400 — 먼저 옮기거나 삭제)',
+  })
+  @ApiNoContentResponse()
+  deleteAccount(
+    @CurrentUser() user: AuthUser,
+    @Param({ schema: accountIdParamSchema }) param: AccountIdParam,
+  ): Promise<void> {
+    return this.accountService.deleteAccount(user, param);
   }
 
   @Patch(':id/type')
