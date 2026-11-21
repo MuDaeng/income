@@ -9,12 +9,12 @@ describe('dividendHistorySchema', () => {
     ).toBe(true);
   });
 
-  it('securityCompany는 선택이고, 목록에 없는 값이면 securityCompany 오류', () => {
-    expect(dividendHistorySchema.safeParse({ securityCompany: 'KIWOOM' }).success).toBe(true);
+  it('accountId는 선택이고, 양의 정수가 아니면 accountId 오류', () => {
+    expect(dividendHistorySchema.safeParse({ accountId: '1' }).success).toBe(true);
 
-    const result = dividendHistorySchema.safeParse({ securityCompany: 'ROBINHOOD' });
+    const result = dividendHistorySchema.safeParse({ accountId: '0' });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0].path).toEqual(['securityCompany']);
+    expect(result.error?.issues[0].path).toEqual(['accountId']);
   });
 
   it('날짜 형식이 아니면 거절한다', () => {

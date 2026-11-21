@@ -12,6 +12,7 @@ import {
   UserBalance,
 } from '@app/common';
 import { SecurityRefresher } from '../../../src/security/security.refresher.js';
+import { accountProviders } from '../account-providers.js';
 import { BalanceService } from '../../../src/balance/restapi/balance.service.js';
 import { PurchaseRateReader } from '../../../src/balance/purchase-rate.reader.js';
 import { PurchaseWriter } from '../../../src/balance/purchase.writer.js';
@@ -42,7 +43,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
     save: vi.fn(),
     create: vi.fn(),
   };
-  const userBalanceRepository = { findOneBy: vi.fn(), save: vi.fn(), create: vi.fn() };
+  const userBalanceRepository = { existsBy: vi.fn(), save: vi.fn(), create: vi.fn() };
   const userRepository = { findOne: vi.fn() };
   const securityRepository = { findOneBy: vi.fn() };
   const dailySecurityRepository = { findOneBy: vi.fn() };
@@ -58,7 +59,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
       lowestPrice: '71500.000000',
       highestPrice: '72300.000000',
     });
-    userBalanceRepository.findOneBy.mockResolvedValue({ userId: 1 });
+    userBalanceRepository.existsBy.mockResolvedValue(true);
     purchaseDateBalanceRepository.findOne.mockResolvedValue(null);
     purchaseDateBalanceRepository.create.mockImplementation((row: object) => row);
     purchaseDateBalanceRepository.save.mockImplementation((row: object) =>
@@ -72,6 +73,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
         ExchangeRateReader,
         PurchaseRateReader,
         PurchaseWriter,
+        ...accountProviders(),
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,
@@ -93,7 +95,7 @@ describe('BalanceService.registerBalance 배당 갱신', () => {
     expect(securityRefresher.refresh).toHaveBeenCalledWith(SAMSUNG);
     expect(saved).toMatchObject({
       securityId: SAMSUNG.id,
-      securityCompany: SecurityCompany.KIWOOM,
+      accountId: 1,
       sequence: 1,
       amount: '10',
     });

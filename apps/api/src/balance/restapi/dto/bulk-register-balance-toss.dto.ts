@@ -77,8 +77,36 @@ export class TossTransaction {
   isCancellation: boolean;
 }
 
+/** 출고 한 건의 키 (거래 id가 없어 ISIN·결제일·수량·순번으로 구분) */
+export class TossTransferKeyDto {
+  @ApiProperty({ description: '출고 종목의 ISIN' })
+  isinCode: string;
+
+  @ApiProperty({ description: '결제일 YYYY-MM-DD' })
+  settlementDate: string;
+
+  @ApiProperty({ description: '출고 수량 (거래내역의 quantity)' })
+  quantity: string;
+
+  @ApiProperty({ description: '같은 (ISIN, 결제일, 수량) 출고 안에서의 순번 (0부터, 처리일시 순)' })
+  index: number;
+}
+
 /** Toss 거래내역으로 잔고 일괄 등록 요청 */
 export class BulkRegisterBalanceTossDto {
+  @ApiProperty({
+    required: false,
+    description: '등록할 내 Toss 계좌 id (GET /accounts). 생략하면 첫 Toss 계좌, 없으면 일반 계좌를 새로 만든다',
+  })
+  accountId?: number;
+
+  @ApiProperty({
+    type: [TossTransferKeyDto],
+    required: false,
+    description: '매도로 처리할 출고 (타사 이체 등 실제로 나간 주식). 출고는 기본으로 주식 빌려주기로 보고 매도하지 않는다. 응답 lentTransfers의 key를 그대로 보낸다',
+  })
+  confirmedTransfersOut?: TossTransferKeyDto[];
+
   @ApiProperty({
     type: [TossTransaction],
     description: '거래 목록. 미결제 먼저, 각 그룹 안에서는 정렬 기준 시각의 최신순',
@@ -94,21 +122,36 @@ export class TossSkippedTransactionDto {
   @ApiProperty({ type: String, nullable: true, description: '거래의 ISIN' })
   isinCode: string | null;
 
-  @ApiProperty({ description: '건너뛴 이유 (취소 거래 / 종목을 찾을 수 없음 / 수량 또는 단가 없음 / 입고일 시세 없음)' })
+  @ApiProperty({ description: '건너뛴 이유 (취소 거래 / 종목을 찾을 수 없음 / 수량 또는 단가 없음 / 입고일 시세 없음 / 빌려주기 반환 / 빌려주기 출고(반환됨))' })
   reason: string;
+}
+
+/** 아직 반환되지 않은 빌려주기 출고 (대여 중으로 보고 매도하지 않은 출고) */
+export class TossLentTransferDto {
+  @ApiProperty({ type: TossTransferKeyDto, description: '실제 출고였다면 다음 요청의 confirmedTransfersOut에 그대로 보낼 키' })
+  key: TossTransferKeyDto;
+
+  @ApiProperty({ description: '아직 반환되지 않은 수량 (부분 반환이면 출고 수량보다 적다)' })
+  remainingQuantity: string;
 }
 
 /** Toss 거래내역 일괄 등록 결과 */
 export class BulkRegisterBalanceTossResponse {
-  @ApiProperty({ description: '삭제한 기존 TOSS 매수분(매도분 포함) 행 수' })
+  @ApiProperty({ description: '등록한 계좌 id' })
+  accountId: number;
+
+  @ApiProperty({ description: '삭제한 그 계좌의 기존 매수분(매도분 포함) 행 수' })
   deletedCount: number;
 
-  @ApiProperty({ description: '등록한 BUY·SECURITIES_TRANSFER_IN 거래 수' })
+  @ApiProperty({ description: '등록한 BUY·SECURITIES_TRANSFER_IN 거래 수 (빌려주기 반환으로 전량 상쇄된 입고 제외)' })
   boughtCount: number;
 
-  @ApiProperty({ description: '매도 처리한 SELL·SECURITIES_TRANSFER_OUT 거래 수' })
+  @ApiProperty({ description: '매도 처리한 SELL·실제 출고(confirmedTransfersOut) 거래 수' })
   soldCount: number;
 
   @ApiProperty({ type: [TossSkippedTransactionDto], description: '건너뛴 매수·매도·입출고 거래' })
   skipped: TossSkippedTransactionDto[];
+
+  @ApiProperty({ type: [TossLentTransferDto], description: '대여 중으로 보고 무시한 출고 (실제 출고면 confirmedTransfersOut으로 다시 요청)' })
+  lentTransfers: TossLentTransferDto[];
 }

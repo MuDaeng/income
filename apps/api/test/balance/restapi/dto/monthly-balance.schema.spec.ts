@@ -13,7 +13,7 @@ describe('monthlyBalanceSchema', () => {
     ['같은 달', { from: '2026-11', to: '2026-11' }],
     ['이번 달까지', { from: '2025-01', to: '2026-11' }],
     ['최대 120개월', { from: '2016-12', to: '2026-11' }],
-    ['증권사 지정', { from: '2026-01', to: '2026-11', securityCompany: 'KIWOOM' }],
+    ['계좌 지정', { from: '2026-01', to: '2026-11', accountId: '1' }],
   ])('%s은 통과', (_, input) => {
     expect(monthlyBalanceSchema.safeParse(input).success).toBe(true);
   });
@@ -26,7 +26,7 @@ describe('monthlyBalanceSchema', () => {
     ['from > to', { from: '2026-10', to: '2026-09' }],
     ['미래 달', { from: '2026-11', to: '2026-12' }],
     ['120개월 초과', { from: '2016-11', to: '2026-11' }],
-    ['없는 증권사', { from: '2026-01', to: '2026-11', securityCompany: 'ROBINHOOD' }],
+    ['0번 계좌', { from: '2026-01', to: '2026-11', accountId: '0' }],
   ])('%s은 실패', (_, input) => {
     expect(monthlyBalanceSchema.safeParse(input).success).toBe(false);
   });

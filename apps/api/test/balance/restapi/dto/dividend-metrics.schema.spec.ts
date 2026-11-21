@@ -3,20 +3,20 @@ import { dividendMetricsSchema } from '../../../../src/balance/restapi/dto/divid
 describe('dividendMetricsSchema', () => {
   it.each([
     ['생략 (전체 증권사)', {}],
-    ['증권사 값', { securityCompany: 'TOSS' }],
+    ['계좌 id', { accountId: '2' }],
   ])('%s이면 통과한다', (_, input) => {
     expect(dividendMetricsSchema.safeParse(input).success).toBe(true);
   });
 
   it.each([
-    ['목록에 없는 값', { securityCompany: 'ROBINHOOD' }],
-    ['빈 문자열', { securityCompany: '' }],
-  ])('%s이면 securityCompany 오류', (_, input) => {
+    ['0', { accountId: '0' }],
+    ['빈 문자열', { accountId: 'abc' }],
+  ])('%s이면 accountId 오류', (_, input) => {
     const result = dividendMetricsSchema.safeParse(input);
 
     expect(result.success).toBe(false);
     expect(result.error?.issues.map((issue) => issue.path)).toEqual([
-      ['securityCompany'],
+      ['accountId'],
     ]);
   });
 });

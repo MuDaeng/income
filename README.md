@@ -9,7 +9,7 @@
 
 - **Google 로그인**: Google OAuth 후 JWT 액세스 토큰과 httpOnly 쿠키의 리프레시 토큰(재발급 시 교체)으로 인증
 - **종목 검색**: 종목코드(심볼) 또는 종목명으로 검색하고, 종목별 일별 시세·월별 주당 배당금 조회
-- **잔고 관리**: 증권사별 매수 등록, 매도·일괄매도(최근 매수분부터) 처리, 구매 환율·증권사 수정, 잘못 등록한 매수분 삭제, 매수 내역 조회
+- **잔고 관리**: 계좌(증권사·계좌타입)별 매수 등록, 매도·일괄매도(최근 매수분부터) 처리, 구매 환율 수정·계좌 이동, 잘못 등록한 매수분 삭제, 매수 내역 조회
 - **Toss 거래내역 가져오기**: Toss 거래내역(매수·매도·입출고)으로 TOSS 잔고를 한 번에 다시 등록 (체결일 = 결제일 − 2거래일)
 - **통합잔고**: 종목별 매입평균가·평가금액·수익률과 한국/미국/전체 합계 (USD는 최신 환율로 원화 환산)
 - **배당금 내역**: 배당락일 전날 보유수량 × 주당배당금, 월별·기간 합계 (USD는 지급일 환율로 원화 환산)
@@ -42,7 +42,7 @@
 
 ```
 apps/
-  api/     HTTP API (admin, auth, balance, security)
+  api/     HTTP API (admin, auth, balance, security, user)
   batch/   매일 도는 수집·정리 작업 (HTTP 없음)
 libs/
   common/  DB 설정, TypeORM 엔티티, 외부 API 클라이언트, JWT 발급, 수집 로직 (api·batch 공용)
@@ -71,23 +71,24 @@ deploy/    Nginx 설정
 | POST | `/auth/access` | 로그인 직후 액세스 토큰 발급 |
 | POST | `/auth/reissue` | 액세스·리프레시 토큰 재발급 |
 | GET | `/auth/me` | 내 정보 |
+| GET | `/accounts` | 내 계좌 목록 (`securityCompany`를 주면 그 증권사 계좌만) |
+| PATCH | `/accounts/:id/type` | 계좌 타입 변경 (일반·ISA·IRP·연금저축) |
 | GET | `/securities` | 종목 검색 |
 | GET | `/daily-securities` | 종목 일별 시세 |
 | GET | `/dividends` | 종목 월별 1주당 현금배당금 |
-| POST | `/balance` | 매수 등록 (증권사 `securityCompany` 필수) |
+| POST | `/balance` | 매수 등록 (증권사 `securityCompany` 필수, `accountId` 선택 — 없으면 그 증권사 첫 계좌, 그것도 없으면 일반 계좌 생성) |
 | POST | `/balance/sale` | 매도 등록 |
-| POST | `/balance/sale/bulk` | 증권사별 일괄매도 (매수일 최근 순) |
-| POST | `/balance/toss` | Toss 거래내역으로 TOSS 잔고 일괄 재등록 |
-| GET | `/balance` | 통합잔고 (`securityCompany`를 주면 그 증권사만) |
-| GET | `/balance/purchases` | 종목 매수 내역 (`securityCompany`를 주면 그 증권사만) |
-| GET | `/balance/security-companies` | 매수 기록이 있는 증권사 목록 |
+| POST | `/balance/sale/bulk` | 계좌별 일괄매도 (매수일 최근 순) |
+| POST | `/balance/toss` | Toss 거래내역으로 Toss 계좌 잔고 일괄 재등록 (`accountId` 선택, 주식 빌려주기 출고·반환 자동 상쇄, 실제 출고는 `confirmedTransfersOut`로 지정) |
+| GET | `/balance` | 통합잔고 (`accountId`를 주면 그 계좌만) |
+| GET | `/balance/purchases` | 종목 매수 내역 (`accountId`를 주면 그 계좌만) |
 | PATCH | `/balance/purchases` | 매수분 구매 환율 수정 |
-| PATCH | `/balance/purchases/security-company` | 매수분 증권사 수정 |
+| PATCH | `/balance/purchases/account` | 매수분을 내 다른 계좌로 이동 (타사 이전 등) |
 | DELETE | `/balance/purchases` | 매수 내역 삭제 |
-| GET | `/balance/dividends` | 배당금 내역 (`securityCompany`를 주면 그 증권사 보유분만) |
-| GET | `/balance/dividend-metrics` | 배당 지표: 보유 종목별 최근 12개월 주당 배당·예상 연배당·YOC·현재 배당률·배당 성장률(세전) (`securityCompany`를 주면 그 증권사만) |
-| GET | `/balance/monthly` | 월말별 원금·평가금액·평가금액+누적배당금 (from~to 년월, 이번 달은 오늘 기준, `securityCompany`를 주면 그 증권사만) |
-| GET | `/balance/returns` | 기간 수익률 (`securityCompany`를 주면 그 증권사만) |
+| GET | `/balance/dividends` | 배당금 내역 (`accountId`를 주면 그 계좌 보유분만) |
+| GET | `/balance/dividend-metrics` | 배당 지표: 보유 종목별 최근 12개월 주당 배당·예상 연배당·YOC·현재 배당률·배당 성장률(세전) (`accountId`를 주면 그 계좌만) |
+| GET | `/balance/monthly` | 월말별 원금·평가금액·평가금액+누적배당금 (from~to 년월, 이번 달은 오늘 기준, `accountId`를 주면 그 계좌만) |
+| GET | `/balance/returns` | 기간 수익률 (`accountId`를 주면 그 계좌만) |
 | GET | `/admin/batch-histories` | 배치 실행 이력 (관리자) |
 | GET | `/admin/security-searches/price` | 종목별 국내 시세 조회 이력 (관리자) |
 

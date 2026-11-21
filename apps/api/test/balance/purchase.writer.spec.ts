@@ -1,21 +1,25 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { In } from 'typeorm';
-import {
-  PurchaseDateBalance,
-  SecurityCompany,
-  User,
-  UserBalance,
-} from '@app/common';
+import { PurchaseDateBalance, User, UserBalance } from '@app/common';
 import { PurchaseWriter } from '../../src/balance/purchase.writer.js';
 
-describe('PurchaseWriter.removeByCompany', () => {
-  const purchaseDateBalanceRepository = { find: vi.fn(), delete: vi.fn() };
-  const userBalanceRepository = { delete: vi.fn() };
+describe('PurchaseWriter', () => {
+  const purchaseDateBalanceRepository = {
+    delete: vi.fn(),
+    update: vi.fn(),
+    existsBy: vi.fn(),
+  };
+  const userBalanceRepository = {
+    delete: vi.fn(),
+    existsBy: vi.fn(),
+    save: vi.fn(),
+    create: vi.fn(),
+  };
   let writer: PurchaseWriter;
 
   beforeEach(async () => {
     vi.resetAllMocks();
+    userBalanceRepository.create.mockImplementation((value: object) => value);
     const moduleRef = await Test.createTestingModule({
       providers: [
         PurchaseWriter,
@@ -33,51 +37,75 @@ describe('PurchaseWriter.removeByCompany', () => {
     writer = moduleRef.get(PurchaseWriter);
   });
 
-  it('그 증권사 행을 지우고, 남은 매수분이 없는 종목의 UserBalance만 지운다', async () => {
-    purchaseDateBalanceRepository.find
-      // 1) 지울 TOSS 행의 종목
-      .mockResolvedValueOnce([
-        { securityId: 'A' },
-        { securityId: 'A' },
-        { securityId: 'B' },
-      ])
-      // 2) 삭제 후 남은 행 (B는 다른 증권사 매수분이 있음)
-      .mockResolvedValueOnce([{ securityId: 'B' }]);
-    purchaseDateBalanceRepository.delete.mockResolvedValue({ affected: 3 });
+  describe('removeByAccount', () => {
+    it('그 계좌의 매수분과 보유 종목을 모두 지우고 지운 행 수를 돌려준다', async () => {
+      purchaseDateBalanceRepository.delete.mockResolvedValue({ affected: 3 });
 
-    const deleted = await writer.removeByCompany(1, SecurityCompany.TOSS);
-
-    expect(deleted).toBe(3);
-    expect(purchaseDateBalanceRepository.delete).toHaveBeenCalledWith({
-      userId: 1,
-      securityCompany: SecurityCompany.TOSS,
-    });
-    expect(purchaseDateBalanceRepository.find).toHaveBeenLastCalledWith({
-      where: { userId: 1, securityId: In(['A', 'B']) },
-      select: { securityId: true },
-    });
-    expect(userBalanceRepository.delete).toHaveBeenCalledWith({
-      userId: 1,
-      securityId: In(['A']),
+      expect(await writer.removeByAccount(1, 2)).toBe(3);
+      expect(purchaseDateBalanceRepository.delete).toHaveBeenCalledWith({
+        userId: 1,
+        accountId: 2,
+      });
+      expect(userBalanceRepository.delete).toHaveBeenCalledWith({
+        userId: 1,
+        accountId: 2,
+      });
     });
   });
 
-  it('지울 행이 없으면 아무것도 지우지 않는다', async () => {
-    purchaseDateBalanceRepository.find.mockResolvedValue([]);
+  describe('moveAccount', () => {
+    const purchase = () =>
+      ({
+        userId: 1,
+        accountId: 1,
+        securityId: 'A',
+        purchaseDate: '2026-11-01',
+        sequence: 2,
+      }) as PurchaseDateBalance;
 
-    expect(await writer.removeByCompany(1, SecurityCompany.TOSS)).toBe(0);
-    expect(purchaseDateBalanceRepository.delete).not.toHaveBeenCalled();
-    expect(userBalanceRepository.delete).not.toHaveBeenCalled();
-  });
+    it('옮길 계좌의 UserBalance를 만들고 PK의 accountId를 update로 바꾼 뒤, 빈 원래 UserBalance를 지운다', async () => {
+      userBalanceRepository.existsBy.mockResolvedValue(false);
+      purchaseDateBalanceRepository.existsBy.mockResolvedValue(false);
 
-  it('모든 종목에 다른 매수분이 남으면 UserBalance는 지우지 않는다', async () => {
-    purchaseDateBalanceRepository.find
-      .mockResolvedValueOnce([{ securityId: 'A' }])
-      .mockResolvedValueOnce([{ securityId: 'A' }]);
-    purchaseDateBalanceRepository.delete.mockResolvedValue({ affected: 1 });
+      const moved = await writer.moveAccount(purchase(), 3);
 
-    await writer.removeByCompany(1, SecurityCompany.TOSS);
+      expect(moved.accountId).toBe(3);
+      expect(userBalanceRepository.save).toHaveBeenCalledWith({
+        userId: 1,
+        accountId: 3,
+        securityId: 'A',
+      });
+      expect(purchaseDateBalanceRepository.update).toHaveBeenCalledWith(
+        {
+          userId: 1,
+          accountId: 1,
+          securityId: 'A',
+          purchaseDate: '2026-11-01',
+          sequence: 2,
+        },
+        { accountId: 3 },
+      );
+      expect(userBalanceRepository.delete).toHaveBeenCalledWith({
+        userId: 1,
+        accountId: 1,
+        securityId: 'A',
+      });
+    });
 
-    expect(userBalanceRepository.delete).not.toHaveBeenCalled();
+    it('원래 계좌에 매수분이 남으면 원래 UserBalance는 두고, 옮길 계좌에 이미 있으면 만들지 않는다', async () => {
+      userBalanceRepository.existsBy.mockResolvedValue(true);
+      purchaseDateBalanceRepository.existsBy.mockResolvedValue(true);
+
+      await writer.moveAccount(purchase(), 3);
+
+      expect(userBalanceRepository.save).not.toHaveBeenCalled();
+      expect(userBalanceRepository.delete).not.toHaveBeenCalled();
+    });
+
+    it('같은 계좌면 아무것도 하지 않는다', async () => {
+      await writer.moveAccount(purchase(), 1);
+
+      expect(purchaseDateBalanceRepository.update).not.toHaveBeenCalled();
+    });
   });
 });

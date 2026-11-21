@@ -3,21 +3,21 @@ import { integratedBalanceSchema } from '../../../../src/balance/restapi/dto/int
 describe('integratedBalanceSchema', () => {
   it.each([
     ['생략 (전체 증권사)', {}],
-    ['국내 증권사 값', { securityCompany: 'KIWOOM' }],
-    ['기타', { securityCompany: 'ETC' }],
+    ['계좌 id', { accountId: '1' }],
+    ['다른 계좌 id', { accountId: '3' }],
   ])('%s이면 통과한다', (_, input) => {
     expect(integratedBalanceSchema.safeParse(input).success).toBe(true);
   });
 
   it.each([
-    ['목록에 없는 값', { securityCompany: 'ROBINHOOD' }],
-    ['빈 문자열', { securityCompany: '' }],
-  ])('%s이면 securityCompany 오류', (_, input) => {
+    ['0', { accountId: '0' }],
+    ['빈 문자열', { accountId: 'abc' }],
+  ])('%s이면 accountId 오류', (_, input) => {
     const result = integratedBalanceSchema.safeParse(input);
 
     expect(result.success).toBe(false);
     expect(result.error?.issues.map((issue) => issue.path)).toEqual([
-      ['securityCompany'],
+      ['accountId'],
     ]);
   });
 });

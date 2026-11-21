@@ -79,12 +79,29 @@ export const tossTransactionSchema = z.object({
   isCancellation: z.boolean(),
 });
 
+/** 실제 출고(타사 이체 등)로 매도 처리할 출고 한 건. 응답 lentTransfers의 키를 그대로 보낸다 */
+export const tossTransferKeySchema = z.object({
+  isinCode: z.string().min(1),
+  settlementDate: z.iso.date(),
+  quantity: unsignedDecimalString,
+  /** 같은 (ISIN, 결제일, 수량) 출고 안에서의 순번 (0부터) */
+  index: z.number().int().min(0),
+});
+
 export const bulkRegisterBalanceTossSchema = z.object({
+  /** 등록할 내 Toss 계좌 id (GET /accounts). 생략하면 첫 Toss 계좌, 없으면 일반 계좌를 새로 만든다 */
+  accountId: z.number().int().positive().optional(),
   /** Toss 거래내역 조회 응답의 `transactions` */
   transactionList: z.array(tossTransactionSchema).min(1),
+  /**
+   * 매도로 처리할 출고. 출고는 기본으로 주식 빌려주기(대여 중)로 보고 매도하지 않으므로,
+   * 실제로 주식이 나간 출고만 여기에 넣는다
+   */
+  confirmedTransfersOut: z.array(tossTransferKeySchema).default([]),
 });
 
 export type TossTransactionRequest = z.infer<typeof tossTransactionSchema>;
+export type TossTransferKeyRequest = z.infer<typeof tossTransferKeySchema>;
 export type BulkRegisterBalanceTossRequest = z.infer<
   typeof bulkRegisterBalanceTossSchema
 >;

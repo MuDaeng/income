@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { BalanceModule } from './balance/balance.module.js';
 import { THROTTLER_OPTIONS } from './rate-limit.js';
 import { SecurityModule } from './security/security.module.js';
+import { UserModule } from './user/user.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { SecurityModule } from './security/security.module.js';
     AdminModule,
     BalanceModule,
     SecurityModule,
+    UserModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -8,6 +8,7 @@ import { Decimal } from 'decimal.js';
 import { In, IsNull, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import {
+  type Account,
   Currency,
   type DailyExchangeRate,
   decimalPlacesOf,
@@ -22,6 +23,8 @@ import { DailyPriceReader } from '../../security/daily-price.reader.js';
 import { ExchangeRateReader } from '../../security/exchange-rate.reader.js';
 import { addDays } from '../../security/iso-date.js';
 import { SecurityRefresher } from '../../security/security.refresher.js';
+import { AccountReader } from '../../user/account.reader.js';
+import { AccountWriter } from '../../user/account.writer.js';
 import type {
   BalanceItemDto,
   IntegratedBalanceResponse,
@@ -29,6 +32,7 @@ import type {
 import type { BulkSellBalanceRequest } from './dto/bulk-sell-balance.schema.js';
 import type {
   BulkRegisterBalanceTossResponse,
+  TossLentTransferDto,
   TossSkippedTransactionDto,
 } from './dto/bulk-register-balance-toss.dto.js';
 import type {
@@ -36,12 +40,12 @@ import type {
   TossTransactionRequest,
 } from './dto/bulk-register-balance-toss.schema.js';
 import { tossTradeDate } from '../toss-trade-date.js';
-import { companyAmountsOf } from '../company-amount.js';
-import type { CompanyAmountDto } from './dto/company-amount.dto.js';
+import { offsetTossLending, type TossTransfer } from '../toss-lending.js';
+import { accountAmountsOf } from '../account-amount.js';
+import type { AccountAmountDto } from './dto/account-amount.dto.js';
 import type { DeletePurchaseRequest } from './dto/delete-purchase.schema.js';
 import type { IntegratedBalanceRequest } from './dto/integrated-balance.schema.js';
 import type { RegisterBalanceRequest } from './dto/register-balance.schema.js';
-import type { SecurityCompanyListResponse } from './dto/security-company-list.dto.js';
 import type {
   PurchaseHistoryItemDto,
   PurchaseHistoryResponse,
@@ -51,13 +55,15 @@ import { PurchaseRateReader } from '../purchase-rate.reader.js';
 import { PurchaseWriter } from '../purchase.writer.js';
 import type { SellBalanceRequest } from './dto/sell-balance.schema.js';
 import type { UpdateExchangeRateRequest } from './dto/update-exchange-rate.schema.js';
-import type { UpdateSecurityCompanyRequest } from './dto/update-security-company.schema.js';
+import type { UpdatePurchaseAccountRequest } from './dto/update-purchase-account.schema.js';
 import { returnRate } from '../return-rate.js';
 
-/** Toss 일괄 등록에서 매수분으로 등록하는 거래 유형 (입고는 이벤트·소수점 주식 지급 등) */
+/** Toss 일괄 등록에서 매수분으로 등록하는 거래 유형 (입고는 이벤트·소수점 주식 지급, 빌려주기 반환 등) */
 const BUY_TYPES: readonly string[] = ['BUY', 'SECURITIES_TRANSFER_IN'];
-/** Toss 일괄 등록에서 LIFO 매도하는 거래 유형 */
+/** Toss 일괄 등록에서 LIFO 매도하는 거래 유형 (출고는 빌려주기 상쇄 후 실제 출고로 지정된 것만) */
 const SELL_TYPES: readonly string[] = ['SELL', 'SECURITIES_TRANSFER_OUT'];
+const TRANSFER_IN = 'SECURITIES_TRANSFER_IN';
+const TRANSFER_OUT = 'SECURITIES_TRANSFER_OUT';
 
 @Injectable()
 export class BalanceService {
@@ -73,6 +79,8 @@ export class BalanceService {
     private readonly exchangeRateReader: ExchangeRateReader,
     private readonly purchaseRateReader: PurchaseRateReader,
     private readonly purchaseWriter: PurchaseWriter,
+    private readonly accountReader: AccountReader,
+    private readonly accountWriter: AccountWriter,
   ) {}
 
   /**
@@ -93,7 +101,8 @@ export class BalanceService {
   /**
    * 매수 잔고 저장 (한 트랜잭션).
    * 1. 사용자 검증 2. 종목 검증 3. 매수일 시세 존재 검증 4. 매수 가격이 그날 저가~고가(경계 포함)인지 검증
-   * 5. UserBalance(없을 때만 생성) + PurchaseDateBalance(sequence = 같은 사용자·종목·매수일 안의 max + 1) 등록.
+   * 5. 계좌 결정(AccountWriter.resolve: accountId → 그 증권사의 첫 계좌 → 없으면 일반 계좌 생성)
+   *    + UserBalance(계좌별, 없을 때만 생성) + PurchaseDateBalance(sequence = 같은 사용자·종목·매수일 안의 max + 1) 등록.
    *    매도일(saleDate)은 입력에 있으면 저장하고, 없으면 null(보유 중).
    *
    * 동시 등록 시 같은 sequence나 중복 UserBalance가 생기지 않도록 먼저 User 행을 잠근다(PurchaseWriter.lockOwner).
@@ -147,11 +156,16 @@ export class BalanceService {
     }
 
     // 5. 등록
+    const account = await this.accountWriter.resolve(
+      userId,
+      input.securityCompany,
+      input.accountId,
+    );
     const saved = await this.purchaseWriter.append({
       userId,
+      accountId: account.id,
       securityId,
       purchaseDate,
-      securityCompany: input.securityCompany,
       amount,
       price,
       saleDate: input.saleDate ?? null,
@@ -167,8 +181,8 @@ export class BalanceService {
    * - 일부: 미매도 행에서 빼고, 같은 매도일·매수가의 매도 행이 있으면 거기에 더하고,
    *   없으면 새 행(saleDate·수량은 입력, 매수가는 미매도 행 값, sequence는 같은 매수일 안의 max + 1)을 저장
    *
-   * 매수가·구매 환율·증권사까지 같은 행만 합쳐서, 같은 날 다른 가격·다른 증권사에서 산 매수분과 섞이지 않게 한다.
-   * 새로 만드는 매도 행은 원래 매수분의 증권사를 그대로 가진다.
+   * 매수가·구매 환율·계좌까지 같은 행만 합쳐서, 같은 날 다른 가격·다른 계좌에서 산 매수분과 섞이지 않게 한다.
+   * 새로 만드는 매도 행은 원래 매수분의 계좌를 그대로 가진다.
    * registerBalance와 같은 이유로 먼저 User 행을 잠가 같은 사용자의 매수·매도를 순서대로 실행한다.
    */
   @Transactional()
@@ -203,7 +217,7 @@ export class BalanceService {
   }
 
   /**
-   * 증권사별 일괄매도. 그 증권사의 미매도 매수분 중 매도일 이전(포함)에 산 것을
+   * 계좌별 일괄매도. 계좌(accountId, 없으면 그 증권사의 첫 계좌)의 미매도 매수분 중 매도일 이전(포함)에 산 것을
    * 매수일이 최근인 순(같은 날은 sequence 큰 순)으로 매도 수량만큼 매도 처리한다(LIFO).
    * - 대상 보유 수량 합계 < 매도 수량: 400 (아무것도 매도하지 않음)
    * - 행마다의 전량/일부 매도·같은 매도 행 병합 규칙은 sellBalance와 같다(PurchaseWriter.sell).
@@ -219,6 +233,11 @@ export class BalanceService {
     const { securityId, securityCompany, saleDate } = input;
 
     await this.purchaseWriter.lockOwner(userId);
+    const account = await this.accountWriter.resolve(
+      userId,
+      securityCompany,
+      input.accountId,
+    );
 
     const security = await this.securityRepository.findOneBy({
       id: securityId,
@@ -230,8 +249,8 @@ export class BalanceService {
     const amount = new Decimal(truncateByCurrency(input.amount, currency));
     return this.purchaseWriter.sellLifo(
       userId,
+      account.id,
       securityId,
-      securityCompany,
       amount,
       saleDate,
       currency,
@@ -239,14 +258,17 @@ export class BalanceService {
   }
 
   /**
-   * Toss 거래내역으로 TOSS 증권사 잔고를 다시 만든다 (한 트랜잭션, 실패하면 삭제까지 롤백).
-   * 1. 사용자의 TOSS 매수분(매도분 포함)을 모두 삭제
-   * 2. BUY·SECURITIES_TRANSFER_IN을 거래일 오름차순으로 등록 — 일별 시세 존재·가격 범위는 검증하지 않음
+   * Toss 거래내역으로 Toss 계좌 하나의 잔고를 다시 만든다 (한 트랜잭션, 실패하면 삭제까지 롤백).
+   * 0. 계좌 결정 (accountId → 첫 Toss 계좌 → 없으면 일반 계좌 생성, AccountWriter.resolve)
+   * 1. 그 계좌의 매수분(매도분 포함)과 보유 종목을 모두 삭제
+   * 2. 주식 빌려주기 상쇄(offsetTossLending): 출고는 기본으로 빌려주기(대여 중)로 보고 매도하지 않고,
+   *    입고는 앞선 빌려주기 출고의 미반환 수량에서 먼저 빼서(반환) 무시한다. confirmedTransfersOut에 있는 출고만 실제 출고로 매도
+   * 3. BUY·남은 입고를 거래일 오름차순으로 등록 — 일별 시세 존재·가격 범위는 검증하지 않음
    *    (amount = quantity, price = filledPrice, 종목 통화로 버림, 환율은 registerBalance와 같은 규칙)
    *    입고는 체결 단가가 없으므로 입고일(포함) 이전 가장 최근 종가를 price로 쓴다
-   * 3. SELL·SECURITIES_TRANSFER_OUT을 거래일 오름차순으로 TOSS 매수분에서 LIFO 매도 (보유 부족이면 400)
-   * 취소 거래, isinCode로 종목을 못 찾는 거래, 수량·단가가 없는 거래, 시세가 없는 입고는 건너뛰고 skipped에 담는다.
-   * 그 밖의 유형(입출금·배당 등)은 무시.
+   * 4. SELL·실제 출고를 거래일 오름차순으로 그 계좌 매수분에서 LIFO 매도 (보유 부족이면 400)
+   * 취소 거래, isinCode로 종목을 못 찾는 거래, 수량·단가가 없는 거래, 시세가 없는 입고, 빌려주기로 상쇄된 입출고는
+   * 건너뛰고 skipped에 담는다. 반환되지 않은 빌려주기 출고는 lentTransfers로 돌려준다. 그 밖의 유형(입출금·배당 등)은 무시.
    * 거래일 = settlementDate − 2거래일(tossTradeDate, 국내 거래일 목록은 한 번만 읽음).
    * 외부 갱신(SecurityRefresher)은 하지 않는다(조회 API가 갱신).
    */
@@ -256,12 +278,17 @@ export class BalanceService {
     input: BulkRegisterBalanceTossRequest,
   ): Promise<BulkRegisterBalanceTossResponse> {
     const userId = authUser.id;
-    const securityCompany = SecurityCompany.TOSS;
 
     await this.purchaseWriter.lockOwner(userId);
-    const deletedCount = await this.purchaseWriter.removeByCompany(
+    const account = await this.accountWriter.resolve(
       userId,
-      securityCompany,
+      SecurityCompany.TOSS,
+      input.accountId,
+    );
+    const accountId = account.id;
+    const deletedCount = await this.purchaseWriter.removeByAccount(
+      userId,
+      accountId,
     );
 
     const trades = input.transactionList.filter(
@@ -304,8 +331,10 @@ export class BalanceService {
       date: string;
       quantity: string;
     };
+    type Transfer = TossTransfer & { trade: Trade };
     const buys: (Trade & { price: string })[] = [];
     const sells: Trade[] = [];
+    const transfers: Transfer[] = [];
     for (const transaction of trades) {
       if (transaction.isCancellation) {
         skip(transaction, '취소 거래');
@@ -319,33 +348,64 @@ export class BalanceService {
         continue;
       }
       const { quantity, transactionType } = transaction;
-      const isBuy = BUY_TYPES.includes(transactionType);
-      const isTransferIn = transactionType === 'SECURITIES_TRANSFER_IN';
+      const isTransfer =
+        transactionType === TRANSFER_IN || transactionType === TRANSFER_OUT;
       if (
         quantity === null ||
-        (isBuy && !isTransferIn && transaction.filledPrice === null)
+        (transactionType === 'BUY' && transaction.filledPrice === null)
       ) {
         skip(transaction, '수량 또는 단가 없음');
         continue;
       }
       const date = tossTradeDate(transaction.settlementDate, tradingDays);
       const trade = { transaction, security, date, quantity };
-      if (!isBuy) {
+      if (isTransfer) {
+        transfers.push({
+          direction: transactionType === TRANSFER_IN ? 'IN' : 'OUT',
+          isinCode: security.id,
+          settlementDate: transaction.settlementDate,
+          transactionTime: transaction.transactionTime,
+          quantity,
+          trade,
+        });
+      } else if (transactionType === 'BUY') {
+        buys.push({ ...trade, price: transaction.filledPrice! });
+      } else {
         sells.push(trade);
-        continue;
       }
+    }
+
+    // 주식 빌려주기 상쇄
+    const lending = offsetTossLending(transfers, input.confirmedTransfersOut);
+    for (const { trade } of lending.returned) {
+      skip(trade.transaction, '빌려주기 반환');
+    }
+    for (const { trade } of lending.repaid) {
+      skip(trade.transaction, '빌려주기 출고(반환됨)');
+    }
+    for (const { trade } of lending.transfersOut) {
+      sells.push(trade);
+    }
+    for (const { transfer, quantity } of lending.transfersIn) {
+      const { trade } = transfer;
       // 입고에는 체결 단가가 없으므로 입고일(휴장일이면 그 이전) 종가를 매수가로 쓴다
       const price =
-        transaction.filledPrice ??
-        (await this.dailyPriceReader.findLatestOnOrBefore(security.id, date))
-          ?.closingPrice ??
-        null;
+        (
+          await this.dailyPriceReader.findLatestOnOrBefore(
+            trade.security.id,
+            trade.date,
+          )
+        )?.closingPrice ?? null;
       if (price === null) {
-        skip(transaction, '입고일 시세 없음');
+        skip(trade.transaction, '입고일 시세 없음');
         continue;
       }
-      buys.push({ ...trade, price });
+      buys.push({ ...trade, quantity, price });
     }
+    const lentTransfers: TossLentTransferDto[] = lending.lent.map(
+      ({ key, quantity }) => ({ key, remainingQuantity: quantity }),
+    );
+
     const byDate = (a: Trade, b: Trade) => a.date.localeCompare(b.date);
     buys.sort(byDate);
     sells.sort(byDate);
@@ -360,9 +420,9 @@ export class BalanceService {
       }
       await this.purchaseWriter.append({
         userId,
+        accountId,
         securityId: security.id,
         purchaseDate: date,
-        securityCompany,
         amount: truncateByCurrency(quantity, security.currency),
         price: truncateByCurrency(price, security.currency),
         saleDate: null,
@@ -373,8 +433,8 @@ export class BalanceService {
     for (const { security, date, quantity } of sells) {
       await this.purchaseWriter.sellLifo(
         userId,
+        accountId,
         security.id,
-        securityCompany,
         new Decimal(truncateByCurrency(quantity, security.currency)),
         date,
         security.currency,
@@ -382,10 +442,12 @@ export class BalanceService {
     }
 
     return {
+      accountId,
       deletedCount,
       boughtCount: buys.length,
       soldCount: sells.length,
       skipped,
+      lentTransfers,
     };
   }
 
@@ -417,33 +479,15 @@ export class BalanceService {
   }
 
   /**
-   * 사용자가 매수 기록을 남긴 증권사 목록 (SELECT DISTINCT securityCompany ... WHERE userId, 매도분 포함).
-   * Repository find에는 DISTINCT가 없어 그 컬럼만 읽고 메모리에서 중복을 없앤다. 순서는 enum 선언 순서.
-   */
-  async getSecurityCompanies(
-    authUser: AuthUser,
-  ): Promise<SecurityCompanyListResponse> {
-    const rows = await this.purchaseDateBalanceRepository.find({
-      where: { userId: authUser.id },
-      select: { securityCompany: true },
-    });
-    const used = new Set(rows.map((row) => row.securityCompany));
-    return {
-      securityCompanies: Object.values(SecurityCompany).filter((company) =>
-        used.has(company),
-      ),
-    };
-  }
-
-  /**
-   * 매수분 하나(종목·매수일·sequence)의 증권사 수정. 매도된 행도 수정할 수 있고, 그 행 하나만 바꾼다(합치거나 나누지 않음).
-   * - 매수분이 없으면 404
+   * 매수분 하나(종목·매수일·sequence)를 내 다른 계좌로 옮긴다 (타사 이전 등). 매도된 행도 옮길 수 있고,
+   * 그 행 하나만 바꾼다(합치거나 나누지 않음, sequence 그대로).
+   * - 매수분이 없으면 404, 옮길 계좌가 내 계좌가 아니면 404
    * registerBalance·sellBalance와 같은 이유로 먼저 User 행을 잠가 같은 사용자의 변경을 순서대로 실행한다.
    */
   @Transactional()
-  async updateSecurityCompany(
+  async updatePurchaseAccount(
     authUser: AuthUser,
-    input: UpdateSecurityCompanyRequest,
+    input: UpdatePurchaseAccountRequest,
   ): Promise<PurchaseDateBalance> {
     const userId = authUser.id;
     const { securityId, purchaseDate, sequence } = input;
@@ -459,9 +503,8 @@ export class BalanceService {
     if (!purchase) {
       throw new NotFoundException('수정할 매수 내역이 없습니다.');
     }
-
-    purchase.securityCompany = input.securityCompany;
-    return this.purchaseWriter.update(purchase);
+    const account = await this.accountReader.getOwned(userId, input.accountId);
+    return this.purchaseWriter.moveAccount(purchase, account.id);
   }
 
   /**
@@ -508,7 +551,7 @@ export class BalanceService {
   /**
    * 종목 하나의 매수 내역 (매수일 최신순, 같은 날은 sequence 역순). 매도한 매수분도 saleDate와 함께 포함.
    * 구매 환율은 USD 종목만: 매수분에 저장된 환율(exchangeRateDate null), 없으면 매수일(이전 최근) USD 종가 환율.
-   * KRW 종목은 null. 종목이 없으면 404. securityCompany를 주면 그 증권사 매수분만, 없으면 전체 증권사.
+   * KRW 종목은 null. 종목이 없으면 404. accountId를 주면 그 계좌 매수분만, 없으면 전체 계좌.
    */
   async getPurchases(
     authUser: AuthUser,
@@ -521,12 +564,12 @@ export class BalanceService {
       throw new NotFoundException('존재하지 않는 종목입니다.');
     }
     const { id, symbol, name, currency } = found;
-    const { securityCompany } = input;
+    const { accountId } = input;
     const purchases = await this.purchaseDateBalanceRepository.find({
       where: {
         userId: authUser.id,
         securityId: id,
-        ...(securityCompany ? { securityCompany } : {}),
+        ...(accountId !== undefined ? { accountId } : {}),
       },
       order: { purchaseDate: 'DESC', sequence: 'DESC' },
     });
@@ -534,6 +577,7 @@ export class BalanceService {
     // 응답 가격은 소수 2자리까지 버림 (KRW는 원래 정수)
     const pricePlaces = Math.min(decimalPlacesOf(currency), 2);
     const rates = new Map<string, DailyExchangeRate | null>();
+    const accounts = await this.accountsOf(authUser.id);
     const items: PurchaseHistoryItemDto[] = [];
     for (const purchase of purchases) {
       let exchangeRate: string | null = null;
@@ -553,7 +597,9 @@ export class BalanceService {
       items.push({
         purchaseDate: purchase.purchaseDate,
         sequence: purchase.sequence,
-        securityCompany: purchase.securityCompany,
+        accountId: purchase.accountId,
+        securityCompany: accounts.get(purchase.accountId)!.securityCompany,
+        accountType: accounts.get(purchase.accountId)!.accountType,
         amount: truncateByCurrency(purchase.amount, currency),
         price: new Decimal(purchase.price)
           .toDecimalPlaces(pricePlaces, Decimal.ROUND_DOWN)
@@ -563,7 +609,7 @@ export class BalanceService {
         exchangeRateDate,
       });
     }
-    // 보유 수량 요약: 매도하지 않은 매수분만 (증권사 필터가 있으면 그 증권사만)
+    // 보유 수량 요약: 매도하지 않은 매수분만 (계좌 필터가 있으면 그 계좌만)
     const unsold = purchases.filter((purchase) => purchase.saleDate === null);
     const amount = unsold.reduce(
       (acc, purchase) => acc.plus(purchase.amount),
@@ -572,13 +618,13 @@ export class BalanceService {
     return {
       security: { id, symbol, name, currency },
       amount: truncateByCurrency(amount, currency),
-      companyAmounts: companyAmountsOf(unsold, currency),
+      accountAmounts: accountAmountsOf(unsold, accounts, currency),
       items,
     };
   }
 
   /**
-   * 통합잔고 조회. securityCompany를 주면 그 증권사의 매수분만, 없으면 전체 증권사로 계산한다.
+   * 통합잔고 조회. accountId를 주면 그 계좌의 매수분만, 없으면 전체 계좌로 계산한다.
    * 1. 보유 종목(UserBalance + Security) 2. 매도하지 않은(saleDate IS NULL) 매수일별 잔고로 종목별 총수량·총매입금액·매입평균가
    *    (미매도 매수분이 없는 종목, 즉 전량 매도한 종목은 제외)
    *    - USD 원화 매입금액은 매수분마다 저장된 구매 환율, 없으면 매수일(이전 최근) USD 환율로 환산
@@ -592,21 +638,24 @@ export class BalanceService {
     input: IntegratedBalanceRequest = {},
   ): Promise<IntegratedBalanceResponse> {
     const userId = authUser.id;
-    const { securityCompany } = input;
+    const { accountId } = input;
 
-    // 1. 보유 종목
-    const userBalances = await this.userBalanceRepository.find({
-      where: { userId },
-      relations: { security: true },
-      order: { securityId: 'ASC' },
-    });
+    // 1. 보유 종목 (UserBalance는 계좌별이라 종목당 하나만 남긴다)
+    const userBalances = uniqueBySecurity(
+      await this.userBalanceRepository.find({
+        where: { userId },
+        relations: { security: true },
+        order: { securityId: 'ASC' },
+      }),
+    );
+    const accounts = await this.accountsOf(userId);
 
-    // 2. 매도하지 않은 매수일별 잔고를 종목별로 합산 (증권사를 주면 그 증권사 매수분만)
+    // 2. 매도하지 않은 매수일별 잔고를 종목별로 합산 (계좌를 주면 그 계좌 매수분만)
     const purchases = await this.purchaseDateBalanceRepository.find({
       where: {
         userId,
         saleDate: IsNull(),
-        ...(securityCompany ? { securityCompany } : {}),
+        ...(accountId !== undefined ? { accountId } : {}),
       },
     });
     const totals = new Map<
@@ -676,8 +725,9 @@ export class BalanceService {
           total.krwCost,
           latest.closingPrice,
           exchangeRate?.closingRate ?? null,
-          companyAmountsOf(
+          accountAmountsOf(
             purchases.filter((p) => p.securityId === securityId),
+            accounts,
             security.currency,
           ),
         ),
@@ -735,7 +785,7 @@ export class BalanceService {
     krwCost: Decimal,
     closingPrice: string,
     usdRate: string | null,
-    companyAmounts: CompanyAmountDto[],
+    accountAmounts: AccountAmountDto[],
   ): BalanceItemDto {
     const { currency } = security;
     const averagePrice = amount.isZero()
@@ -749,7 +799,7 @@ export class BalanceService {
       name: security.name,
       currency,
       amount: truncateByCurrency(amount, currency),
-      companyAmounts,
+      accountAmounts,
       currentPrice: truncateByCurrency(closingPrice, currency),
       returnRate: returnRate(cost, evaluation),
     };
@@ -786,6 +836,24 @@ export class BalanceService {
       new Decimal(0),
     );
   }
+
+  /** 사용자의 계좌를 id로 찾는 Map */
+  private async accountsOf(userId: number): Promise<Map<number, Account>> {
+    const accounts = await this.accountReader.findByUser(userId);
+    return new Map(accounts.map((account) => [account.id, account]));
+  }
+}
+
+/** 계좌별 UserBalance에서 종목마다 첫 행만 남긴다 (순서 유지) */
+function uniqueBySecurity(balances: UserBalance[]): UserBalance[] {
+  const seen = new Set<string>();
+  return balances.filter((balance) => {
+    if (seen.has(balance.securityId)) {
+      return false;
+    }
+    seen.add(balance.securityId);
+    return true;
+  });
 }
 
 const toKrw = (value: Decimal.Value): string =>

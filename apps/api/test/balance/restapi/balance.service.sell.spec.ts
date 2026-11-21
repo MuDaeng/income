@@ -12,6 +12,7 @@ import {
   UserBalance,
 } from '@app/common';
 import { SecurityRefresher } from '../../../src/security/security.refresher.js';
+import { accountProviders } from '../account-providers.js';
 import { BalanceService } from '../../../src/balance/restapi/balance.service.js';
 import { PurchaseRateReader } from '../../../src/balance/purchase-rate.reader.js';
 import { PurchaseWriter } from '../../../src/balance/purchase.writer.js';
@@ -27,7 +28,7 @@ const KEY = { userId: 1, securityId: '005930', purchaseDate: '2026-11-05' };
 const unsold = (amount: string) => ({
   ...KEY,
   sequence: 1,
-  securityCompany: 'KIWOOM',
+  accountId: 1,
   amount,
   price: '70000.000000',
   saleDate: null,
@@ -82,6 +83,7 @@ describe('BalanceService.sellBalance', () => {
         ExchangeRateReader,
         PurchaseRateReader,
         PurchaseWriter,
+        ...accountProviders(),
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,
@@ -112,7 +114,7 @@ describe('BalanceService.sellBalance', () => {
         saleDate: '2026-11-08',
         price: '70000.000000',
         exchangeRate: IsNull(),
-        securityCompany: 'KIWOOM',
+        accountId: 1,
       },
     });
   });
@@ -136,7 +138,7 @@ describe('BalanceService.sellBalance', () => {
         saleDate: '2026-11-08',
         price: '70000.000000',
         exchangeRate: '1400.500000',
-        securityCompany: 'KIWOOM',
+        accountId: 1,
       },
     });
     expect(result).toMatchObject({
@@ -175,6 +177,7 @@ describe('BalanceService.sellBalance', () => {
     expect(result).toMatchObject({ sequence: 2, amount: '10' });
     expect(purchaseDateBalanceRepository.delete).toHaveBeenCalledWith({
       ...KEY,
+      accountId: 1,
       sequence: 1,
     });
   });
@@ -192,7 +195,7 @@ describe('BalanceService.sellBalance', () => {
     expect(result).toEqual({
       ...KEY,
       sequence: 5,
-      securityCompany: 'KIWOOM',
+      accountId: 1,
       amount: '3',
       price: '70000.000000',
       saleDate: '2026-11-08',

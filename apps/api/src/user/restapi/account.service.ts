@@ -1,0 +1,47 @@
+import { Injectable } from '@nestjs/common';
+import type { Account } from '@app/common';
+import type { AuthUser } from '../../auth/restapi/jwt.strategy.js';
+import { AccountReader } from '../account.reader.js';
+import { AccountWriter } from '../account.writer.js';
+import type { AccountDto, AccountListResponse } from './dto/account.dto.js';
+import type { AccountListRequest } from './dto/account-list.schema.js';
+import type {
+  AccountIdParam,
+  UpdateAccountTypeRequest,
+} from './dto/update-account-type.schema.js';
+
+@Injectable()
+export class AccountService {
+  constructor(
+    private readonly accountReader: AccountReader,
+    private readonly accountWriter: AccountWriter,
+  ) {}
+
+  /** 내 계좌 목록 (id 순). securityCompany를 주면 그 증권사 계좌만 */
+  async getAccounts(
+    authUser: AuthUser,
+    input: AccountListRequest,
+  ): Promise<AccountListResponse> {
+    const accounts = await this.accountReader.findByUser(
+      authUser.id,
+      input.securityCompany,
+    );
+    return { accounts: accounts.map(toAccountDto) };
+  }
+
+  /** 내 계좌 하나의 타입 변경. 내 계좌가 아니면 404 */
+  async updateAccountType(
+    authUser: AuthUser,
+    param: AccountIdParam,
+    input: UpdateAccountTypeRequest,
+  ): Promise<AccountDto> {
+    const account = await this.accountReader.getOwned(authUser.id, param.id);
+    return toAccountDto(
+      await this.accountWriter.updateType(account, input.accountType),
+    );
+  }
+}
+
+function toAccountDto({ id, securityCompany, accountType }: Account): AccountDto {
+  return { id, securityCompany, accountType };
+}

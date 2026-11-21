@@ -45,6 +45,8 @@ export const registerBalanceSchema = z
     securityId: z.string().min(1),
     /** 매수한 증권사 */
     securityCompany: z.enum(SecurityCompany),
+    /** 매수한 내 계좌 id (GET /accounts). 생략하면 그 증권사의 첫 계좌, 없으면 일반 계좌를 새로 만든다 */
+    accountId: z.number().int().positive().optional(),
     /** 'YYYY-MM-DD' */
     purchaseDate: z.iso.date(),
     /** 수량 */

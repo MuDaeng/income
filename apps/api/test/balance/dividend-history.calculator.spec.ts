@@ -8,7 +8,6 @@ import {
   DividendType,
   PurchaseDateBalance,
   Security,
-  SecurityCompany,
 } from '@app/common';
 import { SecurityRefresher } from '../../src/security/security.refresher.js';
 import { DividendHistoryCalculator } from '../../src/balance/dividend-history.calculator.js';
@@ -72,14 +71,14 @@ describe('DividendHistoryCalculator.calculate', () => {
     expect(securityRefresher.refresh).not.toHaveBeenCalled();
   });
 
-  it('securityCompany를 주면 그 증권사 매수분만으로 보유 수량을 계산하고, 없으면 전체', async () => {
+  it('accountId를 주면 그 계좌 매수분만으로 보유 수량을 계산하고, 없으면 전체', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
-    await service.calculate({ id: 1, rules: [] }, { securityCompany: SecurityCompany.TOSS });
+    await service.calculate({ id: 1, rules: [] }, { accountId: 2 });
     await service.calculate({ id: 1, rules: [] }, {});
 
     expect(purchaseDateBalanceRepository.find.mock.calls).toEqual([
-      [{ where: { userId: 1, securityCompany: 'TOSS' } }],
+      [{ where: { userId: 1, accountId: 2 } }],
       [{ where: { userId: 1 } }],
     ]);
   });

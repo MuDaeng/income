@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { SecurityCompany } from '@app/common';
+import { AccountType, SecurityCompany } from '@app/common';
 import { DailyPriceSecurityDto } from '../../../security/restapi/dto/daily-price.dto.js';
-import { CompanyAmountDto } from './company-amount.dto.js';
+import { AccountAmountDto } from './account-amount.dto.js';
 
 /** 수량·가격은 decimal 문자열 (KRW 정수; USD 수량은 소수 6자리, 가격은 소수 2자리 버림) */
 export class PurchaseHistoryItemDto {
@@ -11,8 +11,14 @@ export class PurchaseHistoryItemDto {
   @ApiProperty({ description: '같은 매수일 안의 순번 (매도 등록 시 사용)' })
   sequence: number;
 
-  @ApiProperty({ enum: SecurityCompany, description: '매수한 증권사' })
+  @ApiProperty({ description: '매수한 계좌 id' })
+  accountId: number;
+
+  @ApiProperty({ enum: SecurityCompany, description: '계좌의 증권사' })
   securityCompany: SecurityCompany;
+
+  @ApiProperty({ enum: AccountType, description: '계좌 타입' })
+  accountType: AccountType;
 
   @ApiProperty({ description: '수량' })
   amount: string;
@@ -43,14 +49,14 @@ export class PurchaseHistoryResponse {
   @ApiProperty({ type: DailyPriceSecurityDto })
   security: DailyPriceSecurityDto;
 
-  @ApiProperty({ description: '총 보유 수량 (매도하지 않은 매수분 합, securityCompany 필터를 주면 그 증권사만)' })
+  @ApiProperty({ description: '총 보유 수량 (매도하지 않은 매수분 합, accountId 필터를 주면 그 계좌만)' })
   amount: string;
 
   @ApiProperty({
-    type: [CompanyAmountDto],
-    description: '증권사별 보유 수량 (수량 있는 증권사만, enum 순서)',
+    type: [AccountAmountDto],
+    description: '계좌별 보유 수량 (수량 있는 계좌만, 계좌 id 순)',
   })
-  companyAmounts: CompanyAmountDto[];
+  accountAmounts: AccountAmountDto[];
 
   @ApiProperty({ type: [PurchaseHistoryItemDto], description: '매수 내역 (매수일 최신순)' })
   items: PurchaseHistoryItemDto[];

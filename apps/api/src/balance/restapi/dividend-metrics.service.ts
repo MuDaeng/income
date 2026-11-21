@@ -41,7 +41,7 @@ export class DividendMetricsService {
 
   /**
    * 현재 보유 종목의 배당 지표 (세전).
-   * 1. 미매도 매수분으로 종목별 수량·원금 (USD 원금은 매수분마다 구매 환율, 증권사를 주면 그 증권사만)
+   * 1. 미매도 매수분으로 종목별 수량·원금 (USD 원금은 매수분마다 구매 환율, 계좌를 주면 그 계좌만)
    * 2. 종목마다 배당·시세를 원천에서 갱신 (DividendHistoryCalculator와 같은 SecurityRefresher, 하루 한 번)
    * 3. 지급일 기준 최근 12개월(오늘−1년 초과 ~ 오늘)과 그 직전 12개월의 주당 현금배당 합
    * 4. 예상 연배당 = 최근 12개월 주당 배당 × 현재 수량, USD는 최신 환율로 원화 환산
@@ -59,7 +59,7 @@ export class DividendMetricsService {
 
     // 1. 현재 보유분
     const held = (
-      await this.purchaseReader.findByUser(authUser.id, input.securityCompany)
+      await this.purchaseReader.findByUser(authUser.id, input.accountId)
     ).filter((p) => p.saleDate === null && p.purchaseDate <= today);
     const heldBySecurity = new Map<string, PurchaseDateBalance[]>();
     for (const purchase of held) {

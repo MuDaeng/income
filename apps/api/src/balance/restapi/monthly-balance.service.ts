@@ -41,7 +41,7 @@ export class MonthlyBalanceService {
 
   /**
    * 월말별 원금·평가금액·평가금액+누적배당금. 기준일 = 그 달 말일 (이번 달이면 오늘, Asia/Seoul).
-   * securityCompany를 주면 그 증권사 매수분만으로 원금·평가·배당을 계산, 없으면 전체 증권사.
+   * accountId를 주면 그 계좌 매수분만으로 원금·평가·배당을 계산, 없으면 전체 계좌.
    * - 보유분: 매수일 <= 기준일, 미매도 또는 매도일 > 기준일. 원금은 USD면 저장된 구매 환율, 없으면 매수일(이전 최근) 환율로 환산
    * - 평가금액: 기준일(이전 최근) 종가 × 수량, USD는 기준일(이전 최근) 환율로 환산
    * - 누적배당금: 처음부터 기준일까지 지급된 배당금(DividendHistoryCalculator, 원화 환산 없는 건 제외)
@@ -52,7 +52,7 @@ export class MonthlyBalanceService {
     authUser: AuthUser,
     input: MonthlyBalanceRequest,
   ): Promise<MonthlyBalanceResponse> {
-    const { from, to, securityCompany } = input;
+    const { from, to, accountId } = input;
     const today = todayInSeoul();
     const months = monthsBetween(from, to).map((month) => {
       const end = endOfMonth(month);
@@ -61,14 +61,14 @@ export class MonthlyBalanceService {
     const lastDate = months[months.length - 1].date;
 
     const purchases = (
-      await this.purchaseReader.findByUser(authUser.id, securityCompany)
+      await this.purchaseReader.findByUser(authUser.id, accountId)
     ).filter((p) => p.purchaseDate <= lastDate);
 
     // 처음부터 마지막 기준일까지 지급된 배당금 (이 호출이 보유 종목을 온라인 갱신함).
-    // 증권사를 주면 그 증권사 매수분의 보유 수량으로만 배당을 계산
+    // 계좌를 주면 그 계좌 매수분의 보유 수량으로만 배당을 계산
     const history = await this.dividendHistoryCalculator.calculate(authUser, {
       to: lastDate,
-      securityCompany,
+      accountId,
     });
     const dividends = history.months
       .flatMap((month) => month.items)

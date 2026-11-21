@@ -11,6 +11,7 @@ import {
   UserBalance,
 } from '@app/common';
 import { SecurityRefresher } from '../../../src/security/security.refresher.js';
+import { accountProviders } from '../account-providers.js';
 import { BalanceService } from '../../../src/balance/restapi/balance.service.js';
 import { PurchaseRateReader } from '../../../src/balance/purchase-rate.reader.js';
 import { PurchaseWriter } from '../../../src/balance/purchase.writer.js';
@@ -57,6 +58,7 @@ describe('BalanceService.updateExchangeRate', () => {
         ExchangeRateReader,
         PurchaseRateReader,
         PurchaseWriter,
+        ...accountProviders(),
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,

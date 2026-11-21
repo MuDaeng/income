@@ -9,10 +9,10 @@ import {
   DailySecurity,
   PurchaseDateBalance,
   Security,
-  SecurityCompany,
   UserBalance,
 } from '@app/common';
 import { SecurityRefresher } from '../../../src/security/security.refresher.js';
+import { accountProviders } from '../account-providers.js';
 import { BalanceService } from '../../../src/balance/restapi/balance.service.js';
 import { PurchaseRateReader } from '../../../src/balance/purchase-rate.reader.js';
 import { PurchaseWriter } from '../../../src/balance/purchase.writer.js';
@@ -70,7 +70,7 @@ describe('BalanceService.bulkRegisterToss', () => {
   const dailySecurityRepository = { findOne: vi.fn(), find: vi.fn() };
   const purchaseWriter = {
     lockOwner: vi.fn(),
-    removeByCompany: vi.fn(),
+    removeByAccount: vi.fn(),
     append: vi.fn(),
     sellLifo: vi.fn(),
   };
@@ -78,7 +78,7 @@ describe('BalanceService.bulkRegisterToss', () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    purchaseWriter.removeByCompany.mockResolvedValue(5);
+    purchaseWriter.removeByAccount.mockResolvedValue(5);
     securityRepository.findBy.mockResolvedValue([
       { id: KR_ISIN, currency: Currency.KRW },
       { id: US_ISIN, currency: Currency.USD },
@@ -94,6 +94,7 @@ describe('BalanceService.bulkRegisterToss', () => {
         ExchangeRateReader,
         PurchaseRateReader,
         { provide: PurchaseWriter, useValue: purchaseWriter },
+        ...accountProviders(),
         { provide: getRepositoryToken(PurchaseDateBalance), useValue: {} },
         { provide: getRepositoryToken(UserBalance), useValue: {} },
         { provide: getRepositoryToken(Security), useValue: securityRepository },
@@ -111,26 +112,36 @@ describe('BalanceService.bulkRegisterToss', () => {
     service = moduleRef.get(BalanceService);
   });
 
-  it('사용자를 잠근 뒤 TOSS 매수분을 모두 지운다', async () => {
-    const result = await service.bulkRegisterToss(user, { transactionList: [] });
+  it('사용자를 잠근 뒤 Toss 계좌(입력이 없으면 첫 Toss 계좌)의 매수분을 모두 지운다', async () => {
+    const result = await service.bulkRegisterToss(user, { confirmedTransfersOut: [], transactionList: [] });
 
     expect(purchaseWriter.lockOwner).toHaveBeenCalledWith(1);
-    expect(purchaseWriter.removeByCompany).toHaveBeenCalledWith(
-      1,
-      SecurityCompany.TOSS,
-    );
+    expect(purchaseWriter.removeByAccount).toHaveBeenCalledWith(1, 1);
     expect(securityRepository.findBy).not.toHaveBeenCalled();
     expect(dailySecurityRepository.find).not.toHaveBeenCalled();
     expect(result).toEqual({
+      accountId: 1,
       deletedCount: 5,
       boughtCount: 0,
       soldCount: 0,
       skipped: [],
+      lentTransfers: [],
     });
   });
 
+  it('accountId를 주면 그 계좌를 다시 만든다', async () => {
+    const result = await service.bulkRegisterToss(user, {
+      accountId: 7,
+      confirmedTransfersOut: [],
+      transactionList: [],
+    });
+
+    expect(purchaseWriter.removeByAccount).toHaveBeenCalledWith(1, 7);
+    expect(result.accountId).toBe(7);
+  });
+
   it('국내 BUY는 결제일 2거래일 전 체결일로 시세 검증 없이 정수로 버려 등록하고 환율은 null', async () => {
-    await service.bulkRegisterToss(user, { transactionList: [krBuy()] });
+    await service.bulkRegisterToss(user, { confirmedTransfersOut: [], transactionList: [krBuy()] });
 
     expect(securityRepository.findBy).toHaveBeenCalledWith({
       id: In([KR_ISIN]),
@@ -139,7 +150,7 @@ describe('BalanceService.bulkRegisterToss', () => {
       userId: 1,
       securityId: KR_ISIN,
       purchaseDate: '2026-10-16',
-      securityCompany: SecurityCompany.TOSS,
+      accountId: 1,
       amount: '3',
       price: '70000',
       saleDate: null,
@@ -148,7 +159,7 @@ describe('BalanceService.bulkRegisterToss', () => {
   });
 
   it('미국 BUY도 결제일 2거래일 전 체결일, 소수 6자리로 버리고 입력 환율을 쓴다', async () => {
-    await service.bulkRegisterToss(user, { transactionList: [usBuy()] });
+    await service.bulkRegisterToss(user, { confirmedTransfersOut: [], transactionList: [usBuy()] });
 
     expect(purchaseWriter.append).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -168,6 +179,7 @@ describe('BalanceService.bulkRegisterToss', () => {
     });
 
     await service.bulkRegisterToss(user, {
+      confirmedTransfersOut: [],
       transactionList: [usBuy({ exchangeRate: null })],
     });
 
@@ -178,6 +190,7 @@ describe('BalanceService.bulkRegisterToss', () => {
 
   it('transactionTime과 무관하게 결제일에서 평일 2일 앞당긴다 (주말 건너뜀)', async () => {
     await service.bulkRegisterToss(user, {
+      confirmedTransfersOut: [],
       transactionList: [
         // 월요일 결제 → 지난주 목요일 체결
         krBuy({ settlementDate: '2026-10-19', transactionTime: null }),
@@ -198,6 +211,7 @@ describe('BalanceService.bulkRegisterToss', () => {
     );
 
     await service.bulkRegisterToss(user, {
+      confirmedTransfersOut: [],
       transactionList: [
         krBuy({ settlementDate: '2026-10-21' }),
         krBuy({ settlementDate: '2026-10-20' }),
@@ -234,6 +248,7 @@ describe('BalanceService.bulkRegisterToss', () => {
 
     // Toss는 최신순으로 준다
     const result = await service.bulkRegisterToss(user, {
+      confirmedTransfersOut: [],
       transactionList: [
         krBuy({ transactionType: 'SELL', settlementDate: '2026-10-26' }),
         krBuy({ settlementDate: '2026-10-23' }),
@@ -251,15 +266,16 @@ describe('BalanceService.bulkRegisterToss', () => {
     expect(result).toMatchObject({ boughtCount: 2, soldCount: 2 });
   });
 
-  it('SELL은 TOSS 매수분에서 종목 통화로 버린 수량만큼 매도한다', async () => {
+  it('SELL은 그 계좌 매수분에서 종목 통화로 버린 수량만큼 매도한다', async () => {
     await service.bulkRegisterToss(user, {
+      confirmedTransfersOut: [],
       transactionList: [usBuy({ transactionType: 'SELL', filledPrice: null })],
     });
 
     expect(purchaseWriter.sellLifo).toHaveBeenCalledWith(
       1,
+      1,
       US_ISIN,
-      SecurityCompany.TOSS,
       new Decimal('0.123456'),
       '2026-10-16',
       Currency.USD,
@@ -273,6 +289,7 @@ describe('BalanceService.bulkRegisterToss', () => {
 
     await expect(
       service.bulkRegisterToss(user, {
+        confirmedTransfersOut: [],
         transactionList: [krBuy({ transactionType: 'SELL' })],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -284,6 +301,7 @@ describe('BalanceService.bulkRegisterToss', () => {
     });
 
     const result = await service.bulkRegisterToss(user, {
+      confirmedTransfersOut: [],
       transactionList: [
         usBuy({
           transactionType: 'SECURITIES_TRANSFER_IN',
@@ -315,6 +333,7 @@ describe('BalanceService.bulkRegisterToss', () => {
     dailySecurityRepository.findOne.mockResolvedValue(null);
 
     const result = await service.bulkRegisterToss(user, {
+      confirmedTransfersOut: [],
       transactionList: [
         krBuy({ transactionType: 'SECURITIES_TRANSFER_IN', filledPrice: null }),
       ],
@@ -330,7 +349,7 @@ describe('BalanceService.bulkRegisterToss', () => {
     ]);
   });
 
-  it('입고분을 매수분과 함께 먼저 등록하고, SECURITIES_TRANSFER_OUT은 SELL처럼 LIFO 매도한다', async () => {
+  it('입고분을 매수분과 함께 먼저 등록하고, 실제 출고로 지정한 SECURITIES_TRANSFER_OUT은 SELL처럼 LIFO 매도한다', async () => {
     dailySecurityRepository.findOne.mockResolvedValue({ closingPrice: '71000' });
     const calls: string[] = [];
     purchaseWriter.append.mockImplementation(({ purchaseDate, amount }) => {
@@ -345,6 +364,9 @@ describe('BalanceService.bulkRegisterToss', () => {
     );
 
     const result = await service.bulkRegisterToss(user, {
+      confirmedTransfersOut: [
+        { isinCode: KR_ISIN, settlementDate: '2026-10-26', quantity: '1', index: 0 },
+      ],
       transactionList: [
         krBuy({
           transactionType: 'SECURITIES_TRANSFER_OUT',
@@ -374,6 +396,7 @@ describe('BalanceService.bulkRegisterToss', () => {
 
   it('취소·없는 종목·수량/단가 없는 거래는 건너뛰고, 매수·매도·입출고 외 유형은 무시한다', async () => {
     const result = await service.bulkRegisterToss(user, {
+      confirmedTransfersOut: [],
       transactionList: [
         krBuy({ isCancellation: true }),
         krBuy({ isinCode: 'KR0000000000' }),
@@ -396,5 +419,71 @@ describe('BalanceService.bulkRegisterToss', () => {
       { transactionType: 'BUY', isinCode: KR_ISIN, reason: '수량 또는 단가 없음' },
       { transactionType: 'SELL', isinCode: KR_ISIN, reason: '수량 또는 단가 없음' },
     ]);
+  });
+
+  describe('주식 빌려주기', () => {
+    const transfer = (
+      transactionType: 'SECURITIES_TRANSFER_IN' | 'SECURITIES_TRANSFER_OUT',
+      quantity: string,
+      settlementDate: string,
+    ) => krBuy({ transactionType, quantity, settlementDate, filledPrice: null });
+
+    beforeEach(() => {
+      dailySecurityRepository.findOne.mockResolvedValue({ closingPrice: '71000' });
+    });
+
+    it('빌려주기 출고 후 반환 입고는 서로 상쇄해 매도·매수하지 않는다', async () => {
+      const result = await service.bulkRegisterToss(user, {
+        confirmedTransfersOut: [],
+        transactionList: [
+          transfer('SECURITIES_TRANSFER_IN', '10', '2026-10-26'),
+          transfer('SECURITIES_TRANSFER_OUT', '10', '2026-10-20'),
+          krBuy({ quantity: '10', settlementDate: '2026-10-01' }),
+        ],
+      });
+
+      // 원래 매수분만 등록 (반환 입고를 종가로 다시 사지 않음)
+      expect(purchaseWriter.append).toHaveBeenCalledTimes(1);
+      expect(purchaseWriter.sellLifo).not.toHaveBeenCalled();
+      expect(result.skipped).toEqual([
+        { transactionType: 'SECURITIES_TRANSFER_IN', isinCode: KR_ISIN, reason: '빌려주기 반환' },
+        { transactionType: 'SECURITIES_TRANSFER_OUT', isinCode: KR_ISIN, reason: '빌려주기 출고(반환됨)' },
+      ]);
+      expect(result.lentTransfers).toEqual([]);
+    });
+
+    it('반환되지 않은 출고는 대여 중으로 보고 매도하지 않으며 lentTransfers로 돌려준다', async () => {
+      const result = await service.bulkRegisterToss(user, {
+        confirmedTransfersOut: [],
+        transactionList: [
+          transfer('SECURITIES_TRANSFER_IN', '4', '2026-10-26'),
+          transfer('SECURITIES_TRANSFER_OUT', '10', '2026-10-20'),
+        ],
+      });
+
+      expect(purchaseWriter.append).not.toHaveBeenCalled();
+      expect(purchaseWriter.sellLifo).not.toHaveBeenCalled();
+      expect(result.lentTransfers).toEqual([
+        {
+          key: { isinCode: KR_ISIN, settlementDate: '2026-10-20', quantity: '10', index: 0 },
+          remainingQuantity: '6',
+        },
+      ]);
+    });
+
+    it('반환 수량보다 많이 들어온 입고분만 종가로 매수 등록한다', async () => {
+      const result = await service.bulkRegisterToss(user, {
+        confirmedTransfersOut: [],
+        transactionList: [
+          transfer('SECURITIES_TRANSFER_IN', '12', '2026-10-26'),
+          transfer('SECURITIES_TRANSFER_OUT', '10', '2026-10-20'),
+        ],
+      });
+
+      expect(purchaseWriter.append).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: '2', price: '71000' }),
+      );
+      expect(result).toMatchObject({ boughtCount: 1, soldCount: 0, lentTransfers: [] });
+    });
   });
 });

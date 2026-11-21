@@ -7,13 +7,13 @@ describe('periodReturnSchema', () => {
     ).toBe(true);
   });
 
-  it('securityCompany는 선택이고, 목록에 없는 값이면 securityCompany 오류', () => {
+  it('accountId는 선택이고, 양의 정수가 아니면 accountId 오류', () => {
     const range = { from: '2026-01-01', to: '2026-01-31' };
-    expect(periodReturnSchema.safeParse({ ...range, securityCompany: 'TOSS' }).success).toBe(true);
+    expect(periodReturnSchema.safeParse({ ...range, accountId: '2' }).success).toBe(true);
 
-    const result = periodReturnSchema.safeParse({ ...range, securityCompany: 'ROBINHOOD' });
+    const result = periodReturnSchema.safeParse({ ...range, accountId: '0' });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0].path).toEqual(['securityCompany']);
+    expect(result.error?.issues[0].path).toEqual(['accountId']);
   });
 
   it('시작일·종료일이 없거나 형식이 틀리면 거절한다', () => {

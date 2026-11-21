@@ -8,6 +8,7 @@ import {
   UserBalance,
 } from '@app/common';
 import { SecurityModule } from '../security/security.module.js';
+import { UserModule } from '../user/user.module.js';
 import { BalanceController } from './restapi/balance.controller.js';
 import { BalanceService } from './restapi/balance.service.js';
 import { DividendHistoryCalculator } from './dividend-history.calculator.js';
@@ -22,6 +23,7 @@ import { PurchaseWriter } from './purchase.writer.js';
 @Module({
   imports: [
     SecurityModule,
+    UserModule,
     TypeOrmModule.forFeature([
       PurchaseDateBalance,
       UserBalance,

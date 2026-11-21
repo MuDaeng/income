@@ -8,11 +8,20 @@ import {
   DailySecurity,
   PurchaseDateBalance,
   Security,
+  AccountType,
   SecurityCompany,
   User,
   UserBalance,
 } from '@app/common';
 import { SecurityRefresher } from '../../../src/security/security.refresher.js';
+import { ACCOUNT, accountProviders } from '../account-providers.js';
+
+// 1: 키움, 2: 토스, 3: 미래에셋 (모두 일반 계좌)
+const ACCOUNTS = [
+  ACCOUNT,
+  { ...ACCOUNT, id: 2, securityCompany: SecurityCompany.TOSS },
+  { ...ACCOUNT, id: 3, securityCompany: SecurityCompany.MIRAE_ASSET },
+];
 import { BalanceService } from '../../../src/balance/restapi/balance.service.js';
 import { PurchaseRateReader } from '../../../src/balance/purchase-rate.reader.js';
 import { PurchaseWriter } from '../../../src/balance/purchase.writer.js';
@@ -38,6 +47,7 @@ describe('BalanceService.getIntegratedBalance', () => {
         ExchangeRateReader,
         PurchaseRateReader,
         PurchaseWriter,
+        ...accountProviders(ACCOUNTS),
         {
           provide: getRepositoryToken(UserBalance),
           useValue: userBalanceRepository,
@@ -69,10 +79,10 @@ describe('BalanceService.getIntegratedBalance', () => {
     ]);
     // DB는 DECIMAL을 소수 6자리 문자열로 돌려준다
     purchaseDateBalanceRepository.find.mockResolvedValue([
-      { securityId: '005930', securityCompany: SecurityCompany.TOSS, amount: '10.000000', price: '70000.000000' },
-      { securityId: '005930', securityCompany: SecurityCompany.MIRAE_ASSET, amount: '10.000000', price: '80000.000000' },
-      { securityId: 'AAPL', securityCompany: SecurityCompany.KIWOOM, amount: '2.000000', price: '100.500000' },
-      { securityId: 'AAPL', securityCompany: SecurityCompany.KIWOOM, amount: '1.000000', price: '97.000000' },
+      { securityId: '005930', accountId: 2, amount: '10.000000', price: '70000.000000' },
+      { securityId: '005930', accountId: 3, amount: '10.000000', price: '80000.000000' },
+      { securityId: 'AAPL', accountId: 1, amount: '2.000000', price: '100.500000' },
+      { securityId: 'AAPL', accountId: 1, amount: '1.000000', price: '97.000000' },
     ]);
     dailySecurityRepository.findOne.mockImplementation(
       ({ where }: { where: { id: string } }) =>
@@ -96,10 +106,10 @@ describe('BalanceService.getIntegratedBalance', () => {
         name: '삼성전자',
         currency: Currency.KRW,
         amount: '20',
-        // 증권사별 수량은 enum 순서
-        companyAmounts: [
-          { securityCompany: SecurityCompany.MIRAE_ASSET, amount: '10' },
-          { securityCompany: SecurityCompany.TOSS, amount: '10' },
+        // 계좌별 수량은 계좌 id 순
+        accountAmounts: [
+          { accountId: 2, securityCompany: SecurityCompany.TOSS, accountType: AccountType.NORMAL, amount: '10' },
+          { accountId: 3, securityCompany: SecurityCompany.MIRAE_ASSET, accountType: AccountType.NORMAL, amount: '10' },
         ],
         currentPrice: '90000',
         returnRate: '20.00',
@@ -116,8 +126,8 @@ describe('BalanceService.getIntegratedBalance', () => {
         name: 'Apple',
         currency: Currency.USD,
         amount: '3.000000',
-        companyAmounts: [
-          { securityCompany: SecurityCompany.KIWOOM, amount: '3.000000' },
+        accountAmounts: [
+          { accountId: 1, securityCompany: SecurityCompany.KIWOOM, accountType: AccountType.NORMAL, amount: '3.000000' },
         ],
         currentPrice: '110.000000',
         returnRate: '10.73', // 32 / 298
@@ -244,12 +254,12 @@ describe('BalanceService.getIntegratedBalance', () => {
     expect(dailyExchangeRateRepository.findOne).not.toHaveBeenCalled();
   });
 
-  it('securityCompany를 주면 그 증권사의 미매도 매수분만 조회한다', async () => {
+  it('accountId를 주면 그 계좌의 미매도 매수분만 조회한다', async () => {
     userBalanceRepository.find.mockResolvedValue([
       { userId: 1, securityId: KRW_SECURITY.id, security: KRW_SECURITY },
       { userId: 1, securityId: USD_SECURITY.id, security: USD_SECURITY },
     ]);
-    // KIWOOM 조건으로 조회한 결과: AAPL은 다른 증권사에만 있어서 없음
+    // 1번 계좌 조건으로 조회한 결과: AAPL은 다른 계좌에만 있어서 없음
     purchaseDateBalanceRepository.find.mockResolvedValue([
       { securityId: '005930', amount: '10.000000', price: '70000.000000' },
     ]);
@@ -260,21 +270,21 @@ describe('BalanceService.getIntegratedBalance', () => {
 
     const result = await service.getIntegratedBalance(
       { id: 1, rules: [] },
-      { securityCompany: SecurityCompany.KIWOOM },
+      { accountId: 1 },
     );
 
     expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
       where: {
         userId: 1,
         saleDate: IsNull(),
-        securityCompany: SecurityCompany.KIWOOM,
+        accountId: 1,
       },
     });
     expect(result.items.map((item) => item.securityId)).toEqual(['005930']);
     expect(dailyExchangeRateRepository.findOne).not.toHaveBeenCalled();
   });
 
-  it('securityCompany가 없으면 전체 증권사로 조회한다', async () => {
+  it('accountId가 없으면 전체 계좌로 조회한다', async () => {
     userBalanceRepository.find.mockResolvedValue([]);
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 

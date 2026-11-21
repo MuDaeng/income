@@ -69,7 +69,6 @@ import {
   type IntegratedBalanceRequest,
   integratedBalanceSchema,
 } from './dto/integrated-balance.schema.js';
-import { SecurityCompanyListResponse } from './dto/security-company-list.dto.js';
 import {
   type RegisterBalanceRequest,
   registerBalanceSchema,
@@ -83,9 +82,9 @@ import {
   updateExchangeRateSchema,
 } from './dto/update-exchange-rate.schema.js';
 import {
-  type UpdateSecurityCompanyRequest,
-  updateSecurityCompanySchema,
-} from './dto/update-security-company.schema.js';
+  type UpdatePurchaseAccountRequest,
+  updatePurchaseAccountSchema,
+} from './dto/update-purchase-account.schema.js';
 
 @ApiTags('balance')
 @Controller('balance')
@@ -131,7 +130,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '증권사별 일괄매도: 해당 증권사의 미매도 매수분(매도일 이전 매수)을 매수일 최근 순으로 수량만큼 매도',
+      '계좌별 일괄매도: 계좌(accountId, 없으면 그 증권사의 첫 계좌)의 미매도 매수분(매도일 이전 매수)을 매수일 최근 순으로 수량만큼 매도',
   })
   bulkSell(
     @CurrentUser() user: AuthUser,
@@ -145,7 +144,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      'Toss 거래내역으로 TOSS 증권사 잔고 일괄 재등록: 기존 TOSS 매수분 삭제 → BUY 등록(시세 검증 없음) → SELL 일괄매도',
+      'Toss 거래내역으로 Toss 계좌 잔고 일괄 재등록: 그 계좌 매수분 삭제 → 빌려주기 출고·반환 상쇄 → BUY·입고 등록(시세 검증 없음) → SELL·실제 출고 LIFO 매도',
   })
   @ApiCreatedResponse({ type: BulkRegisterBalanceTossResponse })
   bulkRegisterToss(
@@ -161,7 +160,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '통합잔고 조회: 종목별 매입평균가·평가금액(원화/외화)·수익률과 한국/미국/전체 합계 (securityCompany를 주면 그 증권사 매수분만, 없으면 전체)',
+      '통합잔고 조회: 종목별 매입평균가·평가금액(원화/외화)·수익률과 한국/미국/전체 합계 (accountId를 주면 그 계좌 매수분만, 없으면 전체)',
   })
   @ApiOkResponse({ type: IntegratedBalanceResponse })
   getIntegratedBalance(
@@ -200,32 +199,19 @@ export class BalanceController {
     return this.balanceService.updateExchangeRate(user, body);
   }
 
-  @Get('security-companies')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: '매수 기록이 있는 증권사 목록 (중복 없음, 매도한 매수분 포함)',
-  })
-  @ApiOkResponse({ type: SecurityCompanyListResponse })
-  getSecurityCompanies(
-    @CurrentUser() user: AuthUser,
-  ): Promise<SecurityCompanyListResponse> {
-    return this.balanceService.getSecurityCompanies(user);
-  }
-
-  @Patch('purchases/security-company')
+  @Patch('purchases/account')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '매수분 증권사 수정: 종목·매수일·sequence로 매수분 하나의 증권사 변경 (매도된 행도 가능)',
+      '매수분 계좌 이동: 종목·매수일·sequence로 매수분 하나를 내 다른 계좌로 옮김 (매도된 행도 가능, 타사 이전 등)',
   })
-  updateSecurityCompany(
+  updatePurchaseAccount(
     @CurrentUser() user: AuthUser,
-    @Body({ schema: updateSecurityCompanySchema })
-    body: UpdateSecurityCompanyRequest,
+    @Body({ schema: updatePurchaseAccountSchema })
+    body: UpdatePurchaseAccountRequest,
   ): Promise<PurchaseDateBalance> {
-    return this.balanceService.updateSecurityCompany(user, body);
+    return this.balanceService.updatePurchaseAccount(user, body);
   }
 
   @Delete('purchases')
@@ -249,7 +235,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '배당금 내역 조회: 배당락일 전날 보유수량 × 주당배당금, USD는 지급일 환율로 원화 환산, 기간 총배당금과 월별 내역 (securityCompany를 주면 그 증권사 보유분만)',
+      '배당금 내역 조회: 배당락일 전날 보유수량 × 주당배당금, USD는 지급일 환율로 원화 환산, 기간 총배당금과 월별 내역 (accountId를 주면 그 계좌 보유분만)',
   })
   @ApiOkResponse({ type: DividendHistoryResponse })
   getDividendHistory(
@@ -264,7 +250,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '배당 지표 조회: 현재 보유 종목별 최근 12개월 주당 배당·예상 연배당·YOC(매입가 대비 배당률)·현재 배당률·배당 성장률(세전)과 합계 (securityCompany를 주면 그 증권사 보유분만)',
+      '배당 지표 조회: 현재 보유 종목별 최근 12개월 주당 배당·예상 연배당·YOC(매입가 대비 배당률)·현재 배당률·배당 성장률(세전)과 합계 (accountId를 주면 그 계좌 보유분만)',
   })
   @ApiOkResponse({ type: DividendMetricsResponse })
   getDividendMetrics(
@@ -279,7 +265,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '기간 총수익률 조회: 종료일 보유분 평가수익 + 기간 배당금, 원금 대비 수익금·수익률 (securityCompany를 주면 그 증권사만)',
+      '기간 총수익률 조회: 종료일 보유분 평가수익 + 기간 배당금, 원금 대비 수익금·수익률 (accountId를 주면 그 계좌만)',
   })
   @ApiOkResponse({ type: PeriodReturnResponse })
   getPeriodReturn(
@@ -294,7 +280,7 @@ export class BalanceController {
   @ApiBearerAuth()
   @ApiOperation({
     summary:
-      '월말별 원금·평가금액·평가금액+누적배당금 조회 (from~to 년월, 이번 달은 오늘 기준, 월별 합계 + 종목별, securityCompany를 주면 그 증권사만)',
+      '월말별 원금·평가금액·평가금액+누적배당금 조회 (from~to 년월, 이번 달은 오늘 기준, 월별 합계 + 종목별, accountId를 주면 그 계좌만)',
   })
   @ApiOkResponse({ type: MonthlyBalanceResponse })
   getMonthlyBalance(

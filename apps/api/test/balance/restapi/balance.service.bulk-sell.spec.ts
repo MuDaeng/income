@@ -13,6 +13,7 @@ import {
   UserBalance,
 } from '@app/common';
 import { SecurityRefresher } from '../../../src/security/security.refresher.js';
+import { accountProviders } from '../account-providers.js';
 import { BalanceService } from '../../../src/balance/restapi/balance.service.js';
 import { PurchaseRateReader } from '../../../src/balance/purchase-rate.reader.js';
 import { PurchaseWriter } from '../../../src/balance/purchase.writer.js';
@@ -29,7 +30,7 @@ const row = (purchaseDate: string, sequence: number, amount: string) => ({
   securityId: '005930',
   purchaseDate,
   sequence,
-  securityCompany: SecurityCompany.KIWOOM,
+  accountId: 1,
   amount,
   price: '70000.000000',
   saleDate: null as string | null,
@@ -77,6 +78,7 @@ describe('BalanceService.bulkSellBalance', () => {
         ExchangeRateReader,
         PurchaseRateReader,
         PurchaseWriter,
+        ...accountProviders(),
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,
@@ -92,7 +94,7 @@ describe('BalanceService.bulkSellBalance', () => {
     service = moduleRef.get(BalanceService);
   });
 
-  it('그 증권사의 미매도·매도일 이전 매수분을 매수일 최근 순으로 조회한다', async () => {
+  it('그 계좌의 미매도·매도일 이전 매수분을 매수일 최근 순으로 조회한다', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([
       row('2026-11-01', 1, '5'),
     ]);
@@ -103,7 +105,7 @@ describe('BalanceService.bulkSellBalance', () => {
       where: {
         userId: 1,
         securityId: '005930',
-        securityCompany: SecurityCompany.KIWOOM,
+        accountId: 1,
         saleDate: IsNull(),
         purchaseDate: LessThanOrEqual('2026-11-08'),
       },
@@ -130,7 +132,7 @@ describe('BalanceService.bulkSellBalance', () => {
         sequence: 2,
         amount: '2',
         saleDate: '2026-11-08',
-        securityCompany: SecurityCompany.KIWOOM,
+        accountId: 1,
       }),
     ]);
   });
@@ -201,6 +203,7 @@ describe('BalanceService.bulkSellBalance', () => {
 
     expect(purchaseDateBalanceRepository.delete).toHaveBeenCalledWith({
       userId: 1,
+      accountId: 1,
       securityId: '005930',
       purchaseDate: '2026-11-01',
       sequence: 1,

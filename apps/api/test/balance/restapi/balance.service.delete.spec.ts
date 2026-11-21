@@ -10,6 +10,7 @@ import {
   UserBalance,
 } from '@app/common';
 import { SecurityRefresher } from '../../../src/security/security.refresher.js';
+import { accountProviders } from '../account-providers.js';
 import { BalanceService } from '../../../src/balance/restapi/balance.service.js';
 import { PurchaseRateReader } from '../../../src/balance/purchase-rate.reader.js';
 import { PurchaseWriter } from '../../../src/balance/purchase.writer.js';
@@ -28,7 +29,11 @@ const input = {
 };
 
 describe('BalanceService.deletePurchase', () => {
-  const purchaseDateBalanceRepository = { delete: vi.fn(), existsBy: vi.fn() };
+  const purchaseDateBalanceRepository = {
+    findOneBy: vi.fn(),
+    delete: vi.fn(),
+    existsBy: vi.fn(),
+  };
   const userBalanceRepository = { delete: vi.fn() };
   const userRepository = { findOne: vi.fn() };
   let service: BalanceService;
@@ -36,6 +41,12 @@ describe('BalanceService.deletePurchase', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     userRepository.findOne.mockResolvedValue({ id: 1 });
+    // 지울 행은 2번 계좌의 매수분
+    purchaseDateBalanceRepository.findOneBy.mockResolvedValue({
+      userId: 1,
+      accountId: 2,
+      ...input,
+    });
     purchaseDateBalanceRepository.delete.mockResolvedValue({ affected: 1 });
 
     const moduleRef = await Test.createTestingModule({
@@ -45,6 +56,7 @@ describe('BalanceService.deletePurchase', () => {
         ExchangeRateReader,
         PurchaseRateReader,
         PurchaseWriter,
+        ...accountProviders(),
         {
           provide: getRepositoryToken(PurchaseDateBalance),
           useValue: purchaseDateBalanceRepository,
@@ -72,37 +84,44 @@ describe('BalanceService.deletePurchase', () => {
       where: { id: 1 },
       lock: { mode: 'pessimistic_write' },
     });
-    expect(purchaseDateBalanceRepository.delete).toHaveBeenCalledWith({
+    expect(purchaseDateBalanceRepository.findOneBy).toHaveBeenCalledWith({
       userId: 1,
       ...input,
     });
+    expect(purchaseDateBalanceRepository.delete).toHaveBeenCalledWith({
+      userId: 1,
+      ...input,
+      accountId: 2,
+    });
   });
 
-  it('같은 종목의 매수분이 남아 있으면 UserBalance는 그대로 둔다', async () => {
+  it('그 계좌에 같은 종목 매수분이 남아 있으면 UserBalance는 그대로 둔다', async () => {
     purchaseDateBalanceRepository.existsBy.mockResolvedValue(true);
 
     await service.deletePurchase({ id: 1, rules: [] }, input);
 
     expect(purchaseDateBalanceRepository.existsBy).toHaveBeenCalledWith({
       userId: 1,
+      accountId: 2,
       securityId: '005930',
     });
     expect(userBalanceRepository.delete).not.toHaveBeenCalled();
   });
 
-  it('마지막 매수분을 지우면 UserBalance도 삭제한다', async () => {
+  it('그 계좌의 마지막 매수분을 지우면 그 계좌 UserBalance도 삭제한다', async () => {
     purchaseDateBalanceRepository.existsBy.mockResolvedValue(false);
 
     await service.deletePurchase({ id: 1, rules: [] }, input);
 
     expect(userBalanceRepository.delete).toHaveBeenCalledWith({
       userId: 1,
+      accountId: 2,
       securityId: '005930',
     });
   });
 
-  it('삭제된 행이 없으면 404, UserBalance는 건드리지 않는다', async () => {
-    purchaseDateBalanceRepository.delete.mockResolvedValue({ affected: 0 });
+  it('지울 행이 없으면 404, UserBalance는 건드리지 않는다', async () => {
+    purchaseDateBalanceRepository.findOneBy.mockResolvedValue(null);
 
     await expect(service.deletePurchase({ id: 1, rules: [] }, input)).rejects.toThrow(
       NotFoundException,

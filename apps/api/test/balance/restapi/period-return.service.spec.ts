@@ -7,7 +7,6 @@ import {
   DailySecurity,
   PurchaseDateBalance,
   Security,
-  SecurityCompany,
 } from '@app/common';
 import { DividendHistoryCalculator } from '../../../src/balance/dividend-history.calculator.js';
 import { PurchaseRateReader } from '../../../src/balance/purchase-rate.reader.js';
@@ -244,20 +243,20 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     expect(result.exchangeRate).toBeNull();
   });
 
-  it('securityCompany를 주면 그 증권사 매수분과 그 보유분의 배당만으로 계산, 없으면 전체', async () => {
+  it('accountId를 주면 그 계좌 매수분과 그 보유분의 배당만으로 계산, 없으면 전체', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
     dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
     const range = { from: '2026-01-01', to: '2026-11-30' };
 
-    await service.getPeriodReturn({ id: 1, rules: [] }, { ...range, securityCompany: SecurityCompany.KIWOOM });
+    await service.getPeriodReturn({ id: 1, rules: [] }, { ...range, accountId: 2 });
     await service.getPeriodReturn({ id: 1, rules: [] }, range);
 
     expect(purchaseDateBalanceRepository.find.mock.calls).toEqual([
-      [{ where: { userId: 1, securityCompany: SecurityCompany.KIWOOM } }],
+      [{ where: { userId: 1, accountId: 2 } }],
       [{ where: { userId: 1 } }],
     ]);
     expect(dividendHistoryCalculator.calculate.mock.calls).toEqual([
-      [{ id: 1, rules: [] }, { ...range, securityCompany: SecurityCompany.KIWOOM }],
+      [{ id: 1, rules: [] }, { ...range, accountId: 2 }],
       [{ id: 1, rules: [] }, range],
     ]);
   });

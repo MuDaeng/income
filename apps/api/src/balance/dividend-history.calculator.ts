@@ -63,10 +63,10 @@ export class DividendHistoryCalculator {
     const from = input.from ?? null;
     const to = input.to ?? null;
 
-    // 1. 보유했던 종목 (증권사를 주면 그 증권사 매수분만 → 보유 수량도 그 증권사 기준)
+    // 1. 보유했던 종목 (계좌를 주면 그 계좌 매수분만 → 보유 수량도 그 계좌 기준)
     const purchases = await this.purchaseReader.findByUser(
       authUser.id,
-      input.securityCompany,
+      input.accountId,
     );
     const purchasesBySecurity = new Map<string, PurchaseDateBalance[]>();
     for (const purchase of purchases) {

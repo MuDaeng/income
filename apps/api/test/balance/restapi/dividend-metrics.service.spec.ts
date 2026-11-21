@@ -10,7 +10,6 @@ import {
   DividendType,
   PurchaseDateBalance,
   Security,
-  SecurityCompany,
 } from '@app/common';
 import { PurchaseRateReader } from '../../../src/balance/purchase-rate.reader.js';
 import { PurchaseReader } from '../../../src/balance/purchase.reader.js';
@@ -190,18 +189,18 @@ describe('DividendMetricsService.getDividendMetrics', () => {
     });
   });
 
-  it('securityCompany를 주면 그 증권사 매수분만, 보유 종목이 없으면 배당·환율을 읽지 않는다', async () => {
+  it('accountId를 주면 그 계좌 매수분만, 보유 종목이 없으면 배당·환율을 읽지 않는다', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([
       purchase(KRW.id, '2025-01-02', '5.000000', '5000.000000', '2026-01-02'),
     ]);
 
     const result = await service.getDividendMetrics(
       { id: 1, rules: [] },
-      { securityCompany: SecurityCompany.TOSS },
+      { accountId: 2 },
     );
 
     expect(purchaseDateBalanceRepository.find).toHaveBeenCalledWith({
-      where: { userId: 1, securityCompany: 'TOSS' },
+      where: { userId: 1, accountId: 2 },
     });
     expect(securityRepository.findBy).not.toHaveBeenCalled();
     expect(dividendRepository.find).not.toHaveBeenCalled();
