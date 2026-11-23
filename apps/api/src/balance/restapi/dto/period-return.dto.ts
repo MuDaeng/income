@@ -18,7 +18,13 @@ export class EvaluationItemDto {
   @ApiProperty({ description: '종료일 보유 수량 (기간 중 전량 매도면 0)' })
   quantity: string;
 
-  @ApiProperty({ type: String, nullable: true, description: '종료일(이전 최근) 종가, 종목 통화 (보유 수량 0이면 null)' })
+  @ApiProperty({ type: String, nullable: true, description: '기준금액에 쓴 시작일(이전 최근) 종가, 종목 통화 (시작일 전 매수분이 없거나 시세가 없어 원금으로 대신했으면 null)' })
+  startClosingPrice: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: '시작 종가 기준일 YYYY-MM-DD' })
+  startPriceDate: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: '종료일(이전 최근) 종가, 종목 통화 (보유 수량 0이면 null). 국내 종목은 15:30 전이면 당일 대신 전날 종가' })
   closingPrice: string | null;
 
   @ApiProperty({ type: String, nullable: true, description: '종가 기준일 YYYY-MM-DD' })
@@ -27,19 +33,25 @@ export class EvaluationItemDto {
   @ApiProperty({ type: String, nullable: true, description: '외화 원금 (KRW 종목은 null)' })
   usdPurchaseAmount: string | null;
 
+  @ApiProperty({ type: String, nullable: true, description: '외화 기준금액 (KRW 종목은 null)' })
+  usdBaseAmount: string | null;
+
   @ApiProperty({ type: String, nullable: true, description: '외화 평가금액 (KRW 종목은 null)' })
   usdEvaluationAmount: string | null;
 
   @ApiProperty({ description: '원화 원금 (USD는 매수분마다 저장된 구매 환율, 없으면 매수일 환율로 환산)' })
   krwPurchaseAmount: string;
 
+  @ApiProperty({ description: '원화 기준금액: 시작일 전 매수분은 시작일(이전 최근) 종가 × 수량(USD는 시작일 환율), 기간 중 매수분은 원금' })
+  krwBaseAmount: string;
+
   @ApiProperty({ description: '원화 평가금액 (USD는 종료일 환율로 환산)' })
   krwEvaluationAmount: string;
 
-  @ApiProperty({ description: '평가 수익금 (원화) = 평가금액 − 원금' })
+  @ApiProperty({ description: '기간 평가 수익금 (원화) = 평가금액 − 기준금액' })
   profit: string;
 
-  @ApiProperty({ description: '평가 수익률(%)' })
+  @ApiProperty({ description: '기준금액 대비 평가 수익률(%)' })
   returnRate: string;
 }
 
@@ -47,13 +59,16 @@ export class EvaluationSummaryDto {
   @ApiProperty({ description: '원금 합계 (원화)' })
   purchaseAmount: string;
 
+  @ApiProperty({ description: '기준금액 합계 (원화)' })
+  baseAmount: string;
+
   @ApiProperty({ description: '평가금액 합계 (원화)' })
   evaluationAmount: string;
 
-  @ApiProperty({ description: '평가 수익금 합계 (원화)' })
+  @ApiProperty({ description: '기간 평가 수익금 합계 (원화) = 평가금액 − 기준금액' })
   profit: string;
 
-  @ApiProperty({ description: '평가 수익률(%)' })
+  @ApiProperty({ description: '기준금액 대비 평가 수익률(%)' })
   returnRate: string;
 }
 
@@ -120,6 +135,9 @@ export class TotalReturnItemDto {
   @ApiProperty({ description: '원금 (원화)' })
   purchaseAmount: string;
 
+  @ApiProperty({ description: '기준금액 (원화): 시작일 전 매수분은 시작일 평가금액, 기간 중 매수분은 원금' })
+  baseAmount: string;
+
   @ApiProperty({ description: '평가금액 (원화)' })
   evaluationAmount: string;
 
@@ -129,10 +147,10 @@ export class TotalReturnItemDto {
   @ApiProperty({ description: '평가금액 + 배당금 (원화)' })
   totalAmount: string;
 
-  @ApiProperty({ description: '원금 대비 수익금 = 평가금액 + 배당금 − 원금' })
+  @ApiProperty({ description: '기간 수익금 = 평가금액 + 배당금 − 기준금액' })
   profit: string;
 
-  @ApiProperty({ description: '원금 대비 수익률(%)' })
+  @ApiProperty({ description: '기준금액 대비 수익률(%)' })
   returnRate: string;
 
   @ApiProperty({ description: '세후 배당금 합계 (원화)' })
@@ -141,7 +159,7 @@ export class TotalReturnItemDto {
   @ApiProperty({ description: '평가금액 + 세후 배당금 (원화)' })
   afterTaxTotalAmount: string;
 
-  @ApiProperty({ description: '세후 수익금 = 평가금액 + 세후 배당금 − 원금' })
+  @ApiProperty({ description: '세후 수익금 = 평가금액 + 세후 배당금 − 기준금액' })
   afterTaxProfit: string;
 
   @ApiProperty({ description: '세후 수익률(%)' })
@@ -152,6 +170,9 @@ export class TotalReturnSummaryDto {
   @ApiProperty({ description: '원금 합계 (원화)' })
   purchaseAmount: string;
 
+  @ApiProperty({ description: '기준금액 합계 (원화)' })
+  baseAmount: string;
+
   @ApiProperty({ description: '평가금액 합계 (원화)' })
   evaluationAmount: string;
 
@@ -161,10 +182,10 @@ export class TotalReturnSummaryDto {
   @ApiProperty({ description: '평가금액 + 배당금 합계 (원화)' })
   totalAmount: string;
 
-  @ApiProperty({ description: '원금 대비 수익금 합계' })
+  @ApiProperty({ description: '기간 수익금 합계 = 평가금액 + 배당금 − 기준금액' })
   profit: string;
 
-  @ApiProperty({ description: '원금 대비 수익률(%)' })
+  @ApiProperty({ description: '기준금액 대비 수익률(%)' })
   returnRate: string;
 
   @ApiProperty({ description: '세후 배당금 합계 (원화)' })
@@ -200,6 +221,12 @@ export class PeriodReturnResponse {
 
   @ApiProperty({ type: String, nullable: true, description: '환율 기준일 YYYY-MM-DD' })
   exchangeRateDate: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: '시작일 전 매수한 USD 보유분의 기준금액에 쓴 USD 환율 (시작일 이전 최근, 해당 보유분 없으면 null)' })
+  startExchangeRate: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: '시작 환율 기준일 YYYY-MM-DD' })
+  startExchangeRateDate: string | null;
 
   @ApiProperty({ type: EvaluationSectionDto, description: '평가금액 정보 (종료일 보유분)' })
   evaluation: EvaluationSectionDto;

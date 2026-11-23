@@ -27,6 +27,17 @@ const purchase = (
   saleDate: string | null = null,
 ) => ({ securityId, purchaseDate, amount, price, saleDate });
 
+// 종목별 날짜 → 종가
+const PRICES: Record<string, Record<string, string>> = {
+  [KRW.id]: { '2026-11-06': '4000.000000' },
+  [USD.id]: { '2026-02-02': '105.000000', '2026-11-06': '110.000000' },
+  [SOLD.id]: {
+    '2025-04-01': '40000.000000',
+    '2026-11-22': '190000.000000',
+    '2026-11-23': '140000.000000',
+  },
+};
+
 const RATES: Record<string, string> = {
   '2026-01-02': '1400.000000',
   '2026-02-02': '1450.000000',
@@ -60,13 +71,18 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     service = moduleRef.get(PeriodReturnService);
 
     securityRepository.findBy.mockResolvedValue([KRW, USD, SOLD]);
+    // LessThanOrEqual(date)의 값으로 그날(이전 최근) 종가를 돌려준다
     dailySecurityRepository.findOne.mockImplementation(
-      ({ where }: { where: { id: string } }) =>
-        Promise.resolve({
-          id: where.id,
-          date: '2026-11-06',
-          closingPrice: where.id === USD.id ? '110.000000' : '4000.000000',
-        }),
+      ({ where }: { where: { id: string; date: { value: string } } }) => {
+        const prices = PRICES[where.id] ?? {};
+        const date = Object.keys(prices)
+          .filter((d) => d <= where.date.value)
+          .sort()
+          .at(-1);
+        return Promise.resolve(
+          date ? { id: where.id, date, closingPrice: prices[date] } : null,
+        );
+      },
     );
     // LessThanOrEqual(date)의 값으로 그날(이전 최근) 환율을 돌려준다
     dailyExchangeRateRepository.findOne.mockImplementation(
@@ -154,8 +170,15 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       krwEvaluationAmount: '0',
       returnRate: '0.00',
     });
+    // 모든 매수가 시작일 이후 → 기준금액 = 원금
+    expect(result.startExchangeRate).toBeNull();
+    expect(reits).toMatchObject({
+      startClosingPrice: null,
+      krwBaseAmount: '7400000',
+    });
     expect(result.evaluation.total).toEqual({
       purchaseAmount: '9554000',
+      baseAmount: '9554000',
       evaluationAmount: '8227500',
       profit: '-1326500',
       returnRate: '-13.88',
@@ -177,6 +200,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       securityId: KRW.id,
       name: '리츠',
       purchaseAmount: '7400000',
+      baseAmount: '7400000',
       evaluationAmount: '6000000',
       dividendAmount: '75000',
       totalAmount: '6075000',
@@ -190,6 +214,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     });
     expect(result.total.total).toEqual({
       purchaseAmount: '9554000',
+      baseAmount: '9554000',
       evaluationAmount: '8227500',
       dividendAmount: '82110',
       totalAmount: '8309610',
@@ -217,11 +242,147 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     );
 
     // 1000 × 1300 + 520 × 1450 = 2,054,000
+    // 시작일(2026-01-01) 이전 종가·환율이 없으므로 시작일 전 매수분도 원금 기준
     expect(
       result.evaluation.items.find((item) => item.securityId === USD.id),
-    ).toMatchObject({ krwPurchaseAmount: '2054000' });
-    // 매수일 환율은 저장 환율이 없는 매수분과 종료일 환율만 조회
-    expect(dailyExchangeRateRepository.findOne).toHaveBeenCalledTimes(2);
+    ).toMatchObject({ krwPurchaseAmount: '2054000', krwBaseAmount: '2054000' });
+    // 환율은 저장 환율이 없는 매수분, 종료일, 시작일만 조회
+    expect(dailyExchangeRateRepository.findOne).toHaveBeenCalledTimes(3);
+  });
+
+  describe('기준금액 (시작일 전 매수분은 시작일 종가, 기간 중 매수분은 원금)', () => {
+    const user = { id: 1, rules: [] };
+
+    beforeEach(() => {
+      securityRepository.findBy.mockResolvedValue([SOLD]);
+      dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
+      // 장 마감 뒤
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-23T16:00:00+09:00'));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const samsung = async (from: string, to = '2026-11-23') =>
+      (await service.getPeriodReturn(user, { from, to })).total.items[0];
+
+    it('매수일부터 보면 원금 대비: 4만 → 14만 = +10만', async () => {
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(SOLD.id, '2025-04-01', '1.000000', '40000.000000'),
+      ]);
+
+      expect(await samsung('2025-04-01')).toMatchObject({
+        purchaseAmount: '40000',
+        baseAmount: '40000',
+        evaluationAmount: '140000',
+        profit: '100000',
+      });
+    });
+
+    it('시작일 전 매수분은 시작일 종가 기준: 19만 → 14만 = −5만', async () => {
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(SOLD.id, '2025-04-01', '1.000000', '40000.000000'),
+      ]);
+
+      const result = await service.getPeriodReturn(user, {
+        from: '2026-11-22',
+        to: '2026-11-23',
+      });
+
+      expect(result.evaluation.items[0]).toMatchObject({
+        startClosingPrice: '190000',
+        startPriceDate: '2026-11-22',
+        krwPurchaseAmount: '40000',
+        krwBaseAmount: '190000',
+        krwEvaluationAmount: '140000',
+        profit: '-50000',
+        returnRate: '-26.31',
+      });
+      expect(result.total.total).toMatchObject({
+        purchaseAmount: '40000',
+        baseAmount: '190000',
+        profit: '-50000',
+      });
+    });
+
+    it('기간 중 매수분은 원금 기준: 17만에 사서 종가 14만 = −3만 (시작일 전 매수분과 섞여도)', async () => {
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(SOLD.id, '2025-04-01', '1.000000', '40000.000000'),
+        purchase(SOLD.id, '2026-11-23', '1.000000', '170000.000000'),
+      ]);
+
+      // 기존 1주: 1123 종가 14만 → 14만 = 0, 오늘 산 1주: 17만 → 14만 = −3만
+      expect(await samsung('2026-11-23')).toMatchObject({
+        purchaseAmount: '210000',
+        baseAmount: '310000',
+        evaluationAmount: '280000',
+        profit: '-30000',
+      });
+    });
+
+    it('장 마감(15:30) 전이면 오늘 종가가 저장돼 있어도 전날 종가로 평가', async () => {
+      vi.setSystemTime(new Date('2026-11-23T13:00:00+09:00'));
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(SOLD.id, '2026-11-23', '1.000000', '170000.000000'),
+      ]);
+
+      const result = await service.getPeriodReturn(user, {
+        from: '2026-11-23',
+        to: '2026-11-23',
+      });
+
+      expect(result.evaluation.items[0]).toMatchObject({
+        closingPrice: '190000',
+        priceDate: '2026-11-22',
+        krwBaseAmount: '170000',
+        profit: '20000',
+      });
+    });
+
+    it('시작일 종가가 없으면 원금 기준', async () => {
+      securityRepository.findBy.mockResolvedValue([KRW]);
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(KRW.id, '2026-01-02', '10.000000', '5000.000000'),
+      ]);
+
+      const result = await service.getPeriodReturn(user, {
+        from: '2026-03-01',
+        to: '2026-11-23',
+      });
+
+      expect(result.evaluation.items[0]).toMatchObject({
+        startClosingPrice: null,
+        krwBaseAmount: '50000',
+        krwEvaluationAmount: '40000',
+        profit: '-10000',
+      });
+    });
+
+    it('USD 시작일 전 매수분은 시작일 종가 × 시작일 환율', async () => {
+      securityRepository.findBy.mockResolvedValue([USD]);
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(USD.id, '2026-01-02', '10.000000', '100.000000'),
+      ]);
+
+      const result = await service.getPeriodReturn(user, {
+        from: '2026-02-02',
+        to: '2026-11-23',
+      });
+
+      expect(result.startExchangeRate).toBe('1450');
+      expect(result.startExchangeRateDate).toBe('2026-02-02');
+      // 원금 1000 × 1400, 기준 1050 × 1450, 평가 1100 × 1350
+      expect(result.evaluation.items[0]).toMatchObject({
+        startClosingPrice: '105.000000',
+        usdPurchaseAmount: '1000.000000',
+        usdBaseAmount: '1050.000000',
+        krwPurchaseAmount: '1400000',
+        krwBaseAmount: '1522500',
+        krwEvaluationAmount: '1485000',
+        profit: '-37500',
+      });
+    });
   });
 
   it('USD 매수일 이전 환율이 없으면 404', async () => {
@@ -248,6 +409,7 @@ describe('PeriodReturnService.getPeriodReturn', () => {
     expect(result.evaluation.items).toEqual([]);
     expect(result.total.total).toEqual({
       purchaseAmount: '0',
+      baseAmount: '0',
       evaluationAmount: '0',
       dividendAmount: '0',
       totalAmount: '0',
