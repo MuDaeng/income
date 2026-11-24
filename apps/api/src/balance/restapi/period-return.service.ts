@@ -12,7 +12,7 @@ import {
 import type { AuthUser } from '../../auth/restapi/jwt.strategy.js';
 import { DailyPriceReader } from '../../security/daily-price.reader.js';
 import { ExchangeRateReader } from '../../security/exchange-rate.reader.js';
-import { krwPriceDate } from '../../security/iso-date.js';
+import { addDays, krwPriceDate } from '../../security/iso-date.js';
 import { DividendHistoryCalculator } from '../dividend-history.calculator.js';
 import type {
   DividendSumItemDto,
@@ -44,6 +44,7 @@ export class PeriodReturnService {
    * 2. 평가금액 = 종료일(이전 최근) 종가 × 수량, USD는 종료일(이전 최근) 환율로 원화 환산
    *    - 기준금액: 시작일 전 매수분은 시작일(이전 최근) 종가 × 수량(USD는 시작일 환율), 기간 중 매수분은 원금
    *    - KRW 종가는 krwPriceDate()까지만 본다(15:30 전이면 오늘 시세 대신 전날 종가)
+   *    - USD 종가는 하루 전 날짜까지 본다(시세는 미국 거래일 날짜로 저장되고 한국 다음 날 새벽에 마감)
    * 3. 기간 배당금 = DividendHistoryCalculator 결과(지급일이 [from, to])를 종목별로 합산
    * 4. 종목 = 종료일 보유 종목 ∪ 기간 중 배당 받은 종목. 총합 = 평가금액 + 배당금, 기준금액 대비 수익금·수익률
    * 합계는 응답에 보이는 종목별 값(버림 후)을 더한다.
@@ -269,7 +270,8 @@ export class PeriodReturnService {
     // KRW는 장 마감(15:30) 전이면 오늘 대신 전날까지의 종가만 쓴다
     const priceDateOf = (date: string): string => {
       if (isUsd) {
-        return date;
+        // 미국 거래일 D 종가는 한국 D+1 새벽에 확정 → 한국 날짜 X엔 미국 X−1까지의 종가
+        return addDays(date, -1);
       }
       const confirmed = krwPriceDate();
       return date < confirmed ? date : confirmed;

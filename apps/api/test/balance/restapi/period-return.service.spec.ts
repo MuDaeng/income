@@ -365,8 +365,9 @@ describe('PeriodReturnService.getPeriodReturn', () => {
         purchase(USD.id, '2026-01-02', '10.000000', '100.000000'),
       ]);
 
+      // USD 종가는 하루 전(미국 거래일)까지 → 시작 02-03이면 02-02 종가
       const result = await service.getPeriodReturn(user, {
-        from: '2026-02-02',
+        from: '2026-02-03',
         to: '2026-11-23',
       });
 
@@ -382,6 +383,37 @@ describe('PeriodReturnService.getPeriodReturn', () => {
         krwEvaluationAmount: '1485000',
         profit: '-37500',
       });
+    });
+
+    it('USD는 하루 전 날짜(미국 거래일) 종가: 어제~오늘이면 어젯밤 미국장 하루치', async () => {
+      vi.setSystemTime(new Date('2026-11-24T16:00:00+09:00'));
+      securityRepository.findBy.mockResolvedValue([USD]);
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(USD.id, '2026-01-02', '10.000000', '100.000000'),
+      ]);
+      PRICES[USD.id]['2026-11-20'] = '120.000000';
+      PRICES[USD.id]['2026-11-23'] = '125.000000';
+      try {
+        const result = await service.getPeriodReturn(user, {
+          from: '2026-11-23',
+          to: '2026-11-24',
+        });
+
+        // 시작 11-22 이전 최근 = 11-20(금), 종료 11-23 이전 최근 = 11-23(월)
+        // 기준 1200 × 1350, 평가 1250 × 1350
+        expect(result.evaluation.items[0]).toMatchObject({
+          startClosingPrice: '120.000000',
+          startPriceDate: '2026-11-20',
+          closingPrice: '125.000000',
+          priceDate: '2026-11-23',
+          krwBaseAmount: '1620000',
+          krwEvaluationAmount: '1687500',
+          profit: '67500',
+        });
+      } finally {
+        delete PRICES[USD.id]['2026-11-20'];
+        delete PRICES[USD.id]['2026-11-23'];
+      }
     });
   });
 
