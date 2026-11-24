@@ -90,8 +90,8 @@ deploy/    Nginx 설정
 | DELETE | `/balance/purchases` | 매수 내역 삭제 |
 | GET | `/balance/dividends` | 배당금 내역, 세전·세후, 지급 예정 배당은 `scheduled`로 분리 (일반 계좌만 국내 15.4%·미국 15% 과세, `accountId`를 주면 그 계좌 보유분만) |
 | GET | `/balance/dividend-metrics` | 배당 지표: 보유 종목별 최근 12개월 주당 배당·예상 연배당·YOC·현재 배당률·배당 성장률(세전, 상장 1년 남짓한 국내 종목은 회당 평균 비교) (`accountId`를 주면 그 계좌만) |
-| GET | `/balance/monthly` | 월말별 원금·평가금액·평가금액+누적배당금 (from~to 년월, 이번 달은 오늘 기준, `accountId`를 주면 그 계좌만) |
-| GET | `/balance/returns` | 기간 수익률: 시작일 전 매수분은 시작일 종가, 기간 중 매수분은 원금을 기준금액으로 한 수익금·수익률과 기간 배당, 세전·세후 (국내 종목은 15:30 전이면 전날 종가, `accountId`를 주면 그 계좌만) |
+| GET | `/balance/monthly` | 월말별 원금·평가금액·평가금액+누적배당금 (from~to 년월, 이번 달은 오늘 기준, 미국 종목은 기준일 하루 전(미국 거래일) 종가, `accountId`를 주면 그 계좌만) |
+| GET | `/balance/returns` | 기간 수익률: 시작일 전 매수분은 시작일 종가, 기간 중 매수분은 원금을 기준금액으로 한 수익금·수익률과 기간 배당, 세전·세후 (국내 종목은 15:30 전이면 전날 종가, 미국 종목은 시작·종료일 하루 전(미국 거래일) 종가라 어제~오늘이면 어젯밤 미국장 하루치, `accountId`를 주면 그 계좌만) |
 | GET | `/admin/batch-histories` | 배치 실행 이력 (관리자) |
 | GET | `/admin/security-searches/price` | 종목별 국내 시세 조회 이력 (관리자) |
 
