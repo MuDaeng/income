@@ -13,7 +13,7 @@ import {
 import type { AuthUser } from '../../auth/restapi/jwt.strategy.js';
 import { DailyPriceReader } from '../../security/daily-price.reader.js';
 import { ExchangeRateReader } from '../../security/exchange-rate.reader.js';
-import { todayInSeoul } from '../../security/iso-date.js';
+import { addDays, todayInSeoul } from '../../security/iso-date.js';
 import { DividendHistoryCalculator } from '../dividend-history.calculator.js';
 import type {
   MonthlyBalanceItemDto,
@@ -44,6 +44,7 @@ export class MonthlyBalanceService {
    * accountId를 주면 그 계좌 매수분만으로 원금·평가·배당을 계산, 없으면 전체 계좌.
    * - 보유분: 매수일 <= 기준일, 미매도 또는 매도일 > 기준일. 원금은 USD면 저장된 구매 환율, 없으면 매수일(이전 최근) 환율로 환산
    * - 평가금액: 기준일(이전 최근) 종가 × 수량, USD는 기준일(이전 최근) 환율로 환산
+   *   (USD 종가는 하루 전 날짜까지 = 미국 거래일 기준으로 기준일에 마감된 마지막 종가)
    * - 누적배당금: 처음부터 기준일까지 지급된 배당금(DividendHistoryCalculator, 원화 환산 없는 건 제외)
    * - 종목: 기준일 보유 종목 ∪ 기준일까지 배당을 받은 종목. 합계는 종목별 값(버림 후)을 더한다
    * 시세·환율은 마지막 기준일까지 한 번에 읽어 메모리에서 찾는다.
@@ -177,10 +178,13 @@ export class MonthlyBalanceService {
 
     let krwEvaluation = new Decimal(0);
     if (!quantity.isZero()) {
-      const price = latestOnOrBefore(data.prices, date);
+      // USD 시세는 미국 거래일 날짜로 저장되고 한국 다음 날 새벽에 마감 → 하루 전 날짜까지
+      const priceDate =
+        currency === Currency.USD ? addDays(date, -1) : date;
+      const price = latestOnOrBefore(data.prices, priceDate);
       if (!price) {
         throw new NotFoundException(
-          `${security.name}의 ${date} 이전 시세가 없습니다.`,
+          `${security.name}의 ${priceDate} 이전 시세가 없습니다.`,
         );
       }
       krwEvaluation = new Decimal(price.closingPrice).times(quantity);
