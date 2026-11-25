@@ -18,6 +18,7 @@ import {
   type BatchHistoryRequest,
   batchHistorySchema,
 } from './dto/batch-history.schema.js';
+import { ClientTokenItemDto } from './dto/client-token.dto.js';
 import { PriceSearchItemDto } from './dto/price-search.dto.js';
 
 @ApiTags('admin')
@@ -46,5 +47,15 @@ export class AdminController {
   @ApiOkResponse({ type: [PriceSearchItemDto] })
   getPriceSearches(): Promise<PriceSearchItemDto[]> {
     return this.adminService.getPriceSearches();
+  }
+
+  @Get('client-tokens')
+  @ApiOperation({
+    summary:
+      '외부 API 토큰 마지막 갱신 시각 조회 (관리자): clientType, updatedAt, 최신순',
+  })
+  @ApiOkResponse({ type: [ClientTokenItemDto] })
+  getClientTokens(): Promise<ClientTokenItemDto[]> {
+    return this.adminService.getClientTokens();
   }
 }

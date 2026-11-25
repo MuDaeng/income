@@ -2,6 +2,8 @@ import { In, type Repository } from 'typeorm';
 import {
   type BatchHistory,
   BatchStatus,
+  type ClientToken,
+  ClientType,
   SearchType,
   type Security,
   type SecuritySearch,
@@ -14,6 +16,7 @@ describe('AdminService.getBatchHistories', () => {
     { find } as unknown as Repository<BatchHistory>,
     {} as Repository<SecuritySearch>,
     {} as Repository<Security>,
+    {} as Repository<ClientToken>,
   );
 
   beforeEach(() => {
@@ -53,6 +56,7 @@ describe('AdminService.getPriceSearches', () => {
     {} as Repository<BatchHistory>,
     { find: findSearches } as unknown as Repository<SecuritySearch>,
     { find: findSecurities } as unknown as Repository<Security>,
+    {} as Repository<ClientToken>,
   );
   const createdAt = new Date('2026-11-01T00:00:00Z');
   const updatedAt = new Date('2026-11-17T07:00:00Z');
@@ -97,5 +101,41 @@ describe('AdminService.getPriceSearches', () => {
 
     await expect(service.getPriceSearches()).resolves.toEqual([]);
     expect(findSecurities).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdminService.getClientTokens', () => {
+  const find = vi.fn();
+  const service = new AdminService(
+    {} as Repository<BatchHistory>,
+    {} as Repository<SecuritySearch>,
+    {} as Repository<Security>,
+    { find } as unknown as Repository<ClientToken>,
+  );
+
+  beforeEach(() => {
+    find.mockReset();
+  });
+
+  it('토큰 값 없이 clientType·updatedAt만 최신순으로 돌려준다', async () => {
+    const updatedAt = new Date('2026-11-25T23:00:00Z');
+    find.mockResolvedValue([
+      { clientType: ClientType.KIS, token: 'secret', createdAt: updatedAt, updatedAt },
+    ]);
+
+    const result = await service.getClientTokens();
+
+    expect(find).toHaveBeenCalledWith({
+      select: { clientType: true, updatedAt: true },
+      order: { updatedAt: 'DESC', clientType: 'ASC' },
+    });
+    expect(result).toEqual([{ clientType: ClientType.KIS, updatedAt }]);
+    expect(Object.keys(result[0])).toEqual(['clientType', 'updatedAt']);
+  });
+
+  it('토큰이 없으면 빈 배열', async () => {
+    find.mockResolvedValue([]);
+
+    await expect(service.getClientTokens()).resolves.toEqual([]);
   });
 });
