@@ -28,7 +28,7 @@
 - Zod 요청 검증, Swagger (`/api-docs`, 운영 환경에서는 비활성)
 - Passport (Google OAuth 2.0, JWT), `@nestjs/schedule`, `@nestjs/throttler`
 - Vitest, oxlint
-- 배포: GitHub Actions → EC2 (pm2 + Nginx)
+- 배포: GitHub Actions(self-hosted runner) → AWS Lightsail 서울 (pm2 + Nginx), DB는 Lightsail 관리형 MySQL
 
 ## 외부 데이터
 
