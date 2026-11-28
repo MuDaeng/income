@@ -10,6 +10,7 @@ import {
   Repository,
 } from 'typeorm';
 import {
+  addYears,
   Currency,
   type DailyExchangeRate,
   Dividend,
@@ -55,7 +56,8 @@ export class DividendHistoryCalculator {
   /**
    * 배당금 내역.
    * 1. 사용자의 매수일별 잔고(매도분 포함)로 지금까지 보유한 종목을 구하고, 종목마다 배당·시세를 원천에서 갱신한다
-   *    (종목별 하루 한 번, 실패해도 저장분으로 계속)
+   *    (종목별 하루 한 번, 실패해도 저장분으로 계속). 전량 매도하고 마지막 매도일이 1년보다 오래된 종목은
+   *    갱신하지 않고 저장분만 쓴다 (needsRefresh)
    * 2. 그 종목들의 현금배당(MONEY) 중 지급일이 [from, to]인 것 (입력이 없으면 그쪽은 제한 없음, 지급 예정 포함)
    * 3. 배당마다 받을 권리가 있는 수량 = 배당락일 전날까지 매수하고 배당락일 이후(당일 포함) 매도했거나 보유 중인
    *    매수분 수량 합 (purchaseDate < 배당락일 <= saleDate). 배당락일이 없는 예전 행은 기준일 보유
@@ -111,9 +113,13 @@ export class DividendHistoryCalculator {
         .filter((s) => isSupportedCurrency(s.currency))
         .map((s) => [s.id, s]),
     );
-    // 외부 API 한도(Massive 분당 호출 수 등) 때문에 종목마다 순서대로
+    // 외부 API 한도(Massive 분당 호출 수 등) 때문에 종목마다 순서대로.
+    // 전량 매도 후 오래된 종목은 새 배당·시세가 필요 없으니 저장분만 쓴다
+    const today = todayInSeoul();
     for (const security of securityById.values()) {
-      await this.securityRefresher.refresh(security);
+      if (needsRefresh(purchasesBySecurity.get(security.id) ?? [], today)) {
+        await this.securityRefresher.refresh(security);
+      }
     }
 
     // 2. 기간 내 현금배당
@@ -201,7 +207,6 @@ export class DividendHistoryCalculator {
     }
 
     // 5. 지급분(지급일 <= 오늘)은 월별로, 지급 예정분(지급일 > 오늘)은 scheduled로 따로
-    const today = todayInSeoul();
     const paid = items.filter((item) => item.paymentDate <= today);
     const scheduled = items.filter((item) => item.paymentDate > today);
     const byMonth = new Map<string, DividendItemDto[]>();
@@ -227,6 +232,21 @@ export class DividendHistoryCalculator {
     };
   }
 }
+
+/** 전량 매도 후에도 온라인 갱신을 계속하는 기간 (락일 뒤 매도분의 미지급 배당 공시·지급을 놓치지 않도록) */
+export const REFRESH_AFTER_SALE_YEARS = 1;
+
+/**
+ * 종목을 원천에서 갱신해야 하는지. 미매도 매수분이 있거나, 전량 매도했어도 마지막 매도일이
+ * 오늘 − REFRESH_AFTER_SALE_YEARS 이후(당일 포함)면 true
+ */
+export const needsRefresh = (
+  purchases: Pick<PurchaseDateBalance, 'saleDate'>[],
+  today: string,
+): boolean => {
+  const since = addYears(today, -REFRESH_AFTER_SALE_YEARS);
+  return purchases.some((p) => p.saleDate === null || p.saleDate >= since);
+};
 
 const paymentDateFilter = (
   from: string | null,

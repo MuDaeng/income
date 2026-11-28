@@ -11,7 +11,10 @@ import {
   Security,
 } from '@app/common';
 import { SecurityRefresher } from '../../src/security/security.refresher.js';
-import { DividendHistoryCalculator } from '../../src/balance/dividend-history.calculator.js';
+import {
+  DividendHistoryCalculator,
+  needsRefresh,
+} from '../../src/balance/dividend-history.calculator.js';
 import { PurchaseReader } from '../../src/balance/purchase.reader.js';
 import { ExchangeRateReader } from '../../src/security/exchange-rate.reader.js';
 import { ACCOUNT, accountProviders } from './account-providers.js';
@@ -363,5 +366,56 @@ describe('DividendHistoryCalculator.calculate', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('전량 매도 후 1년이 지난 종목은 온라인 갱신하지 않지만 저장된 과거 배당은 계산한다', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-04-20T12:00:00+09:00'));
+    try {
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        // KRW: 2025-04-19 전량 매도 (1년 지남) → 갱신 안 함
+        purchase(KRW_SECURITY.id, '2024-01-02', '10.000000', '2025-04-19'),
+        // USD: 보유 중 → 갱신
+        purchase(USD_SECURITY.id, '2026-01-02', '1.000000'),
+      ]);
+      dividendRepository.find.mockResolvedValue([
+        { id: KRW_SECURITY.id, noticeDate: '2024-12-31', exDividendDate: '2024-12-27', paymentDate: '2025-04-18', amount: '361.000000', type: DividendType.MONEY },
+      ]);
+
+      const result = await service.calculate({ id: 1, rules: [] }, {});
+
+      expect(securityRefresher.refresh.mock.calls).toEqual([[USD_SECURITY]]);
+      expect(dividendRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: In([KRW_SECURITY.id, USD_SECURITY.id]) }),
+        }),
+      );
+      expect(result.total).toMatchObject({ krwAmount: '3610' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('needsRefresh', () => {
+  const TODAY = '2026-04-20';
+
+  it('미매도 매수분이 있으면 true', () => {
+    expect(needsRefresh([{ saleDate: '2020-01-02' }, { saleDate: null }], TODAY)).toBe(true);
+  });
+
+  it('전량 매도했어도 마지막 매도일이 1년 이내(경계일 포함)면 true', () => {
+    expect(needsRefresh([{ saleDate: '2025-04-20' }], TODAY)).toBe(true);
+    expect(needsRefresh([{ saleDate: '2026-04-01' }], TODAY)).toBe(true);
+  });
+
+  it('마지막 매도일이 1년보다 오래되면 false', () => {
+    expect(needsRefresh([{ saleDate: '2025-04-19' }], TODAY)).toBe(false);
+  });
+
+  it('여러 매도분 중 가장 늦은 매도일 하나만 1년 이내여도 true', () => {
+    expect(
+      needsRefresh([{ saleDate: '2020-01-02' }, { saleDate: '2026-01-02' }, { saleDate: '2024-05-01' }], TODAY),
+    ).toBe(true);
   });
 });
