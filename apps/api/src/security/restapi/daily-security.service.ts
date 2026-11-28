@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Security, truncateByCurrency } from '@app/common';
+import { Security, todayInSeoul, truncateByCurrency } from '@app/common';
 import type { DailyPriceResponse } from './dto/daily-price.dto.js';
 import { DailyPriceReader } from '../daily-price.reader.js';
 import type { DailyPriceRequest } from './dto/daily-price.schema.js';
@@ -41,7 +41,8 @@ export class DailySecurityService {
     return {
       security,
       from,
-      to,
+      // 생략하면 오늘 (조회 범위는 그대로 끝까지)
+      to: to ?? todayInSeoul(),
       prices: rows.map((row) => ({
         date: row.date,
         openingPrice: price(row.openingPrice),

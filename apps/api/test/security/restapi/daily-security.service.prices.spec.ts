@@ -114,7 +114,14 @@ describe('DailySecurityService.getDailyPrices', () => {
     findOneBy.mockResolvedValue(AAPL);
     dailyFind.mockResolvedValue([]);
 
-    await service.getDailyPrices({ securityId: AAPL.id });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-28T12:00:00+09:00'));
+    const result = await service.getDailyPrices({ securityId: AAPL.id });
+    vi.useRealTimers();
+
+    // 응답 from은 null, to는 오늘 (조회는 날짜 조건 없음)
+    expect(result.from).toBeNull();
+    expect(result.to).toBe('2026-11-28');
 
     expect(dailyFind.mock.calls[0][0].where).toEqual({ id: AAPL.id });
   });

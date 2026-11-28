@@ -210,10 +210,10 @@ export class TotalReturnSectionDto {
 }
 
 export class PeriodReturnResponse {
-  @ApiProperty({ description: '조회 시작일' })
-  from: string;
+  @ApiProperty({ type: String, nullable: true, description: '조회 시작일 (입력값, 생략하면 null = 처음부터)' })
+  from: string | null;
 
-  @ApiProperty({ description: '조회 종료일 (평가 기준일)' })
+  @ApiProperty({ description: '조회 종료일 = 평가 기준일 (생략하면 오늘, Asia/Seoul)' })
   to: string;
 
   @ApiProperty({ type: String, nullable: true, description: '평가에 쓴 USD 환율 (종료일 이전 최근 종가, USD 보유 없으면 null)' })

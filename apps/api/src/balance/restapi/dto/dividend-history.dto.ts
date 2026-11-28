@@ -125,8 +125,8 @@ export class DividendHistoryResponse {
   @ApiProperty({ type: String, nullable: true, description: '조회 시작일 (입력값, 없으면 null)' })
   from: string | null;
 
-  @ApiProperty({ type: String, nullable: true, description: '조회 종료일 (입력값, 없으면 null)' })
-  to: string | null;
+  @ApiProperty({ description: '조회 종료일 (입력값, 생략하면 오늘(Asia/Seoul) — 조회는 그대로 끝까지라 지급 예정(scheduled)은 이 날짜 이후)' })
+  to: string;
 
   @ApiProperty({ type: DividendSummaryDto, description: '기간 총배당금 (지급분만, 지급 예정은 scheduled)' })
   total: DividendSummaryDto;

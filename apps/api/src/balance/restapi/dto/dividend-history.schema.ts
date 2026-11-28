@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+import { DATE_RANGE_ERROR, isOrderedDateRange } from '@app/common';
 
 export const dividendHistorySchema = z
   .object({
@@ -11,11 +10,6 @@ export const dividendHistorySchema = z
     /** 계좌 id (GET /accounts). 생략하면 전체 계좌 (그 계좌 매수분의 보유 수량으로 배당 계산) */
     accountId: z.coerce.number().int().positive().optional(),
   })
-  // 'YYYY-MM-DD'는 문자열 비교가 날짜 순서와 같음. 형식이 틀린 값은 필드 검증이 잡으므로 건너뜀
-  .refine(
-    ({ from, to }) =>
-      !from || !to || !ISO_DATE.test(from) || !ISO_DATE.test(to) || from <= to,
-    { message: '시작일은 종료일과 같거나 이전이어야 합니다.', path: ['from'] },
-  );
+  .refine(isOrderedDateRange, DATE_RANGE_ERROR);
 
 export type DividendHistoryRequest = z.infer<typeof dividendHistorySchema>;

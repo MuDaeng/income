@@ -16,12 +16,17 @@ describe('periodReturnSchema', () => {
     expect(result.error?.issues[0].path).toEqual(['accountId']);
   });
 
-  it('시작일·종료일이 없거나 형식이 틀리면 거절한다', () => {
-    expect(periodReturnSchema.safeParse({}).success).toBe(false);
-    expect(periodReturnSchema.safeParse({ from: '2026-01-01' }).success).toBe(false);
+  it('시작일·종료일은 둘 다 선택이다 (from 생략 = 처음부터, to 생략 = 오늘)', () => {
+    expect(periodReturnSchema.safeParse({}).success).toBe(true);
+    expect(periodReturnSchema.safeParse({ from: '2026-01-01' }).success).toBe(true);
+    expect(periodReturnSchema.safeParse({ to: '2026-01-31' }).success).toBe(true);
+  });
+
+  it('날짜 형식이 틀리면 거절한다', () => {
     expect(
       periodReturnSchema.safeParse({ from: '20260101', to: '2026-01-31' }).success,
     ).toBe(false);
+    expect(periodReturnSchema.safeParse({ to: '2026-13-01' }).success).toBe(false);
   });
 
   it('시작일이 종료일보다 뒤면 from에 오류를 낸다', () => {

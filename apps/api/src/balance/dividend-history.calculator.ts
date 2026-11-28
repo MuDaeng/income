@@ -72,6 +72,8 @@ export class DividendHistoryCalculator {
   ): Promise<DividendHistoryResponse> {
     const from = input.from ?? null;
     const to = input.to ?? null;
+    // 응답 to: 생략하면 오늘(조회 범위는 그대로 끝까지 — 지급 예정 배당 포함)
+    const responseTo = to ?? todayInSeoul();
 
     // 1. 보유했던 종목 (계좌를 주면 그 계좌 매수분만 → 보유 수량도 그 계좌 기준)
     const purchases = await this.purchaseReader.findByUser(
@@ -88,7 +90,7 @@ export class DividendHistoryCalculator {
     if (securityIds.length === 0) {
       return {
         from,
-        to,
+        to: responseTo,
         total: summarize([]),
         months: [],
         scheduled: { total: summarize([]), items: [] },
@@ -212,7 +214,7 @@ export class DividendHistoryCalculator {
 
     return {
       from,
-      to,
+      to: responseTo,
       total: summarize(paid),
       scheduled: { total: summarize(scheduled), items: scheduled },
       months: [...byMonth.entries()]

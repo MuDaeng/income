@@ -8,6 +8,7 @@ import {
   isSupportedCurrency,
   type PurchaseDateBalance,
   Security,
+  todayInSeoul,
   toKrw,
   toUsd,
   truncateByCurrency,
@@ -53,12 +54,16 @@ export class PeriodReturnService {
    * 4. 종목 = 종료일 보유 종목 ∪ 기간 중 배당 받은 종목. 총합 = 평가금액 + 배당금, 기준금액 대비 수익금·수익률
    * 합계는 응답에 보이는 종목별 값(버림 후)을 더한다.
    * accountId를 주면 그 계좌 매수분만으로 원금·평가·배당을 계산, 없으면 전체 계좌.
+   * from을 생략하면 처음부터(모든 매수분의 기준금액 = 원금, 배당은 처음부터), to를 생략하면 오늘(Asia/Seoul).
+   * 응답의 from·to는 실제 적용한 값 (from 생략이면 null).
    */
   async getPeriodReturn(
     authUser: AuthUser,
     input: PeriodReturnRequest,
   ): Promise<PeriodReturnResponse> {
-    const { from, to, accountId } = input;
+    const { accountId } = input;
+    const from = input.from ?? null;
+    const to = input.to ?? todayInSeoul();
 
     // 1. 종료일 보유분 (계좌를 주면 그 계좌 매수분만)
     const purchases = await this.purchaseReader.findByUser(
@@ -81,7 +86,7 @@ export class PeriodReturnService {
     // 3. 기간 배당금 (계좌를 주면 그 계좌 보유 수량 기준)
     const history = await this.dividendHistoryCalculator.calculate(
       authUser,
-      { from, to, accountId },
+      { from: from ?? undefined, to, accountId },
     );
     const dividends = new Map<
       string,
@@ -133,10 +138,11 @@ export class PeriodReturnService {
     const hasUsdBeforeFrom = targets.some(
       (s) =>
         s.currency === Currency.USD &&
-        (heldBySecurity.get(s.id) ?? []).some((p) => p.purchaseDate < from),
+        (heldBySecurity.get(s.id) ?? []).some((p) => boughtBefore(p, from)),
     );
-    const startRate = hasUsdBeforeFrom
-      ? await this.exchangeRateReader.findUsdOnOrBefore(from, rateCache)
+    const startRate =
+      hasUsdBeforeFrom && from !== null
+        ? await this.exchangeRateReader.findUsdOnOrBefore(from, rateCache)
       : null;
 
     // 1~2. 평가
@@ -260,11 +266,12 @@ export class PeriodReturnService {
    * 종목 하나의 종료일 보유 수량·원금·기준금액·평가금액. 보유 수량이 0이면 모두 0.
    * 기준금액: 시작일 전 매수분은 시작일(이전 최근) 종가 × 수량(USD는 시작일 환율),
    * 그 종가·환율이 없거나 종가가 매수일보다 앞서면(시세 누락) 원금. 기간 중 매수분은 원금.
+   * from이 null(처음부터)이면 모든 매수분이 원금 기준.
    */
   private async evaluate(
     security: Security,
     held: PurchaseDateBalance[],
-    period: { from: string; to: string },
+    period: { from: string | null; to: string },
     endRate: DailyExchangeRate | null,
     startRate: DailyExchangeRate | null,
     rateCache: Map<string, DailyExchangeRate | null>,
@@ -274,12 +281,14 @@ export class PeriodReturnService {
     // KRW는 장 마감(15:30) 전이면 전날까지, USD는 하루 전(미국 거래일)까지의 종가
     const priceDateOf = (date: string): string => priceLookupDate(currency, date);
 
-    const startDaily = held.some((p) => p.purchaseDate < period.from)
-      ? await this.dailyPriceReader.findLatestOnOrBefore(
-          security.id,
-          priceDateOf(period.from),
-        )
-      : null;
+    const startFrom = period.from;
+    const startDaily =
+      startFrom !== null && held.some((p) => boughtBefore(p, startFrom))
+        ? await this.dailyPriceReader.findLatestOnOrBefore(
+            security.id,
+            priceDateOf(startFrom),
+          )
+        : null;
 
     let quantity = new Decimal(0);
     let cost = new Decimal(0);
@@ -299,7 +308,7 @@ export class PeriodReturnService {
       krwCost = krwCost.plus(krwPurchaseCost);
 
       if (
-        purchase.purchaseDate < period.from &&
+        boughtBefore(purchase, period.from) &&
         startDaily !== null &&
         startDaily.date >= purchase.purchaseDate &&
         (!isUsd || startRate !== null)
@@ -378,3 +387,8 @@ export class PeriodReturnService {
   }
 }
 
+/** 시작일 전에 산 매수분인지. from이 null(처음부터)이면 항상 false */
+const boughtBefore = (
+  purchase: Pick<PurchaseDateBalance, 'purchaseDate'>,
+  from: string | null,
+): boolean => from !== null && purchase.purchaseDate < from;

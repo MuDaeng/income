@@ -66,11 +66,15 @@ describe('DividendHistoryCalculator.calculate', () => {
   it('보유했던 종목이 없으면 빈 내역을 돌려준다', async () => {
     purchaseDateBalanceRepository.find.mockResolvedValue([]);
 
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-04-20T12:00:00+09:00'));
     const result = await service.calculate({ id: 1, rules: [] }, {});
+    vi.useRealTimers();
 
+    // to를 생략하면 응답 to는 오늘 (조회 범위는 그대로 끝까지)
     expect(result).toEqual({
       from: null,
-      to: null,
+      to: '2026-04-20',
       total: {
         krwAmount: '0',
         usdAmount: '0.000000',

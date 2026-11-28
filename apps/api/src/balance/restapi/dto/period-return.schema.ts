@@ -1,25 +1,15 @@
 import { z } from 'zod';
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+import { DATE_RANGE_ERROR, isOrderedDateRange } from '@app/common';
 
 export const periodReturnSchema = z
   .object({
-    /** 조회 시작일 'YYYY-MM-DD' (배당 지급일 기간의 시작) */
-    from: z.iso.date(),
-    /** 조회 종료일 'YYYY-MM-DD' (평가 기준일, 배당 지급일 기간의 끝) */
-    to: z.iso.date(),
+    /** 조회 시작일 'YYYY-MM-DD' (배당 지급일 기간의 시작). 생략하면 처음부터 (모든 매수분의 기준금액 = 원금) */
+    from: z.iso.date().optional(),
+    /** 조회 종료일 'YYYY-MM-DD' (평가 기준일, 배당 지급일 기간의 끝). 생략하면 오늘(Asia/Seoul) */
+    to: z.iso.date().optional(),
     /** 계좌 id (GET /accounts). 생략하면 전체 계좌 */
     accountId: z.coerce.number().int().positive().optional(),
   })
-  // 'YYYY-MM-DD'는 문자열 비교가 날짜 순서와 같음. 형식이 틀린 값은 필드 검증이 잡으므로 건너뜀
-  .refine(
-    ({ from, to }) =>
-      typeof from !== 'string' ||
-      typeof to !== 'string' ||
-      !ISO_DATE.test(from) ||
-      !ISO_DATE.test(to) ||
-      from <= to,
-    { message: '시작일은 종료일과 같거나 이전이어야 합니다.', path: ['from'] },
-  );
+  .refine(isOrderedDateRange, DATE_RANGE_ERROR);
 
 export type PeriodReturnRequest = z.infer<typeof periodReturnSchema>;

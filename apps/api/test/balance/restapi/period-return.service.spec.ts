@@ -472,4 +472,66 @@ describe('PeriodReturnService.getPeriodReturn', () => {
       [{ id: 1, rules: [] }, range],
     ]);
   });
+
+  describe('from·to 생략', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('from을 생략하면 처음부터: 시작 종가·환율을 조회하지 않고 기준금액 = 원금, 응답 from은 null', async () => {
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(SOLD.id, '2025-04-01', '1.000000', '40000.000000'),
+      ]);
+      dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
+
+      const result = await service.getPeriodReturn(
+        { id: 1, rules: [] },
+        { to: '2026-11-23' },
+      );
+
+      expect(dividendHistoryCalculator.calculate).toHaveBeenCalledWith(
+        { id: 1, rules: [] },
+        { from: undefined, to: '2026-11-23' },
+      );
+      // 평가 종가 한 번만 조회 (시작 종가 없음)
+      expect(dailySecurityRepository.findOne).toHaveBeenCalledTimes(1);
+      expect(result.from).toBeNull();
+      expect(result.to).toBe('2026-11-23');
+      expect(result.startExchangeRate).toBeNull();
+      expect(result.evaluation.items[0]).toMatchObject({
+        krwPurchaseAmount: '40000',
+        krwBaseAmount: '40000',
+        krwEvaluationAmount: '140000',
+        startClosingPrice: null,
+      });
+      expect(result.total.total.profit).toBe('100000');
+    });
+
+    it('to를 생략하면 오늘(Asia/Seoul)로 평가하고 응답 to에 그 날짜를 준다', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      // 2026-11-23 21:00 KST (장 마감 후)
+      vi.setSystemTime(new Date('2026-11-23T12:00:00Z'));
+      purchaseDateBalanceRepository.find.mockResolvedValue([
+        purchase(SOLD.id, '2025-04-01', '1.000000', '40000.000000'),
+      ]);
+      dividendHistoryCalculator.calculate.mockResolvedValue({ months: [] });
+
+      const result = await service.getPeriodReturn(
+        { id: 1, rules: [] },
+        { from: '2026-11-22' },
+      );
+
+      expect(dividendHistoryCalculator.calculate).toHaveBeenCalledWith(
+        { id: 1, rules: [] },
+        { from: '2026-11-22', to: '2026-11-23' },
+      );
+      expect(result.from).toBe('2026-11-22');
+      expect(result.to).toBe('2026-11-23');
+      expect(result.evaluation.items[0]).toMatchObject({
+        krwBaseAmount: '190000',
+        krwEvaluationAmount: '140000',
+      });
+      expect(result.total.total.profit).toBe('-50000');
+    });
+  });
 });

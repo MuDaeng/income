@@ -40,8 +40,8 @@ export class DailyPriceResponse {
   @ApiProperty({ type: String, nullable: true, description: '조회 시작일 (입력값, 없으면 null)' })
   from: string | null;
 
-  @ApiProperty({ type: String, nullable: true, description: '조회 종료일 (입력값, 없으면 null)' })
-  to: string | null;
+  @ApiProperty({ description: '조회 종료일 (입력값, 생략하면 오늘(Asia/Seoul))' })
+  to: string;
 
   @ApiProperty({ type: [DailyPriceDto], description: '일별 시세 (날짜 오름차순)' })
   prices: DailyPriceDto[];
