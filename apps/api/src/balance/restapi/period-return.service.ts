@@ -5,14 +5,18 @@ import { In, Repository } from 'typeorm';
 import {
   Currency,
   type DailyExchangeRate,
+  isSupportedCurrency,
   type PurchaseDateBalance,
   Security,
+  toKrw,
+  toUsd,
   truncateByCurrency,
 } from '@app/common';
+import { sumDecimals } from '../money.js';
 import type { AuthUser } from '../../auth/restapi/jwt.strategy.js';
 import { DailyPriceReader } from '../../security/daily-price.reader.js';
+import { priceLookupDate } from '../../security/price-date.js';
 import { ExchangeRateReader } from '../../security/exchange-rate.reader.js';
-import { addDays, krwPriceDate } from '../../security/iso-date.js';
 import { DividendHistoryCalculator } from '../dividend-history.calculator.js';
 import type {
   DividendSumItemDto,
@@ -111,7 +115,7 @@ export class PeriodReturnService {
       ? await this.securityRepository.findBy({ id: In(ids) })
       : [];
     const targets = securities
-      .filter((s) => s.currency === Currency.KRW || s.currency === Currency.USD)
+      .filter((s) => isSupportedCurrency(s.currency))
       .sort((a, b) => a.id.localeCompare(b.id));
 
     const hasUsd = targets.some(
@@ -193,12 +197,12 @@ export class PeriodReturnService {
     });
 
     // 합계
-    const purchaseSum = sum(evaluationItems.map((e) => e.krwPurchaseAmount));
-    const baseSum = sum(evaluationItems.map((e) => e.krwBaseAmount));
-    const evaluationSum = sum(evaluationItems.map((e) => e.krwEvaluationAmount));
-    const dividendKrwSum = sum(dividendItems.map((d) => d.krwAmount));
+    const purchaseSum = sumDecimals(evaluationItems.map((e) => e.krwPurchaseAmount));
+    const baseSum = sumDecimals(evaluationItems.map((e) => e.krwBaseAmount));
+    const evaluationSum = sumDecimals(evaluationItems.map((e) => e.krwEvaluationAmount));
+    const dividendKrwSum = sumDecimals(dividendItems.map((d) => d.krwAmount));
     const totalSum = evaluationSum.plus(dividendKrwSum);
-    const afterTaxDividendKrwSum = sum(
+    const afterTaxDividendKrwSum = sumDecimals(
       dividendItems.map((d) => d.afterTaxKrwAmount),
     );
     const afterTaxTotalSum = evaluationSum.plus(afterTaxDividendKrwSum);
@@ -225,10 +229,10 @@ export class PeriodReturnService {
       dividend: {
         items: dividendItems,
         total: {
-          usdAmount: toUsd(sum(dividendItems.map((d) => d.usdAmount))),
+          usdAmount: toUsd(sumDecimals(dividendItems.map((d) => d.usdAmount))),
           krwAmount: toKrw(dividendKrwSum),
           afterTaxUsdAmount: toUsd(
-            sum(dividendItems.map((d) => d.afterTaxUsdAmount)),
+            sumDecimals(dividendItems.map((d) => d.afterTaxUsdAmount)),
           ),
           afterTaxKrwAmount: toKrw(afterTaxDividendKrwSum),
         },
@@ -267,15 +271,8 @@ export class PeriodReturnService {
   ): Promise<EvaluationItemDto> {
     const { currency } = security;
     const isUsd = currency === Currency.USD;
-    // KRW는 장 마감(15:30) 전이면 오늘 대신 전날까지의 종가만 쓴다
-    const priceDateOf = (date: string): string => {
-      if (isUsd) {
-        // 미국 거래일 D 종가는 한국 D+1 새벽에 확정 → 한국 날짜 X엔 미국 X−1까지의 종가
-        return addDays(date, -1);
-      }
-      const confirmed = krwPriceDate();
-      return date < confirmed ? date : confirmed;
-    };
+    // KRW는 장 마감(15:30) 전이면 전날까지, USD는 하루 전(미국 거래일)까지의 종가
+    const priceDateOf = (date: string): string => priceLookupDate(currency, date);
 
     const startDaily = held.some((p) => p.purchaseDate < period.from)
       ? await this.dailyPriceReader.findLatestOnOrBefore(
@@ -381,13 +378,3 @@ export class PeriodReturnService {
   }
 }
 
-const sum = (values: (string | null)[]): Decimal =>
-  values.reduce<Decimal>(
-    (acc, value) => (value === null ? acc : acc.plus(value)),
-    new Decimal(0),
-  );
-
-const toKrw = (value: Decimal.Value): string =>
-  truncateByCurrency(value, Currency.KRW);
-const toUsd = (value: Decimal.Value): string =>
-  truncateByCurrency(value, Currency.USD);

@@ -4,12 +4,13 @@ import { Repository } from 'typeorm';
 import {
   Currency,
   DailySecurity,
+  fromYmd,
   KisClient,
   type KisDailyPriceItem,
+  parseKrwPrice,
   type Security,
-  truncateByCurrency,
+  toYmd,
 } from '@app/common';
-import { toYmd } from './iso-date.js';
 
 /**
  * 국내(KRW) 종목 하나의 하루치 일별 시세를 KIS(한국투자증권)에서 받아 daily_security에 upsert한다 (조회 API의 온라인 보충용).
@@ -43,13 +44,9 @@ export class DailyPriceFetcher {
 /** KIS 일봉 한 행 → daily_security 행 (원화 정수) */
 const toDailySecurity = (id: string, item: KisDailyPriceItem) => ({
   id,
-  date: `${item.stck_bsop_date.slice(0, 4)}-${item.stck_bsop_date.slice(4, 6)}-${item.stck_bsop_date.slice(6, 8)}`,
-  openingPrice: toKrwPrice(item.stck_oprc),
-  closingPrice: toKrwPrice(item.stck_clpr),
-  highestPrice: toKrwPrice(item.stck_hgpr),
-  lowestPrice: toKrwPrice(item.stck_lwpr),
+  date: fromYmd(item.stck_bsop_date),
+  openingPrice: parseKrwPrice(item.stck_oprc),
+  closingPrice: parseKrwPrice(item.stck_clpr),
+  highestPrice: parseKrwPrice(item.stck_hgpr),
+  lowestPrice: parseKrwPrice(item.stck_lwpr),
 });
-
-/** 원화 정수로 버림. 빈 값이면 0 */
-const toKrwPrice = (value: string) =>
-  truncateByCurrency(value?.trim() || '0', Currency.KRW);

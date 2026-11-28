@@ -19,14 +19,33 @@ export const addYears = (isoDate: string, years: number): string => {
   return formatIsoDate(date);
 };
 
+/** 다음 달 1일 'YYYY-MM-DD' */
+export const nextMonthFirst = (isoDate: string): string => {
+  const date = parseIsoDate(isoDate);
+  return formatIsoDate(
+    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)),
+  );
+};
+
+/** 그 날짜가 토·일인지 (UTC 날짜 기준) */
+export const isWeekend = (isoDate: string): boolean => {
+  const day = parseIsoDate(isoDate).getUTCDay();
+  return day === 0 || day === 6;
+};
+
 /** 'YYYY-MM-DD' → 'YYYYMMDD' */
 export const toYmd = (isoDate: string): string => isoDate.replaceAll('-', '');
 
+/** 'YYYYMMDD' → 'YYYY-MM-DD' (형식 검사 없음) */
+export const fromYmd = (ymd: string): string =>
+  `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
+
+/** 그 시간대(IANA, 예: 'America/New_York') 기준 오늘 'YYYY-MM-DD' */
+export const todayIn = (timeZone: string): string =>
+  new Intl.DateTimeFormat('sv-SE', { timeZone }).format(new Date());
+
 /** 한국 시간 기준 오늘 'YYYY-MM-DD' */
-export const todayInSeoul = (): string =>
-  new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(
-    new Date(),
-  );
+export const todayInSeoul = (): string => todayIn('Asia/Seoul');
 
 /** 국내 정규장 마감 시각(한국 시간 'HH:mm'). 이 전에는 그날 시세가 아직 확정되지 않음 */
 export const KRW_MARKET_CLOSE = '15:30';

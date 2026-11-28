@@ -1,10 +1,4 @@
-import { addDays, parseIsoDate } from './iso-date.js';
-
-/** 그 날짜가 토·일인지 (UTC 날짜 기준) */
-const isWeekend = (isoDate: string): boolean => {
-  const day = parseIsoDate(isoDate).getUTCDay();
-  return day === 0 || day === 6;
-};
+import { addDays, isWeekend } from '@app/common';
 
 /** date(포함) 이전 가장 가까운 평일 */
 const weekdayOnOrBefore = (isoDate: string): string => {

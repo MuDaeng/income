@@ -1,5 +1,6 @@
 import { BadGatewayException, Inject, Injectable, Logger } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
+import { sleep } from '../../base/sleep.js';
 import { massiveConfig } from '../../config/massive.config.js';
 import type {
   MassiveAggregateBar,
@@ -127,6 +128,3 @@ export class MassiveClient {
     }
   }
 }
-
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));

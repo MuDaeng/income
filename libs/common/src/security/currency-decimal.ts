@@ -7,6 +7,9 @@ const DECIMAL_PLACES: Record<Currency, number> = {
     [Currency.USD]: 6,
 };
 
+/** decimalColumn(DECIMAL(20, 6))의 소수 자릿수 */
+const COLUMN_SCALE = 6;
+
 export function decimalPlacesOf(currency: Currency): number {
     return DECIMAL_PLACES[currency];
 }
@@ -18,4 +21,30 @@ export function decimalPlacesOf(currency: Currency): number {
 export function truncateByCurrency(value: Decimal.Value, currency: Currency): string {
     const places = decimalPlacesOf(currency);
     return new Decimal(value).toDecimalPlaces(places, Decimal.ROUND_DOWN).toFixed(places);
+}
+
+/**
+ * 환율·비율(%)처럼 통화와 무관하게 컬럼 자릿수(소수 6자리)로 버림한다.
+ * truncateByCurrency(KRW)를 쓰면 정수로 잘리므로 따로 둔다. 예) '1400.1234567' → '1400.123456'
+ */
+export function truncateRate(value: Decimal.Value): string {
+    return new Decimal(value).toDecimalPlaces(COLUMN_SCALE, Decimal.ROUND_DOWN).toFixed(COLUMN_SCALE);
+}
+
+/**
+ * 원천(KIS·data.go.kr) 응답의 원화 가격 문자열 → 원화 정수 버림.
+ * 빈 값이면 new Decimal('')가 예외라 0으로 둔다 (거래정지 종목은 원천에서도 0)
+ */
+export function parseKrwPrice(value: string | undefined): string {
+    return toKrw(value?.trim() || '0');
+}
+
+/** 원화 금액: 정수로 버림 (= truncateByCurrency(value, KRW)) */
+export function toKrw(value: Decimal.Value): string {
+    return truncateByCurrency(value, Currency.KRW);
+}
+
+/** 달러 금액: 소수 6자리로 버림 (= truncateByCurrency(value, USD)) */
+export function toUsd(value: Decimal.Value): string {
+    return truncateByCurrency(value, Currency.USD);
 }

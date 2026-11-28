@@ -5,6 +5,13 @@ import { Currency } from './currency.enum.js';
 import { truncateByCurrency } from './currency-decimal.js';
 import { DailySecurity } from './daily-security.entity.js';
 import { Security } from './security.entity.js';
+import {
+  addDays,
+  addYears,
+  formatIsoDate,
+  isWeekend,
+} from '../base/iso-date.js';
+import { upsertInChunks } from '../base/upsert-in-chunks.js';
 import { toMassiveTicker } from '../client/massive/massive-ticker.js';
 import {
   MassiveClient,
@@ -14,7 +21,6 @@ import type { MassiveGroupedBar } from '../client/massive/massive.types.js';
 
 /** 기간을 생략했을 때 가져올 햇수 */
 const DEFAULT_YEARS = 2;
-const UPSERT_CHUNK = 1_000;
 
 /** 'YYYY-MM-DD', 둘 다 포함. 생략하면 to = 오늘(UTC), from = to - 2년 */
 export interface ImportDailySecuritiesInput {
@@ -35,7 +41,8 @@ export interface ImportDailySecuritiesResult {
   lastDate: string | null;
 }
 
-type DailySecurityRow = Pick<
+/** daily_security에 upsert하는 한 행 (us·domestic 시세 가져오기 공통) */
+export type DailySecurityRow = Pick<
   DailySecurity,
   | 'id'
   | 'date'
@@ -67,8 +74,8 @@ export class UsDailyPriceFetcher {
   async importFromMassive(
     input: ImportDailySecuritiesInput,
   ): Promise<ImportDailySecuritiesResult> {
-    const to = input.to ?? toIsoDate(new Date());
-    const from = input.from ?? yearsBefore(to, DEFAULT_YEARS);
+    const to = input.to ?? formatIsoDate(new Date());
+    const from = input.from ?? addYears(to, -DEFAULT_YEARS);
 
     const usdSecurities = await this.securityRepository.find({
       select: { id: true, symbol: true },
@@ -117,12 +124,7 @@ export class UsDailyPriceFetcher {
           });
         }
       }
-      for (let i = 0; i < prices.length; i += UPSERT_CHUNK) {
-        await this.dailySecurityRepository.upsert(
-          prices.slice(i, i + UPSERT_CHUNK),
-          ['id', 'date'],
-        );
-      }
+      await upsertInChunks(this.dailySecurityRepository, prices, ['id', 'date']);
 
       result.fetched += bars.length;
       result.saved += prices.length;
@@ -138,25 +140,3 @@ export class UsDailyPriceFetcher {
     return result;
   }
 }
-
-/** UTC 기준 'YYYY-MM-DD' */
-const toIsoDate = (date: Date) => date.toISOString().slice(0, 10);
-
-const parseIsoDate = (isoDate: string) => new Date(`${isoDate}T00:00:00Z`);
-
-const addDays = (isoDate: string, days: number) => {
-  const date = parseIsoDate(isoDate);
-  date.setUTCDate(date.getUTCDate() + days);
-  return toIsoDate(date);
-};
-
-const yearsBefore = (isoDate: string, years: number) => {
-  const date = parseIsoDate(isoDate);
-  date.setUTCFullYear(date.getUTCFullYear() - years);
-  return toIsoDate(date);
-};
-
-const isWeekend = (isoDate: string) => {
-  const day = parseIsoDate(isoDate).getUTCDay();
-  return day === 0 || day === 6;
-};

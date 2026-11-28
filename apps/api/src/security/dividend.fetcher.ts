@@ -3,20 +3,23 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
 import { Repository } from 'typeorm';
 import {
+  addDays,
   Currency,
   Dividend,
   DividendType,
+  fromYmd,
   Security,
   KisClient,
   MassiveClient,
   toMassiveTicker,
+  toYmd,
   truncateByCurrency,
+  truncateRate,
   type KisDividendItem,
   type MassiveDividend,
 } from '@app/common';
 import { DailyPriceReader } from './daily-price.reader.js';
 import { krwExDividendDate } from './ex-dividend-date.js';
-import { addDays, toYmd } from './iso-date.js';
 
 type DividendRow = Pick<
   Dividend,
@@ -123,7 +126,7 @@ const fromKisItem = (
       noticeDate,
       exDividendDate,
       // 주식배당률(%), 소수 6자리 버림
-      amount: stockRate.toDecimalPlaces(6, Decimal.ROUND_DOWN).toFixed(6),
+      amount: truncateRate(stockRate),
       type: DividendType.STOCK,
     });
   }
@@ -167,7 +170,5 @@ const toDecimal = (value: string | undefined) => {
  */
 const toIsoDate = (date: string | undefined) => {
   const value = (date ?? '').trim().replace(/[/-]/g, '');
-  return /^\d{8}$/.test(value)
-    ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
-    : null;
+  return /^\d{8}$/.test(value) ? fromYmd(value) : null;
 };

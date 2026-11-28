@@ -6,14 +6,18 @@ import {
   Currency,
   type DailyExchangeRate,
   type DailySecurity,
+  isSupportedCurrency,
   type PurchaseDateBalance,
   Security,
+  todayInSeoul,
+  toKrw,
   truncateByCurrency,
 } from '@app/common';
+import { sumDecimals } from '../money.js';
 import type { AuthUser } from '../../auth/restapi/jwt.strategy.js';
 import { DailyPriceReader } from '../../security/daily-price.reader.js';
+import { priceLookupDate } from '../../security/price-date.js';
 import { ExchangeRateReader } from '../../security/exchange-rate.reader.js';
-import { addDays, todayInSeoul } from '../../security/iso-date.js';
 import { DividendHistoryCalculator } from '../dividend-history.calculator.js';
 import type {
   MonthlyBalanceItemDto,
@@ -83,7 +87,7 @@ export class MonthlyBalanceService {
     ];
     const securities = ids.length
       ? (await this.securityRepository.findBy({ id: In(ids) }))
-          .filter((s) => s.currency === Currency.KRW || s.currency === Currency.USD)
+          .filter((s) => isSupportedCurrency(s.currency))
           .sort((a, b) => a.id.localeCompare(b.id))
       : [];
 
@@ -178,9 +182,8 @@ export class MonthlyBalanceService {
 
     let krwEvaluation = new Decimal(0);
     if (!quantity.isZero()) {
-      // USD 시세는 미국 거래일 날짜로 저장되고 한국 다음 날 새벽에 마감 → 하루 전 날짜까지
-      const priceDate =
-        currency === Currency.USD ? addDays(date, -1) : date;
+      // USD는 하루 전(미국 거래일)까지, KRW는 장 마감(15:30) 전이면 전날까지의 종가
+      const priceDate = priceLookupDate(currency, date);
       const price = latestOnOrBefore(data.prices, priceDate);
       if (!price) {
         throw new NotFoundException(
@@ -198,7 +201,7 @@ export class MonthlyBalanceService {
     }
 
     const evaluationAmount = toKrw(krwEvaluation);
-    const dividendAmount = toKrw(sum(paidKrw));
+    const dividendAmount = toKrw(sumDecimals(paidKrw));
     return {
       securityId: security.id,
       name: security.name,
@@ -252,15 +255,10 @@ const latestOnOrBefore = <T extends Dated>(list: T[], date: string): T | null =>
   return found;
 };
 
-const sum = (values: string[]): Decimal =>
-  values.reduce((acc, value) => acc.plus(value), new Decimal(0));
 
 const sumItems = (items: MonthlyBalanceItemDto[]) => ({
-  purchaseAmount: toKrw(sum(items.map((i) => i.purchaseAmount))),
-  evaluationAmount: toKrw(sum(items.map((i) => i.evaluationAmount))),
-  dividendAmount: toKrw(sum(items.map((i) => i.dividendAmount))),
-  totalAmount: toKrw(sum(items.map((i) => i.totalAmount))),
+  purchaseAmount: toKrw(sumDecimals(items.map((i) => i.purchaseAmount))),
+  evaluationAmount: toKrw(sumDecimals(items.map((i) => i.evaluationAmount))),
+  dividendAmount: toKrw(sumDecimals(items.map((i) => i.dividendAmount))),
+  totalAmount: toKrw(sumDecimals(items.map((i) => i.totalAmount))),
 });
-
-const toKrw = (value: Decimal.Value): string =>
-  truncateByCurrency(value, Currency.KRW);

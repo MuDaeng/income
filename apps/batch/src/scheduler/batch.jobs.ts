@@ -1,13 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import {
+  addDays,
   BatchHistoryWriter,
   BatchStatus,
   DomesticDailyPriceFetcher,
   DOMESTIC_MARKETS,
   ExchangeRateFetcher,
+  formatIsoDate,
   OVERSEAS_MARKETS,
   SecurityFetcher,
+  todayIn,
   TokenProvider,
   UsDailyPriceFetcher,
 } from '@app/common';
@@ -64,8 +67,8 @@ export class BatchJobs {
     waitForCompletion: true,
   })
   importExchangeRates(): Promise<boolean> {
-    const to = new Date().toISOString().slice(0, 10);
-    const from = daysBefore(to, EXCHANGE_RATE_LOOKBACK_DAYS);
+    const to = formatIsoDate(new Date());
+    const from = addDays(to, -EXCHANGE_RATE_LOOKBACK_DAYS);
     return this.run('exchange-rates', () =>
       this.exchangeRateFetcher.importFromMassive({ from, to }),
     );
@@ -104,8 +107,8 @@ export class BatchJobs {
     waitForCompletion: true,
   })
   importUsDailyPrices(): Promise<boolean> {
-    const to = daysBefore(todayIn(US_MARKET_TIME_ZONE), 1);
-    const from = daysBefore(to, US_DAILY_PRICE_LOOKBACK_DAYS);
+    const to = addDays(todayIn(US_MARKET_TIME_ZONE), -1);
+    const from = addDays(to, -US_DAILY_PRICE_LOOKBACK_DAYS);
     return this.run('us-daily-prices', () =>
       this.usDailyPriceFetcher.importFromMassive({ from, to }),
     );
@@ -119,7 +122,7 @@ export class BatchJobs {
   })
   importDomesticDailyPrices(): Promise<boolean> {
     const to = todayIn(BATCH_TIME_ZONE);
-    const from = daysBefore(to, DOMESTIC_DAILY_PRICE_LOOKBACK_DAYS);
+    const from = addDays(to, -DOMESTIC_DAILY_PRICE_LOOKBACK_DAYS);
     return this.run('domestic-daily-prices', () =>
       this.domesticDailyPriceFetcher.importFromDataGoKr({ from, to }),
     );
@@ -176,13 +179,3 @@ export class BatchJobs {
     }
   }
 }
-
-/** 그 시간대의 오늘 'YYYY-MM-DD' */
-const todayIn = (timeZone: string) =>
-  new Intl.DateTimeFormat('sv-SE', { timeZone }).format(new Date());
-
-const daysBefore = (isoDate: string, days: number) => {
-  const date = new Date(`${isoDate}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() - days);
-  return date.toISOString().slice(0, 10);
-};

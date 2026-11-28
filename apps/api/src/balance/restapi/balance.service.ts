@@ -9,19 +9,23 @@ import { In, IsNull, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import {
   type Account,
+  addDays,
   Currency,
   type DailyExchangeRate,
   decimalPlacesOf,
   PurchaseDateBalance,
   Security,
   SecurityCompany,
+  toKrw,
+  toUsd,
   truncateByCurrency,
+  truncateRate,
   UserBalance,
 } from '@app/common';
+import { sumDecimals } from '../money.js';
 import type { AuthUser } from '../../auth/restapi/jwt.strategy.js';
 import { DailyPriceReader } from '../../security/daily-price.reader.js';
 import { ExchangeRateReader } from '../../security/exchange-rate.reader.js';
-import { addDays } from '../../security/iso-date.js';
 import { SecurityRefresher } from '../../security/security.refresher.js';
 import { AccountReader } from '../../user/account.reader.js';
 import { AccountWriter } from '../../user/account.writer.js';
@@ -152,7 +156,7 @@ export class BalanceService {
         input.exchangeRate ??
         (await this.exchangeRateReader.findUsdOnOrBefore(purchaseDate))
           ?.closingRate;
-      exchangeRate = rate ? toRate(rate) : null;
+      exchangeRate = rate ? truncateRate(rate) : null;
     }
 
     // 5. 등록
@@ -416,7 +420,7 @@ export class BalanceService {
         const rate =
           transaction.exchangeRate ??
           (await this.exchangeRateReader.findUsdOnOrBefore(date))?.closingRate;
-        exchangeRate = rate ? toRate(rate) : null;
+        exchangeRate = rate ? truncateRate(rate) : null;
       }
       await this.purchaseWriter.append({
         userId,
@@ -544,7 +548,7 @@ export class BalanceService {
     }
 
     purchase.exchangeRate =
-      input.exchangeRate === null ? null : toRate(input.exchangeRate);
+      input.exchangeRate === null ? null : truncateRate(input.exchangeRate);
     return this.purchaseWriter.update(purchase);
   }
 
@@ -737,12 +741,12 @@ export class BalanceService {
     // 5. 합계
     const krwItems = items.filter((item) => item.currency === Currency.KRW);
     const usdItems = items.filter((item) => item.currency === Currency.USD);
-    const krwPurchase = this.sum(krwItems.map((i) => i.krwPurchaseAmount));
-    const krwEvaluation = this.sum(krwItems.map((i) => i.krwEvaluationAmount));
-    const usdPurchase = this.sum(usdItems.map((i) => i.usdPurchaseAmount));
-    const usdEvaluation = this.sum(usdItems.map((i) => i.usdEvaluationAmount));
-    const usdKrwPurchase = this.sum(usdItems.map((i) => i.krwPurchaseAmount));
-    const usdKrwEvaluation = this.sum(
+    const krwPurchase = sumDecimals(krwItems.map((i) => i.krwPurchaseAmount));
+    const krwEvaluation = sumDecimals(krwItems.map((i) => i.krwEvaluationAmount));
+    const usdPurchase = sumDecimals(usdItems.map((i) => i.usdPurchaseAmount));
+    const usdEvaluation = sumDecimals(usdItems.map((i) => i.usdEvaluationAmount));
+    const usdKrwPurchase = sumDecimals(usdItems.map((i) => i.krwPurchaseAmount));
+    const usdKrwEvaluation = sumDecimals(
       usdItems.map((i) => i.krwEvaluationAmount),
     );
     const totalPurchase = krwPurchase.plus(usdKrwPurchase);
@@ -830,13 +834,6 @@ export class BalanceService {
     };
   }
 
-  private sum(values: (string | null)[]): Decimal {
-    return values.reduce<Decimal>(
-      (acc, value) => (value === null ? acc : acc.plus(value)),
-      new Decimal(0),
-    );
-  }
-
   /** 사용자의 계좌를 id로 찾는 Map */
   private async accountsOf(userId: number): Promise<Map<number, Account>> {
     const accounts = await this.accountReader.findByUser(userId);
@@ -855,12 +852,4 @@ function uniqueBySecurity(balances: UserBalance[]): UserBalance[] {
     return true;
   });
 }
-
-const toKrw = (value: Decimal.Value): string =>
-  truncateByCurrency(value, Currency.KRW);
-const toUsd = (value: Decimal.Value): string =>
-  truncateByCurrency(value, Currency.USD);
-/** 환율은 통화와 무관하게 소수 6자리 버림 (truncateByCurrency(KRW)를 쓰면 정수로 잘림) */
-const toRate = (value: Decimal.Value): string =>
-  new Decimal(value).toDecimalPlaces(6, Decimal.ROUND_DOWN).toFixed(6);
 

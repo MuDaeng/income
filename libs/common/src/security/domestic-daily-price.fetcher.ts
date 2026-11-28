@@ -2,13 +2,22 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Currency } from './currency.enum.js';
-import { truncateByCurrency } from './currency-decimal.js';
+import { parseKrwPrice } from './currency-decimal.js';
 import { DailySecurity } from './daily-security.entity.js';
 import { Security } from './security.entity.js';
 import type {
+  DailySecurityRow,
   ImportDailySecuritiesInput,
   ImportDailySecuritiesResult,
 } from './us-daily-price.fetcher.js';
+import {
+  addDays,
+  fromYmd,
+  nextMonthFirst,
+  todayInSeoul,
+  toYmd,
+} from '../base/iso-date.js';
+import { upsertInChunks } from '../base/upsert-in-chunks.js';
 import { DataGoKrClient } from '../client/data-go-kr/data-go-kr.client.js';
 import type {
   PriceItem,
@@ -18,21 +27,10 @@ import type {
 
 /** data.go.kr 한 페이지 최대 행 수 */
 const PAGE_SIZE = 10_000;
-const UPSERT_CHUNK = 1_000;
 /** 기간을 생략했을 때 가져올 일수 */
 const DEFAULT_DAYS = 4;
 
-type DailySecurityRow = Pick<
-  DailySecurity,
-  | 'id'
-  | 'date'
-  | 'openingPrice'
-  | 'closingPrice'
-  | 'highestPrice'
-  | 'lowestPrice'
->;
-
-/** 국내 주식·ETF 일별 시세 가져오기 (batch domestic-daily-prices 잡, api의 일회용 전체 적재) */
+/** 국내 주식·ETF 일별 시세 가져오기 (batch domestic-daily-prices 잡) */
 @Injectable()
 export class DomesticDailyPriceFetcher {
   private readonly logger = new Logger(DomesticDailyPriceFetcher.name);
@@ -103,12 +101,7 @@ export class DomesticDailyPriceFetcher {
       const prices = page.items
         .filter((item) => knownIds.has(item.isinCd))
         .map(toDailySecurity);
-      for (let i = 0; i < prices.length; i += UPSERT_CHUNK) {
-        await this.dailySecurityRepository.upsert(
-          prices.slice(i, i + UPSERT_CHUNK),
-          ['id', 'date'],
-        );
-      }
+      await upsertInChunks(this.dailySecurityRepository, prices, ['id', 'date']);
 
       result.fetched += page.items.length;
       result.saved += prices.length;
@@ -131,16 +124,12 @@ export class DomesticDailyPriceFetcher {
 /** data.go.kr 일별 시세 한 행 → daily_security 행 (원화 정수) */
 export const toDailySecurity = (item: PriceItem): DailySecurityRow => ({
   id: item.isinCd,
-  date: `${item.basDt.slice(0, 4)}-${item.basDt.slice(4, 6)}-${item.basDt.slice(6, 8)}`,
-  openingPrice: toKrwPrice(item.mkp),
-  closingPrice: toKrwPrice(item.clpr),
-  highestPrice: toKrwPrice(item.hipr),
-  lowestPrice: toKrwPrice(item.lopr),
+  date: fromYmd(item.basDt),
+  openingPrice: parseKrwPrice(item.mkp),
+  closingPrice: parseKrwPrice(item.clpr),
+  highestPrice: parseKrwPrice(item.hipr),
+  lowestPrice: parseKrwPrice(item.lopr),
 });
-
-/** 원화 정수로 버림. 빈 값이 오면 new Decimal('')가 예외라 0으로 둠 (거래정지 종목은 원천에서도 0) */
-const toKrwPrice = (value: string) =>
-  truncateByCurrency(value?.trim() || '0', Currency.KRW);
 
 /** [from, to]를 달력 달 단위 구간들로 나눈다 (둘 다 포함) */
 export const monthlyWindows = (
@@ -156,27 +145,3 @@ export const monthlyWindows = (
   }
   return windows;
 };
-
-const parseIsoDate = (isoDate: string) => new Date(`${isoDate}T00:00:00Z`);
-const toIsoDate = (date: Date) => date.toISOString().slice(0, 10);
-
-const addDays = (isoDate: string, days: number) => {
-  const date = parseIsoDate(isoDate);
-  date.setUTCDate(date.getUTCDate() + days);
-  return toIsoDate(date);
-};
-
-const nextMonthFirst = (isoDate: string) => {
-  const date = parseIsoDate(isoDate);
-  return toIsoDate(
-    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)),
-  );
-};
-
-/** 'YYYY-MM-DD' → 'YYYYMMDD' */
-const toYmd = (isoDate: string) => isoDate.replaceAll('-', '');
-
-const todayInSeoul = () =>
-  new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(
-    new Date(),
-  );

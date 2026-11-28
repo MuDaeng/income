@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Currency } from './currency.enum.js';
 import { Security } from './security.entity.js';
 import { SecurityType } from './security-type.enum.js';
+import { sleep } from '../base/sleep.js';
+import { upsertInChunks } from '../base/upsert-in-chunks.js';
 import { TossClient } from '../client/toss/toss.client.js';
 import type {
   TossMarket,
@@ -48,14 +50,13 @@ const TOSS_TYPE_TO_SECURITY_TYPE: Record<TossSecurityType, SecurityType> = {
 
 /** Toss `stocks/all`의 속도 제한이 1회/초라 시장 사이에 기다리는 시간 */
 export const MARKET_INTERVAL_MS = 1_100;
-const UPSERT_CHUNK = 1_000;
 
 export interface ImportSecuritiesResult {
   total: number;
   markets: Partial<Record<TossMarket, number>>;
 }
 
-/** Toss 상장 종목 목록을 security에 넣는다. api(수동 가져오기)와 batch(일배치)가 같이 쓴다 */
+/** Toss 상장 종목 목록을 security에 넣는다. batch의 domestic-securities·overseas-securities 잡이 쓴다 */
 @Injectable()
 export class SecurityFetcher {
   constructor(
@@ -95,15 +96,7 @@ export class SecurityFetcher {
     }
 
     const securities = [...byIsin.values()];
-    for (let i = 0; i < securities.length; i += UPSERT_CHUNK) {
-      await this.securityRepository.upsert(
-        securities.slice(i, i + UPSERT_CHUNK),
-        ['id'],
-      );
-    }
+    await upsertInChunks(this.securityRepository, securities, ['id']);
     return { total: securities.length, markets: counts };
   }
 }
-
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));

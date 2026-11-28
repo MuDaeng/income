@@ -3,18 +3,24 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Decimal } from 'decimal.js';
 import { Between, In, LessThanOrEqual, Repository } from 'typeorm';
 import {
+  addDays,
+  addYears,
   Currency,
   type DailyExchangeRate,
   Dividend,
   DividendType,
+  isSupportedCurrency,
   type PurchaseDateBalance,
   Security,
+  todayInSeoul,
+  toKrw,
   truncateByCurrency,
 } from '@app/common';
+import { sumDecimals } from '../money.js';
 import type { AuthUser } from '../../auth/restapi/jwt.strategy.js';
 import { DailyPriceReader } from '../../security/daily-price.reader.js';
+import { priceLookupDate } from '../../security/price-date.js';
 import { ExchangeRateReader } from '../../security/exchange-rate.reader.js';
-import { addDays, addYears, todayInSeoul } from '../../security/iso-date.js';
 import { SecurityRefresher } from '../../security/security.refresher.js';
 import { PurchaseRateReader } from '../purchase-rate.reader.js';
 import { PurchaseReader } from '../purchase.reader.js';
@@ -72,7 +78,7 @@ export class DividendMetricsService {
     const ids = [...heldBySecurity.keys()];
     const securities = ids.length
       ? (await this.securityRepository.findBy({ id: In(ids) }))
-          .filter((s) => s.currency === Currency.KRW || s.currency === Currency.USD)
+          .filter((s) => isSupportedCurrency(s.currency))
           .sort((a, b) => a.id.localeCompare(b.id))
       : [];
 
@@ -114,11 +120,11 @@ export class DividendMetricsService {
       );
     }
 
-    const annualSum = sum(items.map((i) => i.krwAnnualDividend));
-    const purchaseSum = sum(items.map((i) => i.krwPurchaseAmount));
+    const annualSum = sumDecimals(items.map((i) => i.krwAnnualDividend));
+    const purchaseSum = sumDecimals(items.map((i) => i.krwPurchaseAmount));
     const priced = items.filter((i) => i.krwEvaluationAmount !== null);
-    const evaluationSum = sum(priced.map((i) => i.krwEvaluationAmount!));
-    const pricedAnnualSum = sum(priced.map((i) => i.krwAnnualDividend));
+    const evaluationSum = sumDecimals(priced.map((i) => i.krwEvaluationAmount!));
+    const pricedAnnualSum = sumDecimals(priced.map((i) => i.krwAnnualDividend));
 
     return {
       date: today,
@@ -231,7 +237,7 @@ export class DividendMetricsService {
 
     const daily = await this.dailyPriceReader.findLatestOnOrBefore(
       security.id,
-      context.today,
+      priceLookupDate(currency, context.today),
     );
     const krwEvaluation = daily
       ? toKrw(
@@ -265,8 +271,3 @@ export class DividendMetricsService {
   }
 }
 
-const sum = (values: string[]): Decimal =>
-  values.reduce((acc, value) => acc.plus(value), new Decimal(0));
-
-const toKrw = (value: Decimal.Value): string =>
-  truncateByCurrency(value, Currency.KRW);

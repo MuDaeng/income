@@ -44,9 +44,9 @@ describe('ExchangeRateFetcher.importFromMassive', () => {
       date: '2026-11-05',
       currency: Currency.USD,
       openingRate: '1380.123456',
-      closingRate: '1385.5',
+      closingRate: '1385.500000',
       highestRate: '1390.999999',
-      lowestRate: '1370',
+      lowestRate: '1370.000000',
     });
     expect(rows[1].date).toBe('2026-11-06');
     expect(result).toEqual({

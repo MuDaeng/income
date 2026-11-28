@@ -14,13 +14,16 @@ import {
   type DailyExchangeRate,
   Dividend,
   DividendType,
+  isSupportedCurrency,
   type PurchaseDateBalance,
   Security,
+  todayInSeoul,
+  toKrw,
+  toUsd,
   truncateByCurrency,
 } from '@app/common';
 import type { AuthUser } from '../auth/restapi/jwt.strategy.js';
 import { ExchangeRateReader } from '../security/exchange-rate.reader.js';
-import { todayInSeoul } from '../security/iso-date.js';
 import { SecurityRefresher } from '../security/security.refresher.js';
 import { AccountReader } from '../user/account.reader.js';
 import { dividendTax, isTaxedAccount } from './dividend-tax.js';
@@ -103,7 +106,7 @@ export class DividendHistoryCalculator {
     });
     const securityById = new Map(
       securities
-        .filter((s) => s.currency === Currency.KRW || s.currency === Currency.USD)
+        .filter((s) => isSupportedCurrency(s.currency))
         .map((s) => [s.id, s]),
     );
     // 외부 API 한도(Massive 분당 호출 수 등) 때문에 종목마다 순서대로
@@ -298,15 +301,12 @@ const summarize = (items: DividendItemDto[]): DividendSummaryDto => {
   }
   return {
     krwAmount: toKrw(pre.krw),
-    usdAmount: truncateByCurrency(pre.usd, Currency.USD),
+    usdAmount: toUsd(pre.usd),
     usdKrwAmount: toKrw(pre.usdKrw),
     totalKrwAmount: toKrw(pre.krw.plus(pre.usdKrw)),
     afterTaxKrwAmount: toKrw(post.krw),
-    afterTaxUsdAmount: truncateByCurrency(post.usd, Currency.USD),
+    afterTaxUsdAmount: toUsd(post.usd),
     afterTaxUsdKrwAmount: toKrw(post.usdKrw),
     afterTaxTotalKrwAmount: toKrw(post.krw.plus(post.usdKrw)),
   };
 };
-
-const toKrw = (value: Decimal.Value): string =>
-  truncateByCurrency(value, Currency.KRW);

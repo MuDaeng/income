@@ -1,6 +1,12 @@
 import { Decimal } from 'decimal.js';
 import { Currency } from '../../src/security/currency.enum.js';
-import { truncateByCurrency } from '../../src/security/currency-decimal.js';
+import {
+  parseKrwPrice,
+  toKrw,
+  toUsd,
+  truncateByCurrency,
+  truncateRate,
+} from '../../src/security/currency-decimal.js';
 
 describe('truncateByCurrency', () => {
   it('KRW는 정수로 버림', () => {
@@ -21,5 +27,31 @@ describe('truncateByCurrency', () => {
 
   it('음수도 0 쪽으로 버림', () => {
     expect(truncateByCurrency('-1234.6', Currency.KRW)).toBe('-1234');
+  });
+});
+
+describe('truncateRate', () => {
+  it('통화와 무관하게 소수 6자리로 버림', () => {
+    expect(truncateRate('1400.1234567')).toBe('1400.123456');
+    expect(truncateRate(1385.5)).toBe('1385.500000');
+  });
+});
+
+describe('parseKrwPrice', () => {
+  it('원화 정수로 버리고, 빈 값은 0', () => {
+    expect(parseKrwPrice(' 71200.9 ')).toBe('71200');
+    expect(parseKrwPrice('')).toBe('0');
+    expect(parseKrwPrice(undefined)).toBe('0');
+  });
+});
+
+describe('toKrw / toUsd', () => {
+  it('통화별 자릿수로 버림 (truncateByCurrency와 같음)', () => {
+    expect(toKrw('1234.9')).toBe('1234');
+    expect(toUsd('0.1234567')).toBe('0.123456');
+  });
+
+  it('toKrw는 빈 문자열이면 예외 (원천 문자열은 parseKrwPrice)', () => {
+    expect(() => toKrw('')).toThrow();
   });
 });
